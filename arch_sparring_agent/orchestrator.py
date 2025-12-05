@@ -32,12 +32,21 @@ class ReviewOrchestrator:
         if not check_model_access(model_id):
             raise RuntimeError(f"Model {model_id} not accessible.")
 
-        # Shared memory for agents
+        # Project-scoped memory (derived from working directory)
         self.memory_config = None
         if enable_memory:
-            self.memory_config, memory_id = setup_agentcore_memory(region=region)
+            import re
+            from pathlib import Path
+
+            # Sanitize: letters, numbers, underscores only; max 48 chars
+            project_name = Path.cwd().name
+            safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", project_name)[:40]
+            memory_name = f"Review_{safe_name}"
+            self.memory_config, memory_id = setup_agentcore_memory(
+                region=region, memory_name=memory_name
+            )
             if self.memory_config:
-                print(f"✓ AgentCore Memory enabled (ID: {memory_id})")
+                print(f"✓ Memory: {memory_name}")
 
         # Initialize agents
         self.requirements_agent = create_requirements_agent(

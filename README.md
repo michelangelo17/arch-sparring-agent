@@ -28,6 +28,18 @@ uv tool install .
 uv run arch-review --help
 ```
 
+## Updating
+
+```bash
+# Reinstall after code changes
+cd arch-sparring-agent
+uv tool uninstall arch-sparring-agent
+uv tool install .
+
+# Or run directly from source (always uses latest)
+uv run --project /path/to/arch-sparring-agent arch-review --help
+```
+
 ## Usage
 
 ```bash

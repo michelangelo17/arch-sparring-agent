@@ -4,10 +4,7 @@ from typing import Any
 
 import boto3
 from bedrock_agentcore.memory import MemoryClient
-from bedrock_agentcore.memory.integrations.strands.config import (
-    AgentCoreMemoryConfig,
-    RetrievalConfig,
-)
+from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig
 from bedrock_agentcore.memory.integrations.strands.session_manager import (
     AgentCoreMemorySessionManager,
 )
@@ -69,32 +66,39 @@ def setup_agentcore_memory(
     memory_id = None
 
     try:
-        # List memories and find by name
-        memories = client.list_memories()
-
-        # Try different possible field names for the memory name
-        for m in memories:
-            name = m.get("name") or m.get("memoryName") or m.get("Name")
-            if name == memory_name:
-                memory_id = m.get("id") or m.get("memoryId") or m.get("memory_id")
-                break
-
-        if not memory_id:
-            # Create new memory if it doesn't exist
-            try:
-                memory = client.create_memory(
-                    name=memory_name, description="Memory for arch review agents"
-                )
-                memory_id = memory.get("id") or memory.get("memoryId") or memory.get("memory_id")
-            except Exception as create_error:
-                if "already exists" in str(create_error).lower():
-                    # Memory exists but we couldn't find it - skip memory for now
-                    print(f"Memory '{memory_name}' exists but couldn't be listed. Skipping.")
-                    return None, None
+        # Try to create first - faster path if memory doesn't exist
+        try:
+            memory = client.create_memory(
+                name=memory_name, description="Memory for arch review agents"
+            )
+            memory_id = memory.get("id") or memory.get("memoryId") or memory.get("memory_id")
+            print(f"✓ Created memory: {memory_name}")
+        except Exception as create_error:
+            if "already exists" not in str(create_error).lower():
                 raise
+            # Memory exists, find it in list
+            memories = client.list_memories()
+            for m in memories:
+                # Check all possible field names
+                m_name = m.get("name") or m.get("memoryName") or m.get("Name") or ""
+                if m_name == memory_name:
+                    memory_id = m.get("id") or m.get("memoryId") or m.get("memory_id")
+                    print(f"✓ Using existing memory: {memory_name}")
+                    break
+            if not memory_id:
+                # Last resort: check if any memory dict has the name as a value
+                for m in memories:
+                    if memory_name in str(m.values()):
+                        for key in ["id", "memoryId", "memory_id", "Id"]:
+                            if key in m:
+                                memory_id = m[key]
+                                print(f"✓ Found memory: {memory_name}")
+                                break
+                        if memory_id:
+                            break
 
         if not memory_id:
-            print("Could not get memory ID. Skipping memory.")
+            print(f"Could not resolve memory ID for '{memory_name}'. Skipping.")
             return None, None
 
         # Generate IDs if not provided
@@ -103,15 +107,10 @@ def setup_agentcore_memory(
         if not session_id:
             session_id = f"session_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-        # Create memory config with required fields
-        retrieval_config = RetrievalConfig()
-        retrieval_config_dict = retrieval_config.model_dump()
-
         memory_config = AgentCoreMemoryConfig(
             memory_id=memory_id,
             session_id=session_id,
             actor_id=actor_id,
-            retrieval_config=retrieval_config_dict,
         )
         return memory_config, memory_id
 
@@ -134,7 +133,9 @@ def create_session_manager(memory_config, actor_id: str | None = None):
             else f"actor_{datetime.now().strftime('%Y%m%d%H%M%S')}"
         )
 
-    session_manager = AgentCoreMemorySessionManager(memory_config=memory_config, actor_id=actor_id)
+    session_manager = AgentCoreMemorySessionManager(
+        agentcore_memory_config=memory_config, actor_id=actor_id
+    )
 
     return session_manager
 
