@@ -29,7 +29,7 @@ from .orchestrator import ReviewOrchestrator
     "--output",
     "-o",
     type=click.Path(file_okay=True, dir_okay=False),
-    help="Output file for the final review (e.g., review.md)",
+    help="Output file for the full review session (e.g., review.md)",
 )
 @click.option(
     "--model", default=MODEL_ID, help=f"Bedrock model ID (default: {MODEL_ID} - Nova 2 Lite)"
@@ -48,19 +48,11 @@ def main(documents_dir, templates_dir, diagrams_dir, output, model, region, inte
 
     Example usage:
 
-        # With regular CloudFormation templates
-        uv run arch-review \\
+        arch-review \\
             --documents-dir ./docs \\
             --templates-dir ./templates \\
             --diagrams-dir ./diagrams \\
-            --output review.md
-
-        # With CDK synthesized output
-        uv run arch-review \\
-            --documents-dir ./docs \\
-            --templates-dir ./cdk.out \\
-            --diagrams-dir ./diagrams \\
-            --output review.md
+            -o review.md
     """
     try:
         # Set AWS region environment variable
@@ -78,18 +70,12 @@ def main(documents_dir, templates_dir, diagrams_dir, output, model, region, inte
         # Run the review
         result = orchestrator.run_review(interactive=interactive)
 
-        # Output results
-        review_text = str(result["review"])
-
+        # Save full session to file if requested
         if output:
+            full_session = result.get("full_session", str(result["review"]))
             with open(output, "w") as f:
-                f.write(review_text)
-            click.echo(f"Review written to {output}")
-        else:
-            click.echo("\n" + "=" * 60)
-            click.echo("ARCHITECTURE REVIEW")
-            click.echo("=" * 60 + "\n")
-            click.echo(review_text)
+                f.write(full_session)
+            click.echo(f"\n✓ Full session saved to {output}")
 
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
