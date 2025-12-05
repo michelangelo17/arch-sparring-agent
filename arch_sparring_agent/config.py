@@ -13,8 +13,6 @@ from bedrock_agentcore.memory.integrations.strands.session_manager import (
 )
 
 MODEL_ID = "amazon.nova-2-lite-v1:0"
-# Note: For direct Bedrock Converse API calls, may need inference profile ARN instead of model ID
-# Strands SDK Agent handles this automatically
 DEFAULT_REGION = "eu-central-1"
 
 
@@ -43,15 +41,7 @@ def check_model_access(model_id: str = MODEL_ID) -> bool:
 
 
 def get_inference_profile_arn(model_id: str = MODEL_ID, region: str = DEFAULT_REGION) -> str | None:
-    """
-    Get inference profile ARN for a model.
-
-    Inference profiles are provided by AWS as ARNs in the format:
-    arn:aws:bedrock:REGION:ACCOUNT_ID:inference-profile/global.MODEL_ID
-
-    Nova 2 Lite requires inference profiles for direct Converse API calls.
-    Strands SDK Agent handles this automatically.
-    """
+    """Get inference profile ARN for Nova 2 Lite."""
     try:
         # Get AWS account ID
         sts = boto3.client("sts", region_name=region)
@@ -64,7 +54,6 @@ def get_inference_profile_arn(model_id: str = MODEL_ID, region: str = DEFAULT_RE
         return profile_arn
     except Exception as e:
         print(f"Warning: Could not get inference profile ARN: {e}")
-        print("Note: Strands SDK Agent handles inference profiles automatically.")
         return None
 
 
@@ -128,7 +117,7 @@ def setup_agentcore_memory(
 
     except Exception as e:
         print(f"Warning: Could not set up AgentCore Memory: {e}")
-        print("Agents will work without memory.")
+        print("Continuing without memory.")
         return None, None
 
 
@@ -153,12 +142,7 @@ def create_session_manager(memory_config, actor_id: str | None = None):
 def setup_policy_engine(
     region: str = DEFAULT_REGION, policy_engine_name: str = "ArchReviewPolicyEngine"
 ):
-    """
-    Create or retrieve a Policy Engine for enforcing agent behavior boundaries.
-
-    Policy Engines enforce policies in real-time to ensure agents operate within
-    defined boundaries (e.g., restrict tool access, limit resource usage).
-    """
+    """Create or retrieve a Policy Engine."""
     try:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
 
@@ -184,7 +168,7 @@ def setup_policy_engine(
 
     except Exception as e:
         print(f"Warning: Could not set up Policy Engine: {e}")
-        print("Agents will work without policy controls.")
+        print("Continuing without policy controls.")
         return None
 
 
@@ -195,19 +179,7 @@ def create_policy(
     description: str = "",
     region: str = DEFAULT_REGION,
 ):
-    """
-    Create a policy within a Policy Engine using Cedar policy language.
-
-    Args:
-        policy_engine_id: ID of the policy engine
-        policy_name: Name for the policy
-        cedar_statement: Cedar policy statement (string) defining the authorization rules
-        description: Optional description of the policy
-        region: AWS region
-
-    Note: Cedar policies use a default-deny model where actions are denied unless explicitly
-    permitted. Forbid policies always override permit policies.
-    """
+    """Create a Cedar policy in a Policy Engine."""
     try:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
         response = client.create_policy(
@@ -228,12 +200,7 @@ def create_policy(
 def setup_online_evaluation(
     region: str = DEFAULT_REGION, evaluation_name: str = "ArchReviewEvaluation"
 ):
-    """
-    Create or retrieve an Online Evaluation configuration for monitoring agent performance.
-
-    Online Evaluations test and monitor agent performance based on real-world behavior,
-    helping ensure agents meet quality standards.
-    """
+    """Create or retrieve an Online Evaluation configuration."""
     try:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
 
@@ -250,7 +217,6 @@ def setup_online_evaluation(
 
         if not evaluation:
             # Create new evaluation config
-            # Note: Provide evaluation criteria, datasets, etc. as needed
             response = client.create_online_evaluation_config(
                 name=evaluation_name,
                 description="Quality evaluation for architecture review agents",
@@ -265,35 +231,21 @@ def setup_online_evaluation(
 
     except Exception as e:
         print(f"Warning: Could not set up Online Evaluation: {e}")
-        print("Agents will work without quality evaluations.")
+        print("Continuing without quality evaluations.")
         return None
 
 
 def setup_architecture_review_policies(
     region: str = DEFAULT_REGION, policy_engine_name: str = "ArchReviewPolicyEngine"
 ):
-    """
-    Set up comprehensive policies for the architecture review multi-agent system.
-
-    Creates policies using Cedar policy language that:
-    1. Enforce tool access restrictions per agent role
-    2. Limit API call rates to prevent excessive costs
-    3. Ensure agents stay within their designated scope
-
-    Note: Cedar policy syntax and available entities/actions depend on the Gateway's
-    tool schema. These policies are templates and may need adjustment based on the
-    actual Gateway configuration and tool names.
-
-    Reference: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy-engine.html
-    """
+    """Set up Cedar policies for agent tool restrictions."""
     engine_id = setup_policy_engine(region=region, policy_engine_name=policy_engine_name)
     if not engine_id:
         return None
 
     policies_created = []
 
-    # Policy 1: Requirements Agent - Only document reading and user interaction tools
-    # Cedar syntax: permit(principal, action, resource) when { condition }
+    # Requirements Agent: document and user tools only
     requirements_cedar = """permit(
     principal == Agent::"RequirementsAnalyst",
     action == Action::"ToolInvoke",
@@ -320,7 +272,7 @@ forbid(
     if policy_id:
         policies_created.append("RequirementsAgentToolRestrictions")
 
-    # Policy 2: Architecture Agent - Only CFN/diagram reading and user interaction tools
+    # Architecture Agent: CFN/diagram tools only
     architecture_cedar = """permit(
     principal == Agent::"ArchitectureEvaluator",
     action == Action::"ToolInvoke",
@@ -359,7 +311,7 @@ forbid(
     if policy_id:
         policies_created.append("ArchitectureAgentToolRestrictions")
 
-    # Policy 3: Moderator Agent - Only agent-to-agent communication tools
+    # Moderator Agent: agent communication tools only
     moderator_cedar = """permit(
     principal == Agent::"ReviewModerator",
     action == Action::"ToolInvoke",
@@ -386,7 +338,7 @@ forbid(
     if policy_id:
         policies_created.append("ModeratorAgentToolRestrictions")
 
-    # Policy 4: Rate Limiting - Prevent excessive API calls
+    # Rate limiting
     # Note: Rate limiting may need to be implemented differently depending on Gateway capabilities
     rate_limit_cedar = """forbid(
     principal,
