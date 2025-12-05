@@ -1,56 +1,48 @@
+"""Sparring agent for Phase 4 - challenging architectural decisions."""
+
 from strands import Agent, tool
 
 
-def create_sparring_agent(model_id: str = "amazon.nova-2-lite-v1:0"):
-    """Create the Sparring Agent for challenging architectural decisions."""
+def create_sparring_agent(model_id: str = "amazon.nova-2-lite-v1:0") -> Agent:
+    """Create agent for challenging architectural decisions."""
 
     challenges_made = []
 
     @tool
     def challenge_user(challenge: str) -> str:
-        """Challenge the user on an architectural decision or gap."""
+        """Challenge an architectural decision or gap."""
         challenges_made.append(challenge)
         print(f"\n⚔️  [{len(challenges_made)}] {challenge}")
-        response = input("Your response: ")
-        return response
+        return input("Your response: ")
 
     @tool
     def done_challenging() -> str:
-        """Call when you've addressed the key architectural issues."""
+        """Signal completion of sparring phase."""
         return "Proceeding to final review."
 
-    agent = Agent(
+    return Agent(
         name="SparringAgent",
         model=model_id,
-        system_prompt="""Challenge the user on architectural gaps and risks.
+        system_prompt="""Challenge architectural gaps and risks.
 
-Your role is to be a sparring partner - push back on decisions.
+Role: Sparring partner - push back on decisions.
 
 Guidelines:
 - Be direct and constructive
-- Focus on the top 3-5 most significant issues
-- Push back if answers seem weak or dismissive
-- If they defend well, acknowledge and move on
-- Challenge real risks, not minor preferences
+- Focus on top 3-5 significant issues
+- Push back on weak answers
+- Acknowledge good defenses
+- Challenge real risks, not preferences
 
-Example challenges:
-- "Why no auto-scaling when traffic is unpredictable?"
-- "How will you handle data consistency during failures?"
-- "This creates a single point of failure. What's the mitigation?"
-
-Call done_challenging when you've addressed the key issues.""",
+Call done_challenging when key issues are addressed.""",
         tools=[challenge_user, done_challenging],
     )
 
-    return agent
 
-
-def run_sparring(
-    agent: Agent, req_summary: str, arch_summary: str, qa_context: str
-) -> str:
-    """Run the sparring phase and return the discussion context."""
+def run_sparring(agent: Agent, req_summary: str, arch_summary: str, qa_context: str) -> str:
+    """Execute sparring phase."""
     result = agent(
-        f"""Based on this context, challenge the user on key architectural gaps:
+        f"""Challenge architectural gaps based on context:
 
 REQUIREMENTS:
 {req_summary}
@@ -61,7 +53,6 @@ ARCHITECTURE:
 Q&A CONTEXT:
 {qa_context}
 
-Challenge architectural decisions. Call done_challenging when ready."""
+Challenge decisions. Call done_challenging when ready."""
     )
     return str(result)
-

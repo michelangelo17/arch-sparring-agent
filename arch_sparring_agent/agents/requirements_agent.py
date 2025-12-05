@@ -1,3 +1,5 @@
+"""Requirements analysis agent for Phase 1."""
+
 from strands import Agent, tool
 
 from ..config import create_session_manager
@@ -8,7 +10,7 @@ def create_requirements_agent(
     model_id: str = "amazon.nova-2-lite-v1:0",
     memory_config=None,
 ) -> Agent:
-    """Create the Requirements Analysis Agent."""
+    """Create agent for analyzing requirements documents."""
 
     from ..tools.document_parser import DocumentParser
 
@@ -22,36 +24,24 @@ def create_requirements_agent(
 
     @tool
     def list_available_documents() -> list[str]:
-        """List all available markdown documents."""
+        """List available markdown documents."""
         return parser.list_documents()
 
-    @tool
-    def ask_user_question(question: str) -> str:
-        """Ask the user a clarifying question and get their response."""
-        print(f"\n❓ {question}")
-        response = input("Your answer: ")
-        return response
-
-    # Set up session manager if memory config provided
     session_manager = None
     if memory_config:
         session_manager = create_session_manager(memory_config)
 
-    agent = Agent(
+    return Agent(
         name="RequirementsAnalyst",
         model=model_id,
-        system_prompt="""Requirements analyst for architecture reviews. Be concise.
+        system_prompt="""Analyze requirements documents.
 
 Tasks:
-1. Read markdown documents using read_document tool
+1. Read documents using read_document
 2. Extract requirements, constraints, NFRs
-3. When information is missing, USE ask_user_question tool to ask the user directly
+3. Return concise summary
 
-IMPORTANT: When you need clarification, call ask_user_question - don't just write questions.
-
-Return a brief summary of requirements found.""",
-        tools=[read_document, list_available_documents, ask_user_question],
+Focus on functional requirements, constraints, and non-functional requirements.""",
+        tools=[read_document, list_available_documents],
         session_manager=session_manager,
     )
-
-    return agent

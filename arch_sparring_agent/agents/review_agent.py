@@ -1,21 +1,23 @@
+"""Review agent for Phase 5 - final review generation."""
+
 from strands import Agent
 
 
-def create_review_agent(model_id: str = "amazon.nova-2-lite-v1:0"):
-    """Create the Review Agent for generating the final review."""
+def create_review_agent(model_id: str = "amazon.nova-2-lite-v1:0") -> Agent:
+    """Create agent for generating final review."""
 
-    agent = Agent(
+    return Agent(
         name="ReviewAgent",
         model=model_id,
-        system_prompt="""Write a concise, actionable architecture review.
+        system_prompt="""Write architecture review.
 
 Format:
 ## Executive Summary
-2-3 sentences summarizing the overall assessment.
+2-3 sentences on overall assessment.
 
 ## Key Gaps
-- Bullet points of significant gaps identified
-- Note which gaps were acknowledged by the user
+- Significant gaps identified
+- Note acknowledged gaps
 
 ## Top 3 Risks
 1. Risk with severity and impact
@@ -27,11 +29,9 @@ Format:
 2. Specific, actionable recommendation
 3. Specific, actionable recommendation
 
-Be specific. Reference actual components and decisions discussed.""",
+Be specific. Reference components and decisions discussed.""",
         tools=[],
     )
-
-    return agent
 
 
 def generate_review(
@@ -41,13 +41,13 @@ def generate_review(
     qa_context: str = "",
     sparring_context: str = "",
 ) -> str:
-    """Generate the final architecture review."""
-    prompt = f"""Write the final architecture review.
+    """Generate final architecture review."""
+    prompt = f"""Write the architecture review.
 
-REQUIREMENTS SUMMARY:
+REQUIREMENTS:
 {req_summary}
 
-ARCHITECTURE SUMMARY:
+ARCHITECTURE:
 {arch_summary}
 """
     if qa_context:
@@ -55,6 +55,4 @@ ARCHITECTURE SUMMARY:
     if sparring_context:
         prompt += f"\nSPARRING DISCUSSION:\n{sparring_context}"
 
-    result = agent(prompt)
-    return str(result)
-
+    return str(agent(prompt))

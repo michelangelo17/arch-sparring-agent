@@ -1,216 +1,113 @@
 # Architecture Review Sparring Partner
 
-Multi-agent system for comprehensive architecture reviews using AWS Bedrock and Strands SDK. Analyzes requirements documents, CloudFormation templates (including CDK synthesized output), and architecture diagrams to provide structured reviews.
+Multi-agent system for architecture reviews. Analyzes requirements documents, CloudFormation templates, and architecture diagrams, then challenges architectural decisions through interactive sparring.
 
 ## Features
 
-- **Multi-agent architecture**: Three specialized agents working together
-  - Requirements Analyst: Extracts and structures requirements from documents
-  - Architecture Evaluator: Analyzes CloudFormation templates and diagrams
-  - Review Moderator: Synthesizes findings into comprehensive reviews
-- **AgentCore integration**: Memory, policy controls, and quality evaluations
-- **CDK support**: Works with both regular CloudFormation templates and CDK synthesized output
-- **Multimodal analysis**: Analyzes architecture diagrams using Bedrock's multimodal capabilities
-- **Interactive questioning**: Agents can ask clarifying questions when information is missing
+- **5-phase review process**: Requirements → Architecture → Questions → Sparring → Final Review
+- **Interactive sparring**: Challenges architectural gaps and pushes back on weak justifications
+- **CDK support**: Works with CloudFormation templates and CDK synthesized output (`cdk.out/`)
+- **Multimodal analysis**: Analyzes architecture diagrams (PNG, JPEG) via Bedrock
+- **Full session export**: Saves complete review session to markdown
 
 ## Prerequisites
 
 - Python 3.14+
 - `uv` package manager
-- AWS credentials configured (`~/.aws/credentials` or environment variables)
-- Access to Nova 2 Lite model in Bedrock console (request model access)
+- AWS credentials configured
+- Nova 2 Lite model access in Bedrock console
 
 ## Installation
 
-### Option 1: Run from Source (Development)
-
 ```bash
-# Clone or navigate to the project directory
+# Install as CLI tool
 cd arch-sparring-agent
+uv tool install .
 
-# Install dependencies
-uv sync
-
-# Verify installation
+# Or run directly from source
 uv run arch-review --help
 ```
 
-### Option 2: Install as Package
-
-```bash
-# From the project directory
-uv pip install -e .
-
-# Or install from a git repository
-uv pip install git+https://github.com/yourusername/arch-sparring-agent.git
-```
-
-## Quick Start
-
-1. **Prepare input directories**:
-
-   ```bash
-   mkdir -p my-project/{documents,templates,diagrams}
-   ```
-
-2. **Add your files**:
-
-   - `documents/`: Markdown files with requirements, constraints, NFRs
-   - `templates/`: CloudFormation templates (`.yaml`, `.yml`, `.json`) or CDK `cdk.out/` directory
-   - `diagrams/`: Architecture diagrams (PNG, JPEG images)
-
-3. **Run the review**:
-
-   ```bash
-   uv run arch-review \
-       --documents-dir ./my-project/documents \
-       --templates-dir ./my-project/templates \
-       --diagrams-dir ./my-project/diagrams \
-       --output review.md
-   ```
-
-4. **Test with examples**:
-   ```bash
-   uv run arch-review \
-       --documents-dir ./examples/documents \
-       --templates-dir ./examples/templates \
-       --diagrams-dir ./examples/diagrams \
-       --output review.md
-   ```
-
 ## Usage
 
-### Basic Usage
-
 ```bash
-# With regular CloudFormation templates
-uv run arch-review \
+arch-review \
     --documents-dir ./docs \
     --templates-dir ./templates \
     --diagrams-dir ./diagrams \
-    --output review.md
-
-# With CDK synthesized output
-uv run arch-review \
-    --documents-dir ./docs \
-    --templates-dir ./cdk.out \
-    --diagrams-dir ./diagrams \
-    --output review.md
+    -o review.md
 ```
 
-### Command Line Options
+### Options
 
-- `--documents-dir`: Directory containing markdown documents (problem statement, goals, NFRs, ADRs)
-- `--templates-dir`: Directory containing CloudFormation templates or CDK `cdk.out/` directory
-- `--diagrams-dir`: Directory containing architecture diagrams (PNG, JPEG images)
-- `--output`: Output file path for the review (optional, prints to stdout if not specified)
-- `--model`: Bedrock model ID (default: `amazon.nova-2-lite-v1:0` - Nova 2 Lite)
-- `--region`: AWS region (default: `eu-central-1`)
-- `--interactive`: Enable interactive questioning mode
+| Option             | Description                                      |
+| ------------------ | ------------------------------------------------ |
+| `--documents-dir`  | Directory with markdown requirements/constraints |
+| `--templates-dir`  | CloudFormation templates or `cdk.out/` directory |
+| `--diagrams-dir`   | Architecture diagrams (PNG, JPEG)                |
+| `-o, --output`     | Output file for full session                     |
+| `--no-interactive` | Skip Q&A and sparring phases                     |
+| `--model`          | Bedrock model ID (default: Nova 2 Lite)          |
+| `--region`         | AWS region (default: eu-central-1)               |
 
-## Input Format
+## Review Phases
 
-### Documents Directory
+1. **Requirements Analysis**: Extracts requirements, constraints, and NFRs from documents
+2. **Architecture Analysis**: Analyzes CloudFormation templates and diagrams
+3. **Clarifying Questions**: Gathers context about scale, security, reliability
+4. **Sparring**: Challenges architectural gaps and decisions
+5. **Final Review**: Produces structured review with gaps, risks, recommendations
 
-Markdown files containing:
+## Input Formats
 
-- Problem statements
-- Goals and objectives
-- Constraints
-- Non-functional requirements (NFRs)
-- Architectural Decision Records (ADRs)
+### Documents
 
-Documents can be in any format - agents extract relevant information semantically.
+Markdown files with requirements, constraints, NFRs, ADRs. No specific format required.
 
-### Templates Directory
+### Templates
 
-- Regular CloudFormation templates (`.yaml`, `.yml`, `.json`)
-- CDK synthesized output directory (`cdk.out/`) containing `.template.json` files
+- CloudFormation: `.yaml`, `.yml`, `.json`
+- CDK: Point to `cdk.out/` directory
 
-Note: CDK synthesized output is CloudFormation, so the same analyzer handles both.
+### Diagrams
 
-### Diagrams Directory
+- PNG, JPEG images
+- Export draw.io files to PNG/JPEG first
 
-Architecture diagrams as images:
-
-- Supported formats: PNG, JPEG
-- For draw.io files: Export to PNG or JPEG first
-
-## How It Works
-
-1. **Requirements Agent** analyzes markdown documents to extract requirements, constraints, and goals
-2. **Architecture Agent** analyzes CloudFormation templates and diagrams to understand implementation
-3. **Moderator Agent** coordinates both agents and synthesizes findings into a comprehensive review
-
-The moderator agent uses the Agents-as-Tools pattern, calling specialized agents as needed.
-
-## AgentCore Features
-
-### Memory
-
-Agents retain context across sessions using AgentCore Memory. Enabled by default.
-
-### Policy Controls
-
-Enforce tool access restrictions and rate limiting using Cedar policies:
-
-```python
-from arch_sparring_agent.config import setup_architecture_review_policies
-
-# Set up policies for all agents
-setup_architecture_review_policies()
-```
-
-### Quality Evaluations
-
-Monitor agent performance using Online Evaluations. Configure via `setup_online_evaluation()` in `config.py`.
-
-## Architecture
+## Project Structure
 
 ```
-arch-sparring-agent/
-├── arch_sparring_agent/
-│   ├── agents/
-│   │   ├── requirements_agent.py    # Requirements analysis
-│   │   ├── architecture_agent.py     # Implementation analysis
-│   │   └── moderator_agent.py       # Review coordination
-│   ├── tools/
-│   │   ├── document_parser.py       # Read markdown documents
-│   │   ├── cfn_analyzer.py          # Read CloudFormation templates
-│   │   └── diagram_analyzer.py      # Analyze architecture diagrams
-│   ├── config.py                    # Bedrock and AgentCore configuration
-│   ├── orchestrator.py              # Main orchestration logic
-│   └── cli.py                       # CLI entry point
-└── pyproject.toml
+arch_sparring_agent/
+├── agents/
+│   ├── requirements_agent.py  # Phase 1: Document analysis
+│   ├── architecture_agent.py  # Phase 2: Template/diagram analysis
+│   ├── question_agent.py      # Phase 3: Clarifying questions
+│   ├── sparring_agent.py      # Phase 4: Challenge decisions
+│   └── review_agent.py        # Phase 5: Final review
+├── tools/
+│   ├── document_parser.py     # Markdown file reader
+│   ├── cfn_analyzer.py        # CloudFormation template reader
+│   └── diagram_analyzer.py    # Diagram analysis via Bedrock
+├── orchestrator.py            # Phase orchestration
+├── config.py                  # AWS/Bedrock configuration
+└── cli.py                     # CLI entry point
 ```
-
-## Technical Details
-
-- **Language**: Python 3.14+
-- **Package Manager**: `uv`
-- **Agent Framework**: AWS Strands SDK
-- **Bedrock Model**: Nova 2 Lite (`amazon.nova-2-lite-v1:0`)
-  - 300K token context window
-  - Multimodal support (text, images, videos)
-- **Region**: eu-central-1 (Frankfurt)
-- **Agent Pattern**: Agents-as-Tools (hierarchical delegation)
 
 ## Development
 
 ```bash
-# Install development dependencies
-uv sync
-
-# Format code
-uv run ruff format .
-
-# Lint code
-uv run ruff check .
+uv sync                    # Install dependencies
+uv run ruff format .       # Format code
+uv run ruff check .        # Lint code
 ```
+
+## Technical Details
+
+- **Model**: Nova 2 Lite (300K context, multimodal)
+- **Framework**: AWS Strands SDK
+- **Region**: eu-central-1 (configurable)
 
 ## References
 
-- [Strands SDK Documentation](https://strandsagents.com/latest/documentation/)
-- [AWS Bedrock Nova Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/nova.html)
-- [AgentCore Documentation](https://docs.aws.amazon.com/bedrock-agentcore/)
-- [Cedar Policy Language](https://www.cedarpolicy.com/)
+- [Strands SDK](https://strandsagents.com/latest/documentation/)
+- [AWS Bedrock Nova](https://docs.aws.amazon.com/bedrock/latest/userguide/nova.html)

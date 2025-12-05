@@ -1,3 +1,5 @@
+"""Orchestrates the 5-phase architecture review process."""
+
 from .agents.architecture_agent import create_architecture_agent
 from .agents.question_agent import create_question_agent, run_questions
 from .agents.requirements_agent import create_requirements_agent
@@ -7,7 +9,7 @@ from .config import MODEL_ID, check_model_access, get_inference_profile_arn, set
 
 
 class ReviewOrchestrator:
-    """Orchestrates the multi-agent architecture review process."""
+    """Orchestrates multi-agent architecture review."""
 
     def __init__(
         self,
@@ -23,24 +25,21 @@ class ReviewOrchestrator:
         self.diagrams_dir = diagrams_dir
         self.region = region
 
-        # Resolve inference profile ARN if needed
+        # Resolve inference profile ARN for Nova 2 Lite
         inference_profile_arn = get_inference_profile_arn(model_id)
         self.model_id = inference_profile_arn if inference_profile_arn else model_id
 
-        # Verify model access
         if not check_model_access(model_id):
-            raise RuntimeError(
-                f"Model {model_id} not accessible. Request access in Bedrock console."
-            )
+            raise RuntimeError(f"Model {model_id} not accessible.")
 
-        # Set up shared memory config
+        # Shared memory for agents
         self.memory_config = None
         if enable_memory:
             self.memory_config, memory_id = setup_agentcore_memory(region=region)
             if self.memory_config:
-                print(f"✓ Shared AgentCore Memory enabled (ID: {memory_id})")
+                print(f"✓ AgentCore Memory enabled (ID: {memory_id})")
 
-        # Initialize all agents
+        # Initialize agents
         self.requirements_agent = create_requirements_agent(
             documents_dir, self.model_id, memory_config=self.memory_config
         )
@@ -51,34 +50,33 @@ class ReviewOrchestrator:
         self.sparring_agent = create_sparring_agent(self.model_id)
         self.review_agent = create_review_agent(self.model_id)
 
-        # Store captured output
         self.captured_output = []
 
     def _capture(self, content: str):
-        """Capture and print output."""
+        """Capture and print output for session export."""
         self.captured_output.append(content)
         print(content)
 
     def run_review(self, interactive: bool = True) -> dict:
-        """Run the complete architecture review."""
+        """Execute the 5-phase review process."""
         self.captured_output = []
 
         self._capture("=" * 60)
         self._capture("ARCHITECTURE REVIEW SESSION")
         self._capture("=" * 60 + "\n")
 
-        # === PHASE 1: Requirements Analysis ===
+        # Phase 1: Requirements
         self._capture("## Phase 1: Requirements Analysis\n")
         req_result = self.requirements_agent(
-            "Analyze all documents. Provide a concise summary of requirements and constraints."
+            "Analyze all documents. Summarize requirements and constraints."
         )
         req_summary = str(req_result)
         self._capture(req_summary)
 
-        # === PHASE 2: Architecture Analysis ===
+        # Phase 2: Architecture
         self._capture("\n## Phase 2: Architecture Analysis\n")
         arch_result = self.architecture_agent(
-            "Analyze all templates and diagrams. Summarize the architecture and patterns."
+            "Analyze all templates and diagrams. Summarize architecture and patterns."
         )
         arch_summary = str(arch_result)
         self._capture(arch_summary)
@@ -87,19 +85,19 @@ class ReviewOrchestrator:
         sparring_context = ""
 
         if interactive:
-            # === PHASE 3: Clarifying Questions ===
+            # Phase 3: Questions
             self._capture("\n## Phase 3: Clarifying Questions\n")
             qa_context = run_questions(self.question_agent, req_summary, arch_summary)
             self._capture(f"\n{qa_context}")
 
-            # === PHASE 4: Sparring ===
+            # Phase 4: Sparring
             self._capture("\n## Phase 4: Architecture Sparring\n")
             sparring_context = run_sparring(
                 self.sparring_agent, req_summary, arch_summary, qa_context
             )
             self._capture(f"\n{sparring_context}")
 
-        # === PHASE 5: Final Review ===
+        # Phase 5: Final Review
         self._capture("\n## Phase 5: Final Review\n")
         self._capture("=" * 60)
         review_text = generate_review(
@@ -121,5 +119,5 @@ class ReviewOrchestrator:
         }
 
     def get_full_session(self) -> str:
-        """Get the complete session output."""
+        """Return captured session output for file export."""
         return "\n".join(self.captured_output)
