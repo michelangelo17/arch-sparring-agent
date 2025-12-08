@@ -77,8 +77,8 @@ dev = ["ruff>=0.14.8"]
 arch-review = "arch_sparring_agent.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/arch-sparring-agent"
-Documentation = "https://github.com/yourusername/arch-sparring-agent#readme"
-Repository = "https://github.com/yourusername/arch-sparring-agent"
-Changelog = "https://github.com/yourusername/arch-sparring-agent/blob/main/CHANGELOG.md"
-Issues = "https://github.com/yourusername/arch-sparring-agent/issues"
+Homepage = "https://github.com/michelangelo17/arch-sparring-agent"
+Documentation = "https://github.com/michelangelo17/arch-sparring-agent#readme"
+Repository = "https://github.com/michelangelo17/arch-sparring-agent"
+Changelog = "https://github.com/michelangelo17/arch-sparring-agent/blob/main/CHANGELOG.md"
+Issues = "https://github.com/michelangelo17/arch-sparring-agent/issues"
