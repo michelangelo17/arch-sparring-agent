@@ -33,16 +33,14 @@ class DiagramAnalyzer:
 
         image_base64 = self.encode_image(image_path)
 
-        # Determine format
-        filename_lower = filename.lower()
-        if filename_lower.endswith(".png"):
+        suffix = Path(filename).suffix.lower()
+        if suffix == ".png":
             img_format = "png"
-        elif filename_lower.endswith((".jpg", ".jpeg")):
+        elif suffix in (".jpg", ".jpeg"):
             img_format = "jpeg"
         else:
             raise ValueError(f"Unsupported format: {filename}. Use PNG or JPEG.")
 
-        # Get inference profile ARN (required for Nova 2 Lite)
         inference_profile_arn = get_inference_profile_arn(MODEL_ID)
         if not inference_profile_arn:
             raise RuntimeError("Could not get inference profile ARN.")

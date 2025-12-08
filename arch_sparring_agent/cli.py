@@ -44,11 +44,19 @@ from .orchestrator import ReviewOrchestrator
     help=f"AWS region (default: {DEFAULT_REGION})",
 )
 @click.option(
-    "--interactive/--no-interactive",
-    default=True,
-    help="Enable Q&A and sparring phases (default: enabled)",
+    "--gateway-arn",
+    default=None,
+    help="Gateway ARN for policy enforcement (optional, auto-creates if not provided)",
 )
-def main(documents_dir, templates_dir, diagrams_dir, output, model, region, interactive):
+def main(
+    documents_dir,
+    templates_dir,
+    diagrams_dir,
+    output,
+    model,
+    region,
+    gateway_arn,
+):
     """
     Architecture Review Sparring Partner
 
@@ -63,10 +71,11 @@ def main(documents_dir, templates_dir, diagrams_dir, output, model, region, inte
             templates_dir=templates_dir,
             diagrams_dir=diagrams_dir,
             model_id=model,
+            gateway_arn=gateway_arn,
             region=region,
         )
 
-        result = orchestrator.run_review(interactive=interactive)
+        result = orchestrator.run_review()
 
         if output:
             full_session = result.get("full_session", str(result["review"]))

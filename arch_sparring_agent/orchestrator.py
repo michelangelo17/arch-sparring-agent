@@ -5,7 +5,13 @@ from .agents.question_agent import create_question_agent, run_questions
 from .agents.requirements_agent import create_requirements_agent
 from .agents.review_agent import create_review_agent, generate_review
 from .agents.sparring_agent import create_sparring_agent, run_sparring
-from .config import MODEL_ID, check_model_access, get_inference_profile_arn, setup_agentcore_memory
+from .config import (
+    MODEL_ID,
+    check_model_access,
+    get_inference_profile_arn,
+    setup_agentcore_memory,
+    setup_architecture_review_policies,
+)
 
 
 class ReviewOrchestrator:
@@ -18,6 +24,7 @@ class ReviewOrchestrator:
         diagrams_dir: str,
         model_id: str = MODEL_ID,
         enable_memory: bool = True,
+        gateway_arn: str | None = None,
         region: str = "eu-central-1",
     ):
         self.documents_dir = documents_dir
@@ -25,30 +32,36 @@ class ReviewOrchestrator:
         self.diagrams_dir = diagrams_dir
         self.region = region
 
-        # Resolve inference profile ARN for Nova 2 Lite
         inference_profile_arn = get_inference_profile_arn(model_id)
-        self.model_id = inference_profile_arn if inference_profile_arn else model_id
+        self.model_id = inference_profile_arn or model_id
 
         if not check_model_access(model_id):
             raise RuntimeError(f"Model {model_id} not accessible.")
 
-        # Project-scoped memory (derived from working directory)
         self.memory_config = None
         if enable_memory:
             import re
             from pathlib import Path
 
-            # Sanitize: letters, numbers, underscores only; max 48 chars
             project_name = Path.cwd().name
             safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", project_name)[:40]
             memory_name = f"Review_{safe_name}"
-            self.memory_config, memory_id = setup_agentcore_memory(
-                region=region, memory_name=memory_name
-            )
+            self.memory_config, _ = setup_agentcore_memory(region=region, memory_name=memory_name)
             if self.memory_config:
                 print(f"✓ Memory: {memory_name}")
 
-        # Initialize agents
+        print("\n" + "=" * 60)
+        print("Setting up Policy Engine and Policies")
+        print("=" * 60)
+        self.policy_engine_id = setup_architecture_review_policies(
+            region=region, gateway_arn=gateway_arn
+        )
+        if self.policy_engine_id:
+            print(f"\n✓ Policy Engine ID: {self.policy_engine_id}")
+        else:
+            print("\n⚠️  Policy Engine setup failed. Review may have limited security controls.")
+        print("=" * 60 + "\n")
+
         self.requirements_agent = create_requirements_agent(
             documents_dir, self.model_id, memory_config=self.memory_config
         )
@@ -66,7 +79,7 @@ class ReviewOrchestrator:
         self.captured_output.append(content)
         print(content)
 
-    def run_review(self, interactive: bool = True) -> dict:
+    def run_review(self) -> dict:
         """Execute the 5-phase review process."""
         self.captured_output = []
 
@@ -90,21 +103,15 @@ class ReviewOrchestrator:
         arch_summary = str(arch_result)
         self._capture(arch_summary)
 
-        qa_context = ""
-        sparring_context = ""
+        # Phase 3: Questions
+        self._capture("\n## Phase 3: Clarifying Questions\n")
+        qa_context = run_questions(self.question_agent, req_summary, arch_summary)
+        self._capture(f"\n{qa_context}")
 
-        if interactive:
-            # Phase 3: Questions
-            self._capture("\n## Phase 3: Clarifying Questions\n")
-            qa_context = run_questions(self.question_agent, req_summary, arch_summary)
-            self._capture(f"\n{qa_context}")
-
-            # Phase 4: Sparring
-            self._capture("\n## Phase 4: Architecture Sparring\n")
-            sparring_context = run_sparring(
-                self.sparring_agent, req_summary, arch_summary, qa_context
-            )
-            self._capture(f"\n{sparring_context}")
+        # Phase 4: Sparring
+        self._capture("\n## Phase 4: Architecture Sparring\n")
+        sparring_context = run_sparring(self.sparring_agent, req_summary, arch_summary, qa_context)
+        self._capture(f"\n{sparring_context}")
 
         # Phase 5: Final Review
         self._capture("\n## Phase 5: Final Review\n")

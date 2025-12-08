@@ -17,14 +17,8 @@ class DocumentParser:
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        with open(file_path, encoding="utf-8") as f:
-            doc = frontmatter.load(f)
-
-        return {
-            "filename": filename,
-            "content": doc.content,
-            "metadata": doc.metadata,
-        }
+        doc = frontmatter.loads(file_path.read_text(encoding="utf-8"))
+        return {"filename": filename, "content": doc.content, "metadata": doc.metadata}
 
     def list_documents(self) -> list[str]:
         """List markdown files in directory."""

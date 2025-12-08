@@ -21,6 +21,4 @@ class CloudFormationAnalyzer:
         file_path = self.templates_dir / filename
         if not file_path.exists():
             raise FileNotFoundError(f"Template not found: {filename}")
-
-        with open(file_path, encoding="utf-8") as f:
-            return f.read()
+        return file_path.read_text(encoding="utf-8")
