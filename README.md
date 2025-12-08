@@ -264,5 +264,6 @@ The tool automatically creates and configures a full policy enforcement stack fo
 
 ## References
 
-- [Strands SDK](https://strandsagents.com/latest/documentation/)
-- [AWS Bedrock Nova](https://docs.aws.amazon.com/bedrock/latest/userguide/nova.html)
+- [Strands SDK](https://strandsagents.com/latest/documentation/docs/)
+- [Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/)
+- [Amazon Nova 2 Models](https://docs.aws.amazon.com/nova/latest/nova2-userguide/)
