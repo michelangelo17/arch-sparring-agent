@@ -1,0 +1,81 @@
+# GitHub Actions workflow for architecture review
+# Copy to .github/workflows/arch-review.yml
+# Set AWS_ROLE_ARN secret (OIDC) or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY secrets
+
+name: Architecture Review
+
+on:
+  pull_request:
+    paths:
+      - '**.yaml'
+      - '**.yml'
+      - '**.json'
+      - '**.md'
+      - 'cdk.out/**'
+      - 'diagrams/**'
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        if: ${{ vars.USE_OIDC == 'true' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-central-1' }}
+
+      - name: Configure AWS Credentials (Secrets)
+        if: ${{ vars.USE_OIDC != 'true' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-central-1' }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - run: pip install arch-sparring-agent
+
+      - name: Run Architecture Review
+        id: review
+        env:
+          ARCH_REVIEW_DOCUMENTS_DIR: ./docs
+          ARCH_REVIEW_TEMPLATES_DIR: ./cdk.out
+          ARCH_REVIEW_DIAGRAMS_DIR: ./diagrams
+          ARCH_REVIEW_SOURCE_DIR: ./src
+        run: |
+          arch-review --ci --output review-output.md || exit_code=$?
+          echo "exit_code=${exit_code:-0}" >> $GITHUB_OUTPUT
+          cat review-output.md >> $GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: architecture-review
+          path: review-output.md
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const review = fs.readFileSync('review-output.md', 'utf8');
+            const exitCode = '${{ steps.review.outputs.exit_code }}';
+            const emoji = exitCode === '1' ? '🔴' : exitCode === '2' ? '🟡' : '✅';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ${emoji} Architecture Review\n\n<details>\n<summary>Full review</summary>\n\n${review}\n\n</details>`
+            });

@@ -1,9 +1,32 @@
 [project]
 name = "arch-sparring-agent"
 version = "0.1.0"
-description = "A multi-agent system that conducts comprehensive architecture reviews"
+description = "Multi-agent architecture review system using AWS Bedrock"
 readme = "README.md"
-requires-python = ">=3.14"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+keywords = [
+  "aws",
+  "architecture",
+  "review",
+  "bedrock",
+  "cloudformation",
+  "ai",
+  "agents",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: System :: Systems Administration",
+]
 dependencies = [
   "bedrock-agentcore>=1.1.1",
   "bedrock-agentcore-starter-toolkit>=0.1.0",
@@ -24,7 +47,7 @@ build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 100
-target-version = "py314"
+target-version = "py311"
 
 [tool.ruff.format]
 quote-style = "double"
@@ -52,3 +75,10 @@ dev = ["ruff>=0.14.8"]
 
 [project.scripts]
 arch-review = "arch_sparring_agent.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/arch-sparring-agent"
+Documentation = "https://github.com/yourusername/arch-sparring-agent#readme"
+Repository = "https://github.com/yourusername/arch-sparring-agent"
+Changelog = "https://github.com/yourusername/arch-sparring-agent/blob/main/CHANGELOG.md"
+Issues = "https://github.com/yourusername/arch-sparring-agent/issues"

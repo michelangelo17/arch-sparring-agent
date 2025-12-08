@@ -23,16 +23,14 @@ def create_sparring_agent(model_id: str = "amazon.nova-2-lite-v1:0") -> Agent:
     return Agent(
         name="SparringAgent",
         model=model_id,
-        system_prompt="""Challenge architectural gaps and risks.
+        system_prompt="""Challenge CONFIRMED gaps only.
 
-Role: Sparring partner - push back on decisions.
-
-Guidelines:
-- Be direct and constructive
-- Focus on top 3-5 significant issues
+RULES:
+- Only challenge items from "Features Not Found"
+- Do NOT challenge features in "Features Verified" - those exist
+- Focus on security, compliance, and architectural risks
 - Push back on weak answers
 - Acknowledge good defenses
-- Challenge real risks, not preferences
 
 Call done_challenging when key issues are addressed.""",
         tools=[challenge_user, done_challenging],
@@ -42,17 +40,12 @@ Call done_challenging when key issues are addressed.""",
 def run_sparring(agent: Agent, req_summary: str, arch_summary: str, qa_context: str) -> str:
     """Execute sparring phase."""
     result = agent(
-        f"""Challenge architectural gaps based on context:
+        f"""Challenge ONLY the gaps identified, not verified features.
 
-REQUIREMENTS:
-{req_summary}
-
-ARCHITECTURE:
-{arch_summary}
-
-Q&A CONTEXT:
+Q&A CONTEXT (confirmed gaps):
 {qa_context}
 
-Challenge decisions. Call done_challenging when ready."""
+Challenge these gaps. Do NOT challenge features that exist.
+Call done_challenging when ready."""
     )
     return str(result)

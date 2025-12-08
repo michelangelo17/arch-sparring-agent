@@ -1,0 +1,56 @@
+# GitLab CI configuration for architecture review
+# Copy to .gitlab-ci.yml
+# Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in CI/CD variables
+
+variables:
+  AWS_REGION: eu-central-1
+  ARCH_REVIEW_DOCUMENTS_DIR: ./docs
+  ARCH_REVIEW_TEMPLATES_DIR: ./cdk.out
+  ARCH_REVIEW_DIAGRAMS_DIR: ./diagrams
+  ARCH_REVIEW_SOURCE_DIR: ./src
+
+arch-review:
+  stage: test
+  image: python:3.14-slim
+
+  before_script:
+    - pip install arch-sparring-agent
+
+  script:
+    - arch-review --ci --output review-output.md
+
+  artifacts:
+    paths:
+      - review-output.md
+    expire_in: 1 week
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - "**/*.yaml"
+        - "**/*.yml"
+        - "**/*.json"
+        - "**/*.md"
+        - "cdk.out/**"
+        - "diagrams/**"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+arch-review-json:
+  stage: test
+  image: python:3.14-slim
+
+  before_script:
+    - pip install arch-sparring-agent
+
+  script:
+    - arch-review --json > review-output.json
+
+  artifacts:
+    paths:
+      - review-output.json
+    expire_in: 1 week
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true

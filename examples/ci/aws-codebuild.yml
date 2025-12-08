@@ -1,0 +1,32 @@
+# AWS CodeBuild buildspec for architecture review
+# Copy to buildspec.yml
+# CodeBuild uses the attached service role automatically
+
+version: 0.2
+
+env:
+  variables:
+    ARCH_REVIEW_DOCUMENTS_DIR: ./docs
+    ARCH_REVIEW_TEMPLATES_DIR: ./cdk.out
+    ARCH_REVIEW_DIAGRAMS_DIR: ./diagrams
+    ARCH_REVIEW_SOURCE_DIR: ./src
+    AWS_REGION: eu-central-1
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.14
+    commands:
+      - pip install arch-sparring-agent
+
+  build:
+    commands:
+      - arch-review --ci --output review-output.md
+
+  post_build:
+    commands:
+      - cat review-output.md
+
+artifacts:
+  files:
+    - review-output.md
