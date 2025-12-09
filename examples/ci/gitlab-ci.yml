@@ -12,18 +12,18 @@ variables:
 arch-review:
   stage: test
   image: python:3.14-slim
-
+  
   before_script:
     - pip install arch-sparring-agent
-
+  
   script:
     - arch-review --ci --output review-output.md
-
+  
   artifacts:
     paths:
       - review-output.md
     expire_in: 1 week
-
+  
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
@@ -38,18 +38,18 @@ arch-review:
 arch-review-json:
   stage: test
   image: python:3.14-slim
-
+  
   before_script:
     - pip install arch-sparring-agent
-
+  
   script:
     - arch-review --json > review-output.json
-
+  
   artifacts:
     paths:
       - review-output.json
     expire_in: 1 week
-
+  
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual

@@ -58,16 +58,16 @@ def _extract_memory_id(memory: dict) -> str | None:
     return None
 
 
-def _find_memory_by_name(memories: list, memory_name: str) -> str | None:
-    """Find memory ID by name from list of memories."""
+def _find_memory_by_name(memories: list, memory_name: str) -> tuple[str | None, str | None]:
+    """Find memory ID and status by name from list of memories."""
     for m in memories:
         m_name = m.get("name") or m.get("memoryName") or m.get("Name") or ""
+        m_status = m.get("status") or m.get("Status") or ""
         if m_name == memory_name:
-            return _extract_memory_id(m)
-        # Fallback: check if name appears in values
+            return _extract_memory_id(m), m_status
         if memory_name in str(m.values()):
-            return _extract_memory_id(m)
-    return None
+            return _extract_memory_id(m), m_status
+    return None, None
 
 
 def setup_agentcore_memory(
@@ -77,13 +77,31 @@ def setup_agentcore_memory(
     session_id: str | None = None,
 ):
     """Setup AgentCore memory for agents."""
+    import time
+
     client = MemoryClient(region_name=region)
 
     try:
         memories = client.list_memories()
-        memory_id = _find_memory_by_name(memories, memory_name)
+        memory_id, memory_status = _find_memory_by_name(memories, memory_name)
 
         if memory_id:
+            # Check if memory is active
+            if memory_status and memory_status.upper() != "ACTIVE":
+                print(f"  Memory '{memory_name}' exists but status is {memory_status}")
+                # Wait for it to become active (up to 60s)
+                for _ in range(12):
+                    time.sleep(5)
+                    memories = client.list_memories()
+                    memory_id, memory_status = _find_memory_by_name(memories, memory_name)
+                    if memory_status and memory_status.upper() == "ACTIVE":
+                        break
+                    print(f"  Waiting for memory to become active... ({memory_status})")
+
+                if memory_status and memory_status.upper() != "ACTIVE":
+                    print("  Memory not active after waiting. Continuing without memory.")
+                    return None, None
+
             print(f"✓ Using existing memory: {memory_name}")
         else:
             memory = client.create_memory(
@@ -91,6 +109,19 @@ def setup_agentcore_memory(
             )
             memory_id = _extract_memory_id(memory)
             print(f"✓ Created memory: {memory_name}")
+
+            # Wait for newly created memory to become active
+            print("  Waiting for memory to initialize...", end="", flush=True)
+            for _ in range(12):
+                time.sleep(5)
+                memories = client.list_memories()
+                _, memory_status = _find_memory_by_name(memories, memory_name)
+                if memory_status and memory_status.upper() == "ACTIVE":
+                    print(" Done!")
+                    break
+                print(".", end="", flush=True)
+            else:
+                print(f"\n  Warning: Memory may not be fully active yet ({memory_status})")
 
         if not memory_id:
             print(f"Could not resolve memory ID for '{memory_name}'. Skipping.")
