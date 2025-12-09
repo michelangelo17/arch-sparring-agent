@@ -2,7 +2,6 @@
 
 from strands import Agent, tool
 
-from ..config import create_session_manager
 from ..tools.cfn_analyzer import CloudFormationAnalyzer
 from ..tools.diagram_analyzer import DiagramAnalyzer
 from ..tools.source_analyzer import SourceAnalyzer
@@ -12,7 +11,6 @@ def create_architecture_agent(
     templates_dir: str,
     diagrams_dir: str,
     model_id: str = "amazon.nova-2-lite-v1:0",
-    memory_config=None,
     source_dir: str | None = None,
 ) -> Agent:
     """Create agent for analyzing CloudFormation templates, diagrams, and source code."""
@@ -62,40 +60,43 @@ def create_architecture_agent(
 
         @tool
         def search_source_code(pattern: str) -> str:
-            """Search for a pattern in source code (e.g., 'language', 'aspect', 'cache')."""
+            """Search for a pattern in source code."""
             return source_analyzer.search_source(pattern)
 
         tools.extend([list_source_files, read_source_file, search_source_code])
 
-    session_manager = None
-    if memory_config:
-        session_manager = create_session_manager(memory_config)
-
     base_prompt = """Analyze infrastructure and verify feature implementations.
 
+UNDERSTANDING THE SOURCES:
+- CloudFormation: DEPLOYED infrastructure (IAM policies, resource configs, what EXISTS)
+- Source code: RUNTIME behavior (SDK calls, business logic, how resources are USED)
+
+Both are important:
+- CloudFormation shows what permissions/resources ARE configured
+- Source code shows what permissions/resources are NEEDED (via SDK calls)
+- If source code makes SDK calls not covered by CloudFormation IAM, that's a gap
+
 Tasks:
-1. Read ALL CloudFormation templates
+1. Read ALL CloudFormation templates for deployed infrastructure
 2. Analyze architecture diagrams"""
 
     if source_analyzer:
         base_prompt += """
-3. For EACH requirement, search source code to verify it exists:
-   - search_source_code("language") for language handling
-   - search_source_code("aspect") for aspect extraction
-   - search_source_code("cache") for caching logic
-   - search_source_code("pii") for PII scanning
-4. Read files to confirm implementation details
-
-CRITICAL: You MUST search source code before marking features as "Not Found"."""
+3. Search source code to understand:
+   - Business logic implementation
+   - SDK calls (dynamodb, s3, sns, etc.) - what services are used at runtime
+   - Environment variables - what resources are referenced
+4. If source includes IaC definitions (CDK/Terraform), note them but use CloudFormation for
+   actual deployed config since that's what's synthesized and deployed"""
 
     base_prompt += """
 
 Output format:
 ### Components
-List infrastructure components
+List from CloudFormation + SDK calls observed in source code
 
 ### Features Verified
-- Feature: [file and line where found]
+- Feature: [evidence from CFN or source code]
 
 ### Features Not Found
 - Feature: [only if searched and not found]"""
@@ -105,5 +106,4 @@ List infrastructure components
         model=model_id,
         system_prompt=base_prompt,
         tools=tools,
-        session_manager=session_manager,
     )

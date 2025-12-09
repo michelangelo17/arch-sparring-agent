@@ -27,11 +27,13 @@ def create_question_agent(model_id: str = "amazon.nova-2-lite-v1:0") -> Agent:
 
 RULES:
 - Only ask about items in "Features Not Found"
-- Do NOT question features listed in "Features Verified"
-- Focus on: scale, security, compliance, reliability
+- Do NOT question verified features
 - One question at a time
 - If answer is "no" or "none", move on
-- Call done_asking when ready to proceed""",
+- Call done_asking when done
+
+IMPORTANT: After done_asking, do NOT output analysis or solutions.
+Just summarize what was confirmed in 2-3 bullet points max.""",
         tools=[ask_user, done_asking],
     )
 

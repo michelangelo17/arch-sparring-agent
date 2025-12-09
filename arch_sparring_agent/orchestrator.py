@@ -19,7 +19,6 @@ from .config import (
     MODEL_ID,
     check_model_access,
     get_inference_profile_arn,
-    setup_agentcore_memory,
     setup_architecture_review_policies,
 )
 
@@ -33,7 +32,6 @@ class ReviewOrchestrator:
         templates_dir: str,
         diagrams_dir: str,
         model_id: str = MODEL_ID,
-        enable_memory: bool = True,
         region: str = "eu-central-1",
         ci_mode: bool = False,
         source_dir: str | None = None,
@@ -51,18 +49,6 @@ class ReviewOrchestrator:
         if not check_model_access(model_id):
             raise RuntimeError(f"Model {model_id} not accessible.")
 
-        self.memory_config = None
-        if enable_memory:
-            import re
-            from pathlib import Path
-
-            project_name = Path.cwd().name
-            safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", project_name)[:40]
-            memory_name = f"Review_{safe_name}"
-            self.memory_config, _ = setup_agentcore_memory(region=region, memory_name=memory_name)
-            if self.memory_config:
-                print(f"✓ Memory: {memory_name}")
-
         print("\n" + "=" * 60)
         print("Setting up Policy Engine and Policies")
         print("=" * 60)
@@ -73,15 +59,9 @@ class ReviewOrchestrator:
             print("\n⚠️  Policy Engine setup failed. Review may have limited security controls.")
         print("=" * 60 + "\n")
 
-        self.requirements_agent = create_requirements_agent(
-            documents_dir, self.model_id, memory_config=self.memory_config
-        )
+        self.requirements_agent = create_requirements_agent(documents_dir, self.model_id)
         self.architecture_agent = create_architecture_agent(
-            templates_dir,
-            diagrams_dir,
-            self.model_id,
-            memory_config=self.memory_config,
-            source_dir=source_dir,
+            templates_dir, diagrams_dir, self.model_id, source_dir=source_dir
         )
 
         if ci_mode:
@@ -220,7 +200,7 @@ Summarize architecture, patterns, and verify which requirements have implementat
             qa_context = run_ci_questions(self.question_agent, req_summary, arch_summary)
         else:
             qa_context = run_questions(self.question_agent, req_summary, arch_summary)
-        self._capture(f"\n{qa_context}")
+            self._capture(f"\n{qa_context}")
 
         # Summarize Q&A context for sparring phase to prevent token overflow
         qa_for_sparring = self._summarize_phase(qa_context, "Q&A")
@@ -236,7 +216,7 @@ Summarize architecture, patterns, and verify which requirements have implementat
             sparring_context = run_sparring(
                 self.sparring_agent, req_summary, arch_summary, qa_for_sparring
             )
-        self._capture(f"\n{sparring_context}")
+            self._capture(f"\n{sparring_context}")
 
         # Summarize sparring for final review to prevent token overflow
         sparring_for_review = self._summarize_phase(sparring_context, "Sparring")

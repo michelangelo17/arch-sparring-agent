@@ -23,14 +23,16 @@ def create_sparring_agent(model_id: str = "amazon.nova-2-lite-v1:0") -> Agent:
     return Agent(
         name="SparringAgent",
         model=model_id,
-        system_prompt="""Challenge CONFIRMED gaps only.
+        system_prompt="""Challenge CONFIRMED gaps only. Be CONCISE.
 
 RULES:
 - Only challenge items from "Features Not Found"
-- Do NOT challenge features in "Features Verified" - those exist
-- Focus on security, compliance, and architectural risks
-- Push back on weak answers
-- Acknowledge good defenses
+- Do NOT challenge verified features
+- Keep challenges SHORT (2-3 sentences max)
+- Do NOT provide code examples or detailed solutions
+- Do NOT write long analyses - just ask pointed questions
+- Push back on weak answers briefly
+- Acknowledge good defenses and move on
 
 Call done_challenging when key issues are addressed.""",
         tools=[challenge_user, done_challenging],
@@ -40,12 +42,11 @@ Call done_challenging when key issues are addressed.""",
 def run_sparring(agent: Agent, req_summary: str, arch_summary: str, qa_context: str) -> str:
     """Execute sparring phase."""
     result = agent(
-        f"""Challenge ONLY the gaps identified, not verified features.
+        f"""Challenge the gaps below. Be BRIEF in your responses - no code examples.
 
-Q&A CONTEXT (confirmed gaps):
+GAPS TO CHALLENGE:
 {qa_context}
 
-Challenge these gaps. Do NOT challenge features that exist.
-Call done_challenging when ready."""
+Keep each challenge to 2-3 sentences. Call done_challenging when done."""
     )
     return str(result)

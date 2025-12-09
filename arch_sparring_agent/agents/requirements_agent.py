@@ -2,13 +2,10 @@
 
 from strands import Agent, tool
 
-from ..config import create_session_manager
-
 
 def create_requirements_agent(
     documents_dir: str,
     model_id: str = "amazon.nova-2-lite-v1:0",
-    memory_config=None,
 ) -> Agent:
     """Create agent for analyzing requirements documents."""
 
@@ -27,21 +24,18 @@ def create_requirements_agent(
         """List available markdown documents."""
         return parser.list_documents()
 
-    session_manager = None
-    if memory_config:
-        session_manager = create_session_manager(memory_config)
-
     return Agent(
         name="RequirementsAnalyst",
         model=model_id,
         system_prompt="""Analyze requirements documents.
 
 Tasks:
-1. Read documents using read_document
-2. Extract requirements, constraints, NFRs
-3. Return concise summary
+1. List all documents using list_available_documents
+2. Read EVERY document using read_document (do not skip any)
+3. Extract requirements, constraints, NFRs from ALL documents
+4. Return concise summary
 
-Focus on functional requirements, constraints, and non-functional requirements.""",
+IMPORTANT: Read ALL markdown files including README.md. Do not skip any documents.
+Look for deployment instructions, troubleshooting guides, and prerequisites.""",
         tools=[read_document, list_available_documents],
-        session_manager=session_manager,
     )

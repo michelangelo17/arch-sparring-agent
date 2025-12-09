@@ -6,6 +6,7 @@ Multi-agent system for architecture reviews. Analyzes requirements documents, Cl
 
 - **5-phase review process**: Requirements → Architecture → Questions → Sparring → Final Review
 - **Interactive sparring**: Challenges architectural gaps and pushes back on weak justifications
+- **Remediation mode**: Discuss and resolve findings from previous reviews with session memory
 - **CI/CD mode**: Non-interactive automated reviews with structured output and exit codes
 - **CDK support**: Works with CloudFormation templates and CDK synthesized output (`cdk.out/`)
 - **Multimodal analysis**: Analyzes architecture diagrams (PNG, JPEG) via Bedrock
@@ -66,20 +67,47 @@ arch-review --json \
     --diagrams-dir ./diagrams
 ```
 
+### Remediation Mode
+
+After running a review, enter remediation mode to discuss and resolve findings:
+
+```bash
+# Uses default state file (review.state.json)
+arch-review --remediate
+
+# Specify a different state file
+arch-review --remediate --state-file ./old-review.state.json
+
+# Don't save remediation notes
+arch-review --remediate --no-remediation-output
+```
+
+Remediation mode:
+
+- Loads gaps and risks from the previous review
+- Uses memory to continue conversations across sessions
+- Suggests AWS-specific solutions and code snippets
+- Saves discussion notes to `remediation-notes.md`
+
 ### Options
 
-| Option            | Description                                      |
-| ----------------- | ------------------------------------------------ |
-| `--documents-dir` | Directory with markdown requirements/constraints |
-| `--templates-dir` | CloudFormation templates or `cdk.out/` directory |
-| `--diagrams-dir`  | Architecture diagrams (PNG, JPEG)                |
-| `--source-dir`    | Lambda/application source code (optional)        |
-| `-o, --output`    | Output file for full session                     |
-| `--ci`            | CI/CD mode: non-interactive analysis             |
-| `--json`          | Output as JSON (implies --ci)                    |
-| `--strict`        | Fail on any High impact risk (ignores verdict)   |
-| `--model`         | Bedrock model ID (default: Nova 2 Lite)          |
-| `--region`        | AWS region (default: eu-central-1)               |
+| Option                    | Description                                              |
+| ------------------------- | -------------------------------------------------------- |
+| `--documents-dir`         | Directory with markdown requirements/constraints         |
+| `--templates-dir`         | CloudFormation templates or `cdk.out/` directory         |
+| `--diagrams-dir`          | Architecture diagrams (PNG, JPEG)                        |
+| `--source-dir`            | Lambda/application source code (optional)                |
+| `-o, --output`            | Output file for review (default: `review.md`)            |
+| `--state-file`            | State file path (default: `{output}.state.json`)         |
+| `--no-state`              | Don't save state file after review                       |
+| `--remediate`             | Enter remediation mode (uses --state-file or default)    |
+| `--remediation-output`    | Remediation notes file (default: `remediation-notes.md`) |
+| `--no-remediation-output` | Don't save remediation notes                             |
+| `--ci`                    | CI/CD mode: non-interactive analysis                     |
+| `--json`                  | Output as JSON (implies --ci)                            |
+| `--strict`                | Fail on any High impact risk (ignores verdict)           |
+| `--model`                 | Bedrock model ID (default: Nova 2 Lite)                  |
+| `--region`                | AWS region (default: eu-central-1)                       |
 
 ### Environment Variables
 
@@ -219,7 +247,8 @@ arch_sparring_agent/
 │   ├── question_agent.py      # Phase 3: Interactive questions
 │   ├── sparring_agent.py      # Phase 4: Interactive sparring
 │   ├── ci_agents.py           # Phase 3-4: CI/CD non-interactive
-│   └── review_agent.py        # Phase 5: Final review
+│   ├── review_agent.py        # Phase 5: Final review
+│   └── remediation_agent.py   # Remediation mode discussions
 ├── tools/
 │   ├── document_parser.py     # Markdown file reader
 │   ├── cfn_analyzer.py        # CloudFormation template reader
@@ -227,6 +256,7 @@ arch_sparring_agent/
 │   └── source_analyzer.py     # Lambda/application source code reader
 ├── orchestrator.py            # Phase orchestration
 ├── config.py                  # AWS/Bedrock configuration
+├── state.py                   # Review state persistence
 └── cli.py                     # CLI entry point
 examples/ci/
 ├── github-actions.yml         # GitHub Actions example

@@ -110,18 +110,26 @@ def setup_agentcore_memory(
             memory_id = _extract_memory_id(memory)
             print(f"✓ Created memory: {memory_name}")
 
-            # Wait for newly created memory to become active
+            # Wait for memory to become active (up to 3 minutes)
             print("  Waiting for memory to initialize...", end="", flush=True)
-            for _ in range(12):
+            memory_status = "CREATING"
+            for _ in range(36):  # 36 * 5s = 3 minutes max
                 time.sleep(5)
                 memories = client.list_memories()
                 _, memory_status = _find_memory_by_name(memories, memory_name)
-                if memory_status and memory_status.upper() == "ACTIVE":
+                status_upper = (memory_status or "").upper()
+
+                if status_upper == "ACTIVE":
                     print(" Done!")
                     break
+                if status_upper == "FAILED":
+                    print("\n  Memory creation failed.")
+                    return None, None
+
                 print(".", end="", flush=True)
             else:
-                print(f"\n  Warning: Memory may not be fully active yet ({memory_status})")
+                print(f"\n  Timeout waiting for memory. Status: {memory_status}")
+                return None, None
 
         if not memory_id:
             print(f"Could not resolve memory ID for '{memory_name}'. Skipping.")
