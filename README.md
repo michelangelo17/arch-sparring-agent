@@ -32,82 +32,75 @@ pip install arch-sparring-agent
 arch-review \
     --documents-dir ./docs \
     --templates-dir ./templates \
-    --diagrams-dir ./diagrams \
-    -o review.md
+    --diagrams-dir ./diagrams
 ```
 
-### With Source Code Analysis
+Outputs to `.arch-review/` folder. Previous reviews are automatically archived to `.arch-review/history/`.
 
-CloudFormation templates only define infrastructure. To analyze business logic in Lambda handlers:
+### With Source Code Analysis
 
 ```bash
 arch-review \
     --documents-dir ./docs \
     --templates-dir ./cdk.out \
     --diagrams-dir ./diagrams \
-    --source-dir ./src/lambdas \
-    -o review.md
+    --source-dir ./src/lambdas
 ```
 
 ### CI/CD Mode
 
 ```bash
-# Non-interactive with markdown output
+# Non-interactive (no history archiving by default)
 arch-review --ci \
     --documents-dir ./docs \
     --templates-dir ./cdk.out \
-    --diagrams-dir ./diagrams \
-    --source-dir ./src \
-    -o review.md
+    --diagrams-dir ./diagrams
 
 # JSON output for programmatic processing
 arch-review --json \
     --documents-dir ./docs \
     --templates-dir ./templates \
     --diagrams-dir ./diagrams
+
+# CI with history archiving
+arch-review --ci --keep-history \
+    --documents-dir ./docs \
+    --templates-dir ./cdk.out \
+    --diagrams-dir ./diagrams
 ```
 
 ### Remediation Mode
 
-After running a review, enter remediation mode to discuss and resolve findings:
+After running a review, discuss and resolve findings:
 
 ```bash
-# Uses default state file (review.state.json)
 arch-review --remediate
-
-# Specify a different state file
-arch-review --remediate --state-file ./old-review.state.json
-
-# Don't save remediation notes
-arch-review --remediate --no-remediation-output
 ```
 
-Remediation mode:
-
-- Loads gaps and risks from the previous review
-- Uses memory to continue conversations across sessions
-- Suggests AWS-specific solutions and code snippets
-- Saves discussion notes to `remediation-notes.md`
+- Loads gaps/risks from `.arch-review/state.json`
+- Continues conversations across sessions via memory
+- Saves notes to `.arch-review/remediation-notes.md`
 
 ### Options
 
-| Option                    | Description                                              |
-| ------------------------- | -------------------------------------------------------- |
-| `--documents-dir`         | Directory with markdown requirements/constraints         |
-| `--templates-dir`         | CloudFormation templates or `cdk.out/` directory         |
-| `--diagrams-dir`          | Architecture diagrams (PNG, JPEG)                        |
-| `--source-dir`            | Lambda/application source code (optional)                |
-| `-o, --output`            | Output file for review (default: `review.md`)            |
-| `--state-file`            | State file path (default: `{output}.state.json`)         |
-| `--no-state`              | Don't save state file after review                       |
-| `--remediate`             | Enter remediation mode (uses --state-file or default)    |
-| `--remediation-output`    | Remediation notes file (default: `remediation-notes.md`) |
-| `--no-remediation-output` | Don't save remediation notes                             |
-| `--ci`                    | CI/CD mode: non-interactive analysis                     |
-| `--json`                  | Output as JSON (implies --ci)                            |
-| `--strict`                | Fail on any High impact risk (ignores verdict)           |
-| `--model`                 | Bedrock model ID (default: Nova 2 Lite)                  |
-| `--region`                | AWS region (default: eu-central-1)                       |
+| Option                    | Description                                         |
+| ------------------------- | --------------------------------------------------- |
+| `--documents-dir`         | Directory with markdown requirements/constraints    |
+| `--templates-dir`         | CloudFormation templates or `cdk.out/` directory    |
+| `--diagrams-dir`          | Architecture diagrams (PNG, JPEG)                   |
+| `--source-dir`            | Lambda/application source code (optional)           |
+| `--output-dir`            | Output directory (default: `.arch-review`)          |
+| `--no-history`            | Don't archive previous reviews (default in CI mode) |
+| `--keep-history`          | Archive previous reviews even in CI mode            |
+| `--state-file`            | Specific state file path (overrides default)        |
+| `--no-state`              | Don't save state file after review                  |
+| `--remediate`             | Enter remediation mode                              |
+| `--no-remediation-output` | Don't save remediation notes                        |
+| `--ci`                    | CI/CD mode: non-interactive analysis                |
+| `--json`                  | Output as JSON (implies --ci)                       |
+| `--strict`                | Fail on any High impact risk (ignores verdict)      |
+| `--model`                 | Bedrock model ID (default: Nova 2 Lite)             |
+| `--region`                | AWS region (default: eu-central-1)                  |
 
 ### Environment Variables
 
@@ -119,7 +112,7 @@ All options can be set via environment variables:
 | `ARCH_REVIEW_TEMPLATES_DIR` | Templates directory         |
 | `ARCH_REVIEW_DIAGRAMS_DIR`  | Diagrams directory          |
 | `ARCH_REVIEW_SOURCE_DIR`    | Source code directory       |
-| `ARCH_REVIEW_OUTPUT`        | Output file path            |
+| `ARCH_REVIEW_OUTPUT_DIR`    | Output directory            |
 | `ARCH_REVIEW_MODEL`         | Bedrock model ID            |
 | `AWS_REGION`                | AWS region                  |
 | `CI`                        | Enable CI mode (true/1/yes) |
@@ -281,7 +274,6 @@ The tool automatically creates and configures a full policy enforcement stack fo
 3. **Creates Cedar policies** restricting each agent to specific tools:
    - **RequirementsAnalyst**: Only document reading tools
    - **ArchitectureEvaluator**: Only CFN/diagram reading tools
-   - **ReviewModerator**: Only agent communication tools
    - **DefaultDeny**: Blocks unknown agents
 4. **Associates the Gateway with the Policy Engine** for enforcement
 

@@ -37,7 +37,7 @@ class ReviewState:
 
 
 def _infer_severity(text: str) -> str:
-    """Infer severity/impact level from text."""
+    """Infer severity."""
     text_lower = text.lower()
     if "critical" in text_lower or "high" in text_lower:
         return "high"
@@ -47,7 +47,7 @@ def _infer_severity(text: str) -> str:
 
 
 def _is_duplicate(text: str, items: list[dict], key: str = "description") -> bool:
-    """Check if text matches any existing item."""
+    """Check for duplicates."""
     prefix = text[:50]
     return any(prefix in item[key] for item in items)
 
@@ -79,7 +79,6 @@ def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
     gaps = []
     gap_id = 1
 
-    # Look for gaps section in review
     for source in [review_text, gaps_context]:
         lines = source.split("\n")
         in_gaps_section = False
@@ -90,7 +89,7 @@ def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
             if "gap" in line_lower and ("##" in line or "key" in line_lower):
                 in_gaps_section = True
                 continue
-            if in_gaps_section and line.startswith("##"):
+            if in_gaps_section and line.strip().startswith("##"):
                 in_gaps_section = False
                 continue
 
@@ -106,7 +105,7 @@ def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
                     )
                     gap_id += 1
 
-    # Also check "Features Not Found" section
+    # Check "Features Not Found" section
     if "not found" in review_text.lower():
         lines = review_text.split("\n")
         in_not_found = False
@@ -114,7 +113,7 @@ def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
             if "not found" in line.lower() and "#" in line:
                 in_not_found = True
                 continue
-            if in_not_found and line.startswith("#"):
+            if in_not_found and line.strip().startswith("#"):
                 in_not_found = False
                 continue
             if in_not_found and line.strip().startswith("-"):
@@ -129,7 +128,7 @@ def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
                     )
                     gap_id += 1
 
-    return gaps[:20]  # Cap at 20 gaps
+    return gaps[:20]
 
 
 def _extract_risks(review_text: str, risks_context: str) -> list[dict]:
@@ -147,7 +146,7 @@ def _extract_risks(review_text: str, risks_context: str) -> list[dict]:
             if "risk" in line_lower and ("##" in line or "top" in line_lower):
                 in_risks_section = True
                 continue
-            if in_risks_section and line.startswith("##"):
+            if in_risks_section and line.strip().startswith("##"):
                 in_risks_section = False
                 continue
 
@@ -165,7 +164,7 @@ def _extract_risks(review_text: str, risks_context: str) -> list[dict]:
                         )
                         risk_id += 1
 
-    return risks[:10]  # Cap at 10 risks
+    return risks[:10]
 
 
 def _extract_recommendations(review_text: str) -> list[str]:
@@ -180,7 +179,7 @@ def _extract_recommendations(review_text: str) -> list[str]:
         if "recommendation" in line_lower and "#" in line:
             in_recommendations = True
             continue
-        if in_recommendations and line.startswith("##"):
+        if in_recommendations and line.strip().startswith("##"):
             in_recommendations = False
             continue
 
@@ -208,11 +207,3 @@ def _extract_verdict(review_text: str) -> str:
             return "PASS"
 
     return "UNKNOWN"
-
-
-def get_default_state_path(output_path: str | None) -> Path:
-    """Get default state file path based on output path."""
-    if output_path:
-        output = Path(output_path)
-        return output.with_suffix(".state.json")
-    return Path("review.state.json")

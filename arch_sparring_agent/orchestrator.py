@@ -82,7 +82,6 @@ class ReviewOrchestrator:
 
     def _summarize_phase(self, content: str, phase_name: str) -> str:
         """Summarize verbose phase output to prevent token overflow in later phases."""
-        # Only summarize if content is long enough to warrant it
         if len(content) < 6000:
             return content
 
@@ -155,7 +154,9 @@ Max 400 words.""",
         if self.ci_mode:
             req_prompt = "Analyze documents. List key requirements in bullet points. Max 20 lines."
         else:
-            req_prompt = "Analyze all documents. Summarize requirements and constraints."
+            req_prompt = """
+            Analyze all documents. Summarize requirements and constraints. Keep it under 600 words.
+            """
         req_result = self.requirements_agent(req_prompt)
         req_summary = str(req_result)
         self._capture(req_summary)

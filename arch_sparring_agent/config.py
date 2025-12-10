@@ -202,6 +202,7 @@ def create_policy(
     region: str = DEFAULT_REGION,
 ):
     """Create a Cedar policy in a Policy Engine, or use existing one."""
+    print(f"  Checking Policy: {policy_name}...", end=" ", flush=True)
     try:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
         response = client.create_policy(
@@ -212,14 +213,16 @@ def create_policy(
             validationMode="FAIL_ON_ANY_FINDINGS",
         )
         policy_id = response.get("policyId")
-        print(f"✓ Created Policy: {policy_name} (ID: {policy_id})")
+        print(f"✓ Created (ID: {policy_id})")
         return policy_id
     except Exception as e:
+        error_msg = str(e).lower()
         # Handle "already exists" as success
-        if "already exists" in str(e).lower():
-            print(f"✓ Using existing Policy: {policy_name}")
+        if "already exists" in error_msg or "conflictexception" in error_msg:
+            print("✓ Using existing")
             return policy_name  # Return name as ID placeholder
-        print(f"Error creating policy {policy_name}: {e}")
+
+        print(f"\n  ❌ Error: {e}")
         return None
 
 
@@ -276,6 +279,7 @@ def setup_architecture_review_policies(
     if not engine_id:
         return None
 
+    print("\nVerifying policies...")
     policies_created = []
 
     # RequirementsAnalyst: document and user interaction tools only
@@ -374,7 +378,7 @@ def setup_architecture_review_policies(
         policies_created.append("DefaultDenyUnknownAgents")
 
     if policies_created:
-        print(f"\n✓ Created {len(policies_created)} policies:")
+        print(f"\n✓ Verified {len(policies_created)} policies:")
         for policy_name in policies_created:
             print(f"  - {policy_name}")
 
@@ -453,7 +457,6 @@ def list_gateways(region: str = DEFAULT_REGION):
     try:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
         response = client.list_gateways()
-        # API returns 'items' not 'gateways'
         return response.get("items", [])
     except Exception as e:
         print(f"Warning: Could not list Gateways: {e}")
@@ -552,7 +555,7 @@ def setup_gateway(
 
         import time
 
-        print("  Waiting for IAM propagation (30s)...", end="", flush=True)
+        print("  Waiting for IAM propagation...", end="", flush=True)
         for i in range(30):
             time.sleep(1)
             if i % 5 == 0:
