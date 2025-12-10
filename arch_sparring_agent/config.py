@@ -219,8 +219,32 @@ def create_policy(
         error_msg = str(e).lower()
         # Handle "already exists" as success
         if "already exists" in error_msg or "conflictexception" in error_msg:
-            print("✓ Using existing")
-            return policy_name  # Return name as ID placeholder
+            print(f"  Policy '{policy_name}' exists. Updating...", end=" ", flush=True)
+            try:
+                # Find policy ID
+                response = client.list_policies(policyEngineId=policy_engine_id)
+                existing_policy = next(
+                    (p for p in response.get("items", []) if p.get("name") == policy_name), None
+                )
+
+                if existing_policy:
+                    policy_id = existing_policy.get("policyId") or existing_policy.get("id")
+                    # Update policy
+                    client.update_policy(
+                        policyEngineId=policy_engine_id,
+                        policyId=policy_id,
+                        name=policy_name,
+                        definition={"cedar": {"statement": cedar_statement}},
+                        description=description or f"Policy for {policy_name}",
+                    )
+                    print(f"✓ Updated (ID: {policy_id})")
+                    return policy_id
+                else:
+                    print(f"\n  ❌ Error: Could not find existing policy ID for '{policy_name}'")
+                    return None
+            except Exception as update_error:
+                print(f"\n  ❌ Error updating policy: {update_error}")
+                return None
 
         print(f"\n  ❌ Error: {e}")
         return None
@@ -292,7 +316,7 @@ def setup_architecture_review_policies(
     ],
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context.input has agentName && context.input.agentName == "RequirementsAnalyst"
+    context has agentName && context.agentName == "RequirementsAnalyst"
 }};"""
 
     policy_id = create_policy(
@@ -317,7 +341,7 @@ def setup_architecture_review_policies(
     ],
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context.input has agentName && context.input.agentName == "ArchitectureEvaluator"
+    context has agentName && context.agentName == "ArchitectureEvaluator"
 }};"""
 
     policy_id = create_policy(
@@ -339,7 +363,7 @@ def setup_architecture_review_policies(
     ],
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context.input has agentName && context.input.agentName == "ReviewModerator"
+    context has agentName && context.agentName == "ReviewModerator"
 }};"""
 
     policy_id = create_policy(
@@ -358,13 +382,13 @@ def setup_architecture_review_policies(
     action,
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) unless {{
-    context.input has agentName &&
-    (context.input.agentName == "RequirementsAnalyst" ||
-     context.input.agentName == "ArchitectureEvaluator" ||
-     context.input.agentName == "ReviewModerator" ||
-     context.input.agentName == "QuestionAgent" ||
-     context.input.agentName == "SparringAgent" ||
-     context.input.agentName == "ReviewAgent")
+    context has agentName &&
+    (context.agentName == "RequirementsAnalyst" ||
+     context.agentName == "ArchitectureEvaluator" ||
+     context.agentName == "ReviewModerator" ||
+     context.agentName == "QuestionAgent" ||
+     context.agentName == "SparringAgent" ||
+     context.agentName == "ReviewAgent")
 }};"""
 
     policy_id = create_policy(
