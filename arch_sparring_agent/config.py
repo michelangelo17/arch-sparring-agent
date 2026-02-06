@@ -267,6 +267,7 @@ def create_policy(
     cedar_statement: str,
     description: str = "",
     region: str = DEFAULT_REGION,
+    validation_mode: str = "FAIL_ON_ANY_FINDINGS",
 ):
     """Create a Cedar policy in a Policy Engine, or use existing one."""
     logger.info("Checking Policy: %s...", policy_name)
@@ -277,7 +278,7 @@ def create_policy(
             name=policy_name,
             definition={"cedar": {"statement": cedar_statement}},
             description=description or f"Policy for {policy_name}",
-            validationMode="FAIL_ON_ANY_FINDINGS",
+            validationMode=validation_mode,
         )
         policy_id = response.get("policyId")
         logger.info("Created policy %s (ID: %s)", policy_name, policy_id)
@@ -330,7 +331,7 @@ def create_policy(
                         policyId=policy_id,
                         definition={"cedar": {"statement": cedar_statement}},
                         description=description or f"Policy for {policy_name}",
-                        validationMode="FAIL_ON_ANY_FINDINGS",
+                        validationMode=validation_mode,
                     )
                     logger.info("Updated policy %s (ID: %s)", policy_name, policy_id)
                     # Verify policy becomes ACTIVE before returning
@@ -506,6 +507,7 @@ def setup_architecture_review_policies(
         default_deny_cedar,
         "Denies access for unknown agents - only registered agents are allowed",
         region=region,
+        validation_mode="IGNORE_ALL_FINDINGS",  # Intentionally restrictive policy
     )
     if policy_id:
         policies_created.append("DefaultDenyUnknownAgents")
