@@ -4,13 +4,13 @@ from datetime import datetime
 from typing import Any
 
 import boto3
-
-logger = logging.getLogger(__name__)
 from bedrock_agentcore.memory import MemoryClient
 from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig
 from bedrock_agentcore.memory.integrations.strands.session_manager import (
     AgentCoreMemorySessionManager,
 )
+
+logger = logging.getLogger(__name__)
 
 MODEL_ID = "amazon.nova-2-lite-v1:0"
 DEFAULT_REGION = "eu-central-1"
