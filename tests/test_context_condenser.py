@@ -4,10 +4,14 @@ from unittest.mock import MagicMock, patch
 
 # Mock external dependencies before importing application code
 for mod in [
-    "strands", "strands.types", "strands.types.exceptions",
-    "botocore", "botocore.exceptions",
+    "strands",
+    "strands.types",
+    "strands.types.exceptions",
+    "botocore",
+    "botocore.exceptions",
     "boto3",
-    "bedrock_agentcore", "bedrock_agentcore.memory",
+    "bedrock_agentcore",
+    "bedrock_agentcore.memory",
     "bedrock_agentcore.memory.integrations",
     "bedrock_agentcore.memory.integrations.strands",
     "bedrock_agentcore.memory.integrations.strands.config",
@@ -16,24 +20,28 @@ for mod in [
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
+
 # Create real exception classes so isinstance checks work in tests
 class FakeContextWindowOverflow(Exception):
     pass
 
+
 class FakeMaxTokensReached(Exception):
     pass
+
 
 class FakeClientError(Exception):
     def __init__(self, error_code="ValidationException"):
         self.response = {"Error": {"Code": error_code}}
         super().__init__(f"ClientError: {error_code}")
 
+
 # Wire up the fake exceptions into the mocked modules
 sys.modules["strands.types.exceptions"].ContextWindowOverflowException = FakeContextWindowOverflow
 sys.modules["strands.types.exceptions"].MaxTokensReachedException = FakeMaxTokensReached
 sys.modules["botocore.exceptions"].ClientError = FakeClientError
 
-from arch_sparring_agent.context_condenser import (
+from arch_sparring_agent.context_condenser import (  # noqa: E402
     CHUNK_SIZE,
     MAX_CHUNKS,
     PASSTHROUGH_THRESHOLD,
@@ -131,6 +139,7 @@ class TestChunkedFallback(unittest.TestCase):
         content = "D" * (PASSTHROUGH_THRESHOLD + 100)
 
         call_count = [0]
+
         def side_effect(*args, **kwargs):
             call_count[0] += 1
             mock = MagicMock()
@@ -154,6 +163,7 @@ class TestChunkedFallback(unittest.TestCase):
         content = "E" * (PASSTHROUGH_THRESHOLD + 100)
 
         call_count = [0]
+
         def side_effect(*args, **kwargs):
             call_count[0] += 1
             mock = MagicMock()
@@ -174,6 +184,7 @@ class TestChunkedFallback(unittest.TestCase):
         content = "F" * (PASSTHROUGH_THRESHOLD + 100)
 
         call_count = [0]
+
         def side_effect(*args, **kwargs):
             call_count[0] += 1
             mock = MagicMock()
@@ -223,7 +234,7 @@ class TestChunkedExtract(unittest.TestCase):
         mock_agent.return_value = "chunk summary"
         mock_agent_cls.return_value = mock_agent
 
-        result = _chunked_extract(content, "prompt", "test-model")
+        _chunked_extract(content, "prompt", "test-model")
 
         # Should have created multiple agents (chunks + merger)
         self.assertTrue(mock_agent_cls.call_count >= 3)
@@ -236,7 +247,7 @@ class TestChunkedExtract(unittest.TestCase):
         mock_agent.return_value = "chunk summary"
         mock_agent_cls.return_value = mock_agent
 
-        result = _chunked_extract(content, "prompt", "test-model")
+        _chunked_extract(content, "prompt", "test-model")
 
         # Chunk agents should be capped at MAX_CHUNKS (+ possibly 1 merger)
         self.assertLessEqual(mock_agent_cls.call_count, MAX_CHUNKS + 1)
@@ -246,6 +257,7 @@ class TestChunkedExtract(unittest.TestCase):
         content = "K" * (CHUNK_SIZE + 100)
 
         call_count = [0]
+
         def side_effect(*args, **kwargs):
             call_count[0] += 1
             mock = MagicMock()

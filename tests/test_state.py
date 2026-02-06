@@ -133,13 +133,13 @@ class TestExtractionLogic(unittest.TestCase):
             "review": """
             ## Gaps
             - Missing Gap 1
-            
+
             ## Top Risks
             1. Major Risk 1
-            
+
             ## Recommendations
             - Recommendation 1
-            
+
             Verdict: PASS
             """,
             "gaps": "",

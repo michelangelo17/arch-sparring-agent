@@ -56,6 +56,9 @@ def generate_review(
     if arch_findings:
         prompt += f"\nARCHITECTURE REFERENCE:\n{arch_findings}"
 
-    prompt += "\n\nOnly report gaps from 'Confirmed Gaps' or 'Features Not Found'. Verified features are NOT gaps."
+    prompt += (
+        "\n\nOnly report gaps from 'Confirmed Gaps' or 'Features Not Found'. "
+        "Verified features are NOT gaps."
+    )
 
     return str(agent(prompt))

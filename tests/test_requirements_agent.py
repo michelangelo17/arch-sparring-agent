@@ -4,11 +4,15 @@ from unittest.mock import MagicMock, patch
 
 # Mock strands and others to prevent ImportError
 for mod in [
-    "strands", "strands.types", "strands.types.exceptions",
-    "botocore", "botocore.exceptions",
+    "strands",
+    "strands.types",
+    "strands.types.exceptions",
+    "botocore",
+    "botocore.exceptions",
     "arch_sparring_agent.tools.document_parser",
     "frontmatter",
-    "bedrock_agentcore", "bedrock_agentcore.memory",
+    "bedrock_agentcore",
+    "bedrock_agentcore.memory",
     "bedrock_agentcore.memory.integrations.strands",
     "bedrock_agentcore.memory.integrations.strands.config",
     "bedrock_agentcore.memory.integrations.strands.session_manager",
@@ -16,7 +20,7 @@ for mod in [
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
-from arch_sparring_agent.agents.requirements_agent import create_requirements_agent
+from arch_sparring_agent.agents.requirements_agent import create_requirements_agent  # noqa: E402
 
 
 class TestRequirementsAgent(unittest.TestCase):
@@ -36,7 +40,7 @@ class TestRequirementsAgent(unittest.TestCase):
         patch.stopall()
 
     def test_create_requirements_agent(self):
-        agent = create_requirements_agent("docs_dir")
+        create_requirements_agent("docs_dir")
 
         # Check Agent was created
         self.mock_agent_cls.assert_called()
@@ -64,7 +68,7 @@ class TestRequirementsAgent(unittest.TestCase):
         self.mock_parser.list_documents.assert_called()
 
     def test_read_document_short(self):
-        agent = create_requirements_agent("docs_dir")
+        create_requirements_agent("docs_dir")
         # Get the tool from the call args
         tools = self.mock_agent_cls.call_args[1]["tools"]
         read_doc_tool = next(t for t in tools if t.__name__ == "read_document")
@@ -82,7 +86,7 @@ class TestRequirementsAgent(unittest.TestCase):
         # Reset Agent calls from create_requirements_agent
         self.mock_agent_cls.reset_mock()
 
-        agent = create_requirements_agent("docs_dir")
+        create_requirements_agent("docs_dir")
         tools = self.mock_agent_cls.call_args[1]["tools"]
         read_doc_tool = next(t for t in tools if t.__name__ == "read_document")
 

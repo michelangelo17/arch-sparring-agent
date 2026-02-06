@@ -18,7 +18,7 @@ sys.modules["bedrock_agentcore.memory.integrations.strands"] = MagicMock()
 sys.modules["bedrock_agentcore.memory.integrations.strands.config"] = MagicMock()
 sys.modules["bedrock_agentcore.memory.integrations.strands.session_manager"] = MagicMock()
 
-from arch_sparring_agent.orchestrator import ReviewOrchestrator
+from arch_sparring_agent.orchestrator import ReviewOrchestrator  # noqa: E402
 
 
 class TestReviewOrchestrator(unittest.TestCase):
