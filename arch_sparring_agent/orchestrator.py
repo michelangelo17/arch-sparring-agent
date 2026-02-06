@@ -84,7 +84,11 @@ class ReviewOrchestrator:
             self.sparring_agent = create_ci_sparring_agent(self.model_id)
             self.review_agent = create_ci_review_agent(self.model_id)
         else:
-            self.question_agent = create_question_agent(self.model_id)
+            self.question_agent = create_question_agent(
+                self.model_id,
+                templates_dir=templates_dir,
+                source_dir=source_dir,
+            )
             self.sparring_agent = create_sparring_agent(self.model_id)
             self.review_agent = create_review_agent(self.model_id)
 
