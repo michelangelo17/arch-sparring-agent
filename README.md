@@ -92,13 +92,13 @@ arch-review --remediate
 | `--output-dir`            | Output directory (default: `.arch-review`)          |
 | `--no-history`            | Don't archive previous reviews (default in CI mode) |
 | `--keep-history`          | Archive previous reviews even in CI mode            |
-| `--state-file`            | Specific state file path (overrides default)        |
 | `--no-state`              | Don't save state file after review                  |
 | `--remediate`             | Enter remediation mode                              |
 | `--no-remediation-output` | Don't save remediation notes                        |
 | `--ci`                    | CI/CD mode: non-interactive analysis                |
 | `--json`                  | Output as JSON (implies --ci)                       |
 | `--strict`                | Fail on any High impact risk (ignores verdict)      |
+| `--skip-policy-check`     | Skip policy engine setup (development only)         |
 | `--model`                 | Bedrock model ID (default: Nova 2 Lite)             |
 | `--region`                | AWS region (default: eu-central-1)                  |
 
@@ -127,7 +127,7 @@ All options can be set via environment variables:
 
 ## AWS Credentials
 
-The tool uses the standard AWS credential chain. No credentials are hardcoded.
+The tool uses the standard AWS credential chain.
 
 ### Local Development
 
@@ -249,6 +249,7 @@ arch_sparring_agent/
 │   └── source_analyzer.py     # Lambda/application source code reader
 ├── orchestrator.py            # Phase orchestration
 ├── config.py                  # AWS/Bedrock configuration
+├── context_condenser.py       # Handles large inputs
 ├── state.py                   # Review state persistence
 └── cli.py                     # CLI entry point
 examples/ci/
@@ -282,7 +283,7 @@ The tool automatically creates and configures a full policy enforcement stack fo
 - **Model**: Nova 2 Lite (300K context, multimodal)
 - **Framework**: AWS Strands SDK
 - **Region**: eu-central-1 (configurable)
-- **Policy Engine**: AgentCore Policy Engine for tool access control (required; use `--skip-policy-check` to bypass in development)
+- **Policy Engine**: AgentCore Policy Engine for tool access control
 
 ## References
 
