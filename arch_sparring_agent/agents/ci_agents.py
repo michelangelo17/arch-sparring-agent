@@ -23,13 +23,13 @@ Output exactly what's in "Features Not Found", nothing more.""",
     )
 
 
-def run_ci_questions(agent: Agent, req_summary: str, arch_summary: str) -> str:
+def run_ci_questions(agent: Agent, req_findings: str, arch_findings: str) -> str:
     """Execute CI question phase - identifies gaps without user interaction."""
     result = agent(
         f"""Copy the items from "Features Not Found" below. Do not add anything else.
 
-ARCHITECTURE ANALYSIS:
-{arch_summary}
+ARCHITECTURE FINDINGS:
+{arch_findings}
 
 Copy items from "Features Not Found" section only:"""
     )
@@ -56,13 +56,13 @@ Format per gap:
     )
 
 
-def run_ci_sparring(agent: Agent, req_summary: str, arch_summary: str, gaps_context: str) -> str:
+def run_ci_sparring(agent: Agent, req_findings: str, arch_findings: str, qa_findings: str) -> str:
     """Execute CI sparring phase - challenges architecture without user interaction."""
     result = agent(
         f"""Assess risks ONLY for these confirmed gaps:
 
 CONFIRMED GAPS:
-{gaps_context}
+{qa_findings}
 
 For each gap above, provide: Risk, Impact, Mitigation.
 Do NOT add risks for features not in the gaps list."""
@@ -101,21 +101,21 @@ RULES:
 
 def generate_ci_review(
     agent: Agent,
-    req_summary: str,
-    arch_summary: str,
-    gaps_context: str = "",
-    risks_context: str = "",
+    req_findings: str,
+    arch_findings: str,
+    qa_findings: str = "",
+    sparring_findings: str = "",
 ) -> str:
-    """Generate concise CI review."""
+    """Generate concise CI review from extracted findings."""
     return str(
         agent(
             f"""Write review based ONLY on these inputs. Do not add new gaps.
 
 CONFIRMED GAPS:
-{gaps_context if gaps_context.strip() else "None identified"}
+{qa_findings if qa_findings.strip() else "None identified"}
 
 ASSESSED RISKS:
-{risks_context if risks_context.strip() else "None identified"}
+{sparring_findings if sparring_findings.strip() else "None identified"}
 
 Base your verdict on the gaps and risks above. If none, verdict is PASS."""
         )

@@ -1,11 +1,14 @@
 """Remediation agent for discussing and resolving review findings."""
 
+import logging
 import re
 
 from strands import Agent
 
 from ..config import create_session_manager, setup_agentcore_memory
 from ..state import ReviewState
+
+logger = logging.getLogger(__name__)
 
 
 def _format_list(items: list[dict], severity_key: str) -> str:
@@ -67,6 +70,18 @@ def create_remediation_agent(
         )
         if memory_config:
             session_manager = create_session_manager(memory_config)
+            logger.info("Session memory active (project: %s)", state.project_name)
+        else:
+            logger.warning(
+                "Session memory could not be set up. "
+                "Cross-session context will NOT be preserved. "
+                "This session's discussions will be lost when you exit."
+            )
+    else:
+        logger.warning(
+            "No project name in review state. "
+            "Session memory requires a project name for persistence."
+        )
 
     # Build context
     gaps_text = _format_list(state.gaps, "severity")

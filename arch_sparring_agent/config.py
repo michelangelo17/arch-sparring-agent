@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime
 from typing import Any
@@ -9,8 +10,33 @@ from bedrock_agentcore.memory.integrations.strands.session_manager import (
     AgentCoreMemorySessionManager,
 )
 
+logger = logging.getLogger(__name__)
+
 MODEL_ID = "amazon.nova-2-lite-v1:0"
 DEFAULT_REGION = "eu-central-1"
+
+# --- Tuning constants (override via environment variables) ---
+
+# Context condenser: skip extraction for content shorter than this (chars)
+CONDENSER_PASSTHROUGH_THRESHOLD = int(os.getenv("ARCH_REVIEW_PASSTHROUGH_THRESHOLD", "2000"))
+
+# Context condenser: chunk size for fallback chunked extraction (chars)
+CONDENSER_CHUNK_SIZE = int(os.getenv("ARCH_REVIEW_CHUNK_SIZE", "8000"))
+
+# Context condenser: max chunks to process in fallback mode
+CONDENSER_MAX_CHUNKS = int(os.getenv("ARCH_REVIEW_MAX_CHUNKS", "5"))
+
+# Requirements agent: summarize documents longer than this (chars, ~6k tokens)
+DOC_SUMMARY_THRESHOLD = int(os.getenv("ARCH_REVIEW_DOC_SUMMARY_THRESHOLD", "25000"))
+
+# Requirements agent: use chunked summarization for documents longer than this (chars)
+DOC_CHUNK_SUMMARY_THRESHOLD = int(os.getenv("ARCH_REVIEW_DOC_CHUNK_THRESHOLD", "100000"))
+
+# Source analyzer: truncate source files longer than this (chars)
+SOURCE_FILE_MAX_CHARS = int(os.getenv("ARCH_REVIEW_SOURCE_MAX_CHARS", "50000"))
+
+# Diagram analyzer: max tokens for diagram analysis response
+DIAGRAM_MAX_TOKENS = int(os.getenv("ARCH_REVIEW_DIAGRAM_MAX_TOKENS", "4000"))
 
 
 def get_bedrock_client(region: str | None = None) -> Any:
@@ -18,22 +44,22 @@ def get_bedrock_client(region: str | None = None) -> Any:
     return boto3.client("bedrock-runtime", region_name=region)
 
 
-def check_model_access(model_id: str = MODEL_ID) -> bool:
+def check_model_access(model_id: str = MODEL_ID, region: str = DEFAULT_REGION) -> bool:
     """Verify access to the model."""
     try:
-        bedrock = boto3.client("bedrock", region_name=DEFAULT_REGION)
+        bedrock = boto3.client("bedrock", region_name=region)
         response = bedrock.list_foundation_models()
         available_models = [m["modelId"] for m in response["modelSummaries"]]
         has_access = model_id in available_models
         if has_access:
-            print(f"✓ Model {model_id} is accessible")
+            logger.info("Model %s is accessible", model_id)
         else:
-            print(
-                f"✗ Model {model_id} is not accessible. Available models: {len(available_models)}"
+            logger.error(
+                "Model %s is not accessible. Available models: %d", model_id, len(available_models)
             )
         return has_access
     except Exception as e:
-        print(f"Error checking model access: {e}")
+        logger.error("Error checking model access: %s", e)
         return False
 
 
@@ -43,10 +69,10 @@ def get_inference_profile_arn(model_id: str = MODEL_ID, region: str = DEFAULT_RE
         sts = boto3.client("sts", region_name=region)
         account_id = sts.get_caller_identity()["Account"]
         profile_arn = f"arn:aws:bedrock:{region}:{account_id}:inference-profile/global.{model_id}"
-        print(f"✓ Using inference profile: {profile_arn}")
+        logger.info("Using inference profile: %s", profile_arn)
         return profile_arn
     except Exception as e:
-        print(f"Warning: Could not get inference profile ARN: {e}")
+        logger.warning("Could not get inference profile ARN: %s", e)
         return None
 
 
@@ -88,7 +114,7 @@ def setup_agentcore_memory(
         if memory_id:
             # Check if memory is active
             if memory_status and memory_status.upper() != "ACTIVE":
-                print(f"  Memory '{memory_name}' exists but status is {memory_status}")
+                logger.debug("Memory '%s' exists but status is %s", memory_name, memory_status)
                 # Wait for it to become active (up to 60s)
                 for _ in range(12):
                     time.sleep(5)
@@ -96,22 +122,22 @@ def setup_agentcore_memory(
                     memory_id, memory_status = _find_memory_by_name(memories, memory_name)
                     if memory_status and memory_status.upper() == "ACTIVE":
                         break
-                    print(f"  Waiting for memory to become active... ({memory_status})")
+                    logger.debug("Waiting for memory to become active... (%s)", memory_status)
 
                 if memory_status and memory_status.upper() != "ACTIVE":
-                    print("  Memory not active after waiting. Continuing without memory.")
+                    logger.debug("Memory not active after waiting. Continuing without memory.")
                     return None, None
 
-            print(f"✓ Using existing memory: {memory_name}")
+            logger.info("Using existing memory: %s", memory_name)
         else:
             memory = client.create_memory(
                 name=memory_name, description="Memory for arch review agents"
             )
             memory_id = _extract_memory_id(memory)
-            print(f"✓ Created memory: {memory_name}")
+            logger.info("Created memory: %s", memory_name)
 
             # Wait for memory to become active (up to 3 minutes)
-            print("  Waiting for memory to initialize...", end="", flush=True)
+            logger.info("Waiting for memory to initialize...")
             memory_status = "CREATING"
             for _ in range(36):  # 36 * 5s = 3 minutes max
                 time.sleep(5)
@@ -120,19 +146,19 @@ def setup_agentcore_memory(
                 status_upper = (memory_status or "").upper()
 
                 if status_upper == "ACTIVE":
-                    print(" Done!")
+                    logger.info("Memory initialization done.")
                     break
                 if status_upper == "FAILED":
-                    print("\n  Memory creation failed.")
+                    logger.error("Memory creation failed.")
                     return None, None
 
-                print(".", end="", flush=True)
+                logger.debug("Memory status: %s", memory_status)
             else:
-                print(f"\n  Timeout waiting for memory. Status: {memory_status}")
+                logger.warning("Timeout waiting for memory. Status: %s", memory_status)
                 return None, None
 
         if not memory_id:
-            print(f"Could not resolve memory ID for '{memory_name}'. Skipping.")
+            logger.warning("Could not resolve memory ID for '%s'. Skipping.", memory_name)
             return None, None
 
         actor_id = actor_id or f"actor_{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -146,8 +172,8 @@ def setup_agentcore_memory(
         return memory_config, memory_id
 
     except Exception as e:
-        print(f"Warning: Could not set up AgentCore Memory: {e}")
-        print("Continuing without memory.")
+        logger.warning("Could not set up AgentCore Memory: %s", e)
+        logger.warning("Continuing without memory.")
         return None, None
 
 
@@ -178,19 +204,19 @@ def setup_policy_engine(
 
         if engine:
             engine_id = engine.get("policyEngineId")
-            print(f"✓ Using existing Policy Engine: {policy_engine_name} (ID: {engine_id})")
+            logger.info("Using existing Policy Engine: %s (ID: %s)", policy_engine_name, engine_id)
         else:
             response = client.create_policy_engine(
                 name=policy_engine_name, description="Policy engine for architecture review agents"
             )
             engine_id = response.get("policyEngineId")
-            print(f"✓ Created Policy Engine: {policy_engine_name} (ID: {engine_id})")
+            logger.info("Created Policy Engine: %s (ID: %s)", policy_engine_name, engine_id)
 
         return engine_id
 
     except Exception as e:
-        print(f"Warning: Could not set up Policy Engine: {e}")
-        print("Continuing without policy controls.")
+        logger.warning("Could not set up Policy Engine: %s", e)
+        logger.warning("Continuing without policy controls.")
         return None
 
 
@@ -243,7 +269,7 @@ def create_policy(
     region: str = DEFAULT_REGION,
 ):
     """Create a Cedar policy in a Policy Engine, or use existing one."""
-    print(f"  Checking Policy: {policy_name}...", end=" ", flush=True)
+    logger.info("Checking Policy: %s...", policy_name)
     try:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
         response = client.create_policy(
@@ -254,16 +280,13 @@ def create_policy(
             validationMode="FAIL_ON_ANY_FINDINGS",
         )
         policy_id = response.get("policyId")
-        print(f"✓ Created (ID: {policy_id})")
-
-        if _wait_for_policy_active(client, policy_engine_id, policy_id):
-            return policy_id
-        return None  # Failed verification
+        logger.info("Created policy %s (ID: %s)", policy_name, policy_id)
+        return policy_id
     except Exception as e:
         error_msg = str(e).lower()
         # Handle "already exists" as success
         if "already exists" in error_msg or "conflictexception" in error_msg:
-            print(f"  Policy '{policy_name}' exists.", end=" ", flush=True)
+            logger.info("Policy '%s' exists. Updating...", policy_name)
             try:
                 # Find policy ID with pagination
                 policy_id = None
@@ -305,21 +328,16 @@ def create_policy(
                         description=description or f"Policy for {policy_name}",
                         validationMode="FAIL_ON_ANY_FINDINGS",
                     )
-                    print(f"✓ Updated (ID: {policy_id})")
-
-                    if _wait_for_policy_active(client, policy_engine_id, policy_id):
-                        return policy_id
-                    return None  # Failed verification
+                    logger.info("Updated policy %s (ID: %s)", policy_name, policy_id)
+                    return policy_id
                 else:
-                    print(f"\n  ❌ Error: Could not find existing policy ID for '{policy_name}'")
-                    # Debug output to help identify correct response key if needed
-                    print(f"  Debug: Response keys were {list(response.keys())}")
+                    logger.error("Could not find existing policy ID for '%s'", policy_name)
                     return None
             except Exception as update_error:
-                print(f"\n  ❌ Error updating policy: {update_error}")
+                logger.error("Error updating policy: %s", update_error)
                 return None
 
-        print(f"\n  ❌ Error: {e}")
+        logger.error("Error creating policy %s: %s", policy_name, e)
         return None
 
 
@@ -341,20 +359,22 @@ def setup_online_evaluation(
 
         if evaluation:
             evaluation_id = evaluation.get("onlineEvaluationConfigId")
-            print(f"✓ Using existing Online Evaluation: {evaluation_name} (ID: {evaluation_id})")
+            logger.info(
+                "Using existing Online Evaluation: %s (ID: %s)", evaluation_name, evaluation_id
+            )
         else:
             response = client.create_online_evaluation_config(
                 name=evaluation_name,
                 description="Quality evaluation for architecture review agents",
             )
             evaluation_id = response.get("onlineEvaluationConfigId")
-            print(f"✓ Created Online Evaluation: {evaluation_name} (ID: {evaluation_id})")
+            logger.info("Created Online Evaluation: %s (ID: %s)", evaluation_name, evaluation_id)
 
         return evaluation_id
 
     except Exception as e:
-        print(f"Warning: Could not set up Online Evaluation: {e}")
-        print("Continuing without quality evaluations.")
+        logger.warning("Could not set up Online Evaluation: %s", e)
+        logger.warning("Continuing without quality evaluations.")
         return None
 
 
@@ -369,14 +389,16 @@ def setup_architecture_review_policies(
     if not gateway_arn:
         gateway_arn, gateway_id = setup_gateway(region=region, gateway_name=gateway_name)
         if not gateway_arn:
-            print("⚠️  Could not set up Gateway. Policies cannot be created without a Gateway.")
+            logger.warning(
+                "Could not set up Gateway. Policies cannot be created without a Gateway."
+            )
             return None
 
     engine_id = setup_policy_engine(region=region, policy_engine_name=policy_engine_name)
     if not engine_id:
         return None
 
-    print("\nVerifying policies...")
+    logger.info("Verifying policies...")
     policies_created = []
 
     # RequirementsAnalyst: document and user interaction tools only
@@ -474,12 +496,12 @@ def setup_architecture_review_policies(
         policies_created.append("DefaultDenyUnknownAgents")
 
     if policies_created:
-        print(f"\n✓ Verified {len(policies_created)} policies:")
+        logger.info("Verified %d policies:", len(policies_created))
         for policy_name in policies_created:
-            print(f"  - {policy_name}")
+            logger.debug("  - %s", policy_name)
 
         if gateway_id:
-            print("\nAssociating Gateway with Policy Engine...")
+            logger.info("Associating Gateway with Policy Engine...")
             associate_gateway_with_policy_engine(
                 gateway_id=gateway_id,
                 policy_engine_id=engine_id,
@@ -489,7 +511,7 @@ def setup_architecture_review_policies(
         else:
             if gateway_arn and "/gateway/" in gateway_arn:
                 extracted_id = gateway_arn.split("/gateway/")[-1]
-                print("\nAssociating Gateway with Policy Engine...")
+                logger.info("Associating Gateway with Policy Engine...")
                 associate_gateway_with_policy_engine(
                     gateway_id=extracted_id,
                     policy_engine_id=engine_id,
@@ -499,7 +521,7 @@ def setup_architecture_review_policies(
 
         return engine_id
     else:
-        print("Warning: No policies were created.")
+        logger.warning("No policies were created.")
         return None
 
 
@@ -537,14 +559,14 @@ def associate_gateway_with_policy_engine(
             update_params["authorizerConfiguration"] = gateway.get("authorizerConfiguration")
 
         client.update_gateway(**update_params)
-        print("✓ Associated Policy Engine with Gateway")
-        print(f"  Gateway ID: {gateway_id}")
-        print(f"  Policy Engine ARN: {policy_engine_arn}")
-        print(f"  Enforcement mode: {enforcement_mode}")
+        logger.info("Associated Policy Engine with Gateway")
+        logger.debug("Gateway ID: %s", gateway_id)
+        logger.debug("Policy Engine ARN: %s", policy_engine_arn)
+        logger.debug("Enforcement mode: %s", enforcement_mode)
         return True
     except Exception as e:
-        print(f"Warning: Could not associate Gateway with Policy Engine: {e}")
-        print("You may need to associate them manually via the AWS Console.")
+        logger.warning("Could not associate Gateway with Policy Engine: %s", e)
+        logger.warning("You may need to associate them manually via the AWS Console.")
         return False
 
 
@@ -555,7 +577,7 @@ def list_gateways(region: str = DEFAULT_REGION):
         response = client.list_gateways()
         return response.get("items", [])
     except Exception as e:
-        print(f"Warning: Could not list Gateways: {e}")
+        logger.warning("Could not list Gateways: %s", e)
         return []
 
 
@@ -598,17 +620,17 @@ def setup_gateway(
 
         gateway_arn, gateway_id, gateway_url = _find_gateway_by_name(gateway_name, region)
         if gateway_id:
-            print(f"✓ Using existing Gateway: {gateway_name}")
+            logger.info("Using existing Gateway: %s", gateway_name)
             if gateway_url:
-                print(f"  Gateway URL: {gateway_url}")
-            print(f"  Gateway ID: {gateway_id}")
+                logger.debug("Gateway URL: %s", gateway_url)
+            logger.debug("Gateway ID: %s", gateway_id)
             return gateway_arn, gateway_id
 
-        print(f"Creating Gateway: {gateway_name}...")
+        logger.info("Creating Gateway: %s...", gateway_name)
         client = GatewayClient(region_name=region)
 
         try:
-            print("  Creating OAuth authorization server...")
+            logger.info("Creating OAuth authorization server...")
             cognito_response = client.create_oauth_authorizer_with_cognito(gateway_name)
 
             if isinstance(cognito_response, str):
@@ -621,9 +643,9 @@ def setup_gateway(
                 raise ValueError(
                     f"Missing authorizer_config. Keys: {list(cognito_response.keys())}"
                 )
-            print("  ✓ Authorization server created")
+            logger.info("Authorization server created")
 
-            print("  Creating MCP Gateway...")
+            logger.info("Creating MCP Gateway...")
             gateway = client.create_mcp_gateway(
                 name=gateway_name,
                 role_arn=None,
@@ -635,28 +657,26 @@ def setup_gateway(
             if "already exists" in str(create_error).lower():
                 gateway_arn, gateway_id, gateway_url = _find_gateway_by_name(gateway_name, region)
                 if gateway_id:
-                    print(f"✓ Using existing Gateway: {gateway_name}")
+                    logger.info("Using existing Gateway: %s", gateway_name)
                     if gateway_url:
-                        print(f"  Gateway URL: {gateway_url}")
-                    print(f"  Gateway ID: {gateway_id}")
+                        logger.debug("Gateway URL: %s", gateway_url)
+                    logger.debug("Gateway ID: %s", gateway_id)
                     return gateway_arn, gateway_id
             raise
 
         if isinstance(gateway, str):
             gateway = {"gatewayId": gateway}
 
-        print("  ✓ Gateway created")
-        print("  Configuring IAM permissions...")
+        logger.info("Gateway created")
+        logger.info("Configuring IAM permissions...")
         client.fix_iam_permissions(gateway)
 
         import time
 
-        print("  Waiting for IAM propagation...", end="", flush=True)
+        logger.debug("Waiting for IAM propagation...")
         for i in range(30):
             time.sleep(1)
-            if i % 5 == 0:
-                print(".", end="", flush=True)
-        print(" Done!")
+        logger.debug("IAM propagation wait complete.")
 
         gateway_id = gateway.get("gatewayId") or gateway.get("id")
         gateway_url = gateway.get("gatewayUrl") or gateway.get("url")
@@ -667,24 +687,24 @@ def setup_gateway(
             account_id = sts.get_caller_identity()["Account"]
             gateway_arn = f"arn:aws:bedrock-agentcore:{region}:{account_id}:gateway/{gateway_id}"
 
-        print(f"✓ Gateway setup complete: {gateway_name}")
+        logger.info("Gateway setup complete: %s", gateway_name)
         if gateway_url:
-            print(f"  Gateway URL: {gateway_url}")
-        print(f"  Gateway ID: {gateway_id}")
+            logger.debug("Gateway URL: %s", gateway_url)
+        logger.debug("Gateway ID: %s", gateway_id)
 
         _save_gateway_config(gateway, cognito_response, region)
         return gateway_arn, gateway_id
 
     except ImportError:
-        print("Warning: bedrock-agentcore-starter-toolkit not installed.")
-        print("Run: pip install bedrock-agentcore-starter-toolkit")
+        logger.warning("bedrock-agentcore-starter-toolkit not installed.")
+        logger.warning("Run: pip install bedrock-agentcore-starter-toolkit")
         return None, None
     except Exception as e:
         import traceback
 
-        print(f"Warning: Could not set up Gateway: {e}")
-        print(f"Details: {traceback.format_exc()}")
-        print("Continuing without Gateway. Policies will not be created.")
+        logger.warning("Could not set up Gateway: %s", e)
+        logger.debug("Details: %s", traceback.format_exc())
+        logger.warning("Continuing without Gateway. Policies will not be created.")
         return None, None
 
 
@@ -712,7 +732,7 @@ def cleanup_gateway(region: str = DEFAULT_REGION):
 
     config_path = Path.home() / ".arch-review" / "gateway_config.json"
     if not config_path.exists():
-        print("No gateway config found. Nothing to clean up.")
+        logger.info("No gateway config found. Nothing to clean up.")
         return
 
     try:
@@ -721,7 +741,7 @@ def cleanup_gateway(region: str = DEFAULT_REGION):
         config = json.loads(config_path.read_text())
         client = GatewayClient(region_name=config.get("region", region))
         client.cleanup_gateway(config["gateway_id"], config.get("client_info"))
-        print("✓ Gateway cleanup complete!")
+        logger.info("Gateway cleanup complete!")
         config_path.unlink()
     except Exception as e:
-        print(f"Warning: Could not clean up Gateway: {e}")
+        logger.warning("Could not clean up Gateway: %s", e)
