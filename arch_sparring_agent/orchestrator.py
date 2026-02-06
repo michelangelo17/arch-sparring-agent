@@ -59,7 +59,11 @@ class ReviewOrchestrator:
         if self.policy_engine_id:
             print(f"\n✓ Policy Engine ID: {self.policy_engine_id}")
         else:
-            print("\n⚠️  Policy Engine setup failed. Review may have limited security controls.")
+            print(
+                "\n⚠️  Policy Engine setup failed. Continuing without policy enforcement.\n"
+                "   Agents will not have Cedar tool-access restrictions applied.\n"
+                "   The review itself will still run normally."
+            )
         print("=" * 60 + "\n")
 
         self.requirements_agent = create_requirements_agent(documents_dir, self.model_id)

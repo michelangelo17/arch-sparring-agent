@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from ..config import MODEL_ID, get_bedrock_client, get_inference_profile_arn
+from ..config import DIAGRAM_MAX_TOKENS, MODEL_ID, get_bedrock_client, get_inference_profile_arn
 
 
 class DiagramAnalyzer:
@@ -71,7 +71,7 @@ class DiagramAnalyzer:
                         ],
                     }
                 ],
-                inferenceConfig={"maxTokens": 4000, "temperature": 0.1},
+                inferenceConfig={"maxTokens": DIAGRAM_MAX_TOKENS, "temperature": 0.1},
             )
 
             if "output" in response and "message" in response["output"]:

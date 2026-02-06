@@ -12,6 +12,29 @@ from bedrock_agentcore.memory.integrations.strands.session_manager import (
 MODEL_ID = "amazon.nova-2-lite-v1:0"
 DEFAULT_REGION = "eu-central-1"
 
+# --- Tuning constants (override via environment variables) ---
+
+# Context condenser: skip extraction for content shorter than this (chars)
+CONDENSER_PASSTHROUGH_THRESHOLD = int(os.getenv("ARCH_REVIEW_PASSTHROUGH_THRESHOLD", "2000"))
+
+# Context condenser: chunk size for fallback chunked extraction (chars)
+CONDENSER_CHUNK_SIZE = int(os.getenv("ARCH_REVIEW_CHUNK_SIZE", "8000"))
+
+# Context condenser: max chunks to process in fallback mode
+CONDENSER_MAX_CHUNKS = int(os.getenv("ARCH_REVIEW_MAX_CHUNKS", "5"))
+
+# Requirements agent: summarize documents longer than this (chars, ~6k tokens)
+DOC_SUMMARY_THRESHOLD = int(os.getenv("ARCH_REVIEW_DOC_SUMMARY_THRESHOLD", "25000"))
+
+# Requirements agent: use chunked summarization for documents longer than this (chars)
+DOC_CHUNK_SUMMARY_THRESHOLD = int(os.getenv("ARCH_REVIEW_DOC_CHUNK_THRESHOLD", "100000"))
+
+# Source analyzer: truncate source files longer than this (chars)
+SOURCE_FILE_MAX_CHARS = int(os.getenv("ARCH_REVIEW_SOURCE_MAX_CHARS", "50000"))
+
+# Diagram analyzer: max tokens for diagram analysis response
+DIAGRAM_MAX_TOKENS = int(os.getenv("ARCH_REVIEW_DIAGRAM_MAX_TOKENS", "4000"))
+
 
 def get_bedrock_client(region: str | None = None) -> Any:
     region = region or os.getenv("AWS_REGION", DEFAULT_REGION)

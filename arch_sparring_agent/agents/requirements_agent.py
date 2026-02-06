@@ -2,6 +2,7 @@
 
 from strands import Agent, tool
 
+from ..config import DOC_CHUNK_SUMMARY_THRESHOLD, DOC_SUMMARY_THRESHOLD
 from ..context_condenser import _chunked_extract
 
 
@@ -26,8 +27,8 @@ def create_requirements_agent(
         doc = parser.read_markdown_file(filename)
         content = str(doc["content"])
 
-        # If content > 25k chars (~6k tokens), summarize to avoid context overflow
-        if len(content) > 25000:
+        # If content > threshold (~6k tokens), summarize to avoid context overflow
+        if len(content) > DOC_SUMMARY_THRESHOLD:
             summarizer = Agent(
                 name="DocSummarizer",
                 model=model_id,
@@ -35,8 +36,8 @@ def create_requirements_agent(
                 tools=[],
             )
             try:
-                # Use chunked extraction for very large files (>100k chars)
-                if len(content) > 100000:
+                # Use chunked extraction for very large files
+                if len(content) > DOC_CHUNK_SUMMARY_THRESHOLD:
                     summary = _chunked_extract(content, summarize_prompt, model_id)
                 else:
                     summary = str(summarizer(f"Summarize this content:\n\n{content}"))

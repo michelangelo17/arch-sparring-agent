@@ -9,12 +9,12 @@ from botocore.exceptions import ClientError
 from strands import Agent
 from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
-# Below this character count, skip extraction (already compact enough)
-PASSTHROUGH_THRESHOLD = 2000
+from .config import CONDENSER_CHUNK_SIZE, CONDENSER_MAX_CHUNKS, CONDENSER_PASSTHROUGH_THRESHOLD
 
-# Chunk size for fallback when input is too large for single-pass extraction
-CHUNK_SIZE = 8000
-MAX_CHUNKS = 5
+# Re-export for backwards compatibility and test access
+PASSTHROUGH_THRESHOLD = CONDENSER_PASSTHROUGH_THRESHOLD
+CHUNK_SIZE = CONDENSER_CHUNK_SIZE
+MAX_CHUNKS = CONDENSER_MAX_CHUNKS
 
 
 def _chunked_extract(content: str, system_prompt: str, model_id: str) -> str:

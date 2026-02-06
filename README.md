@@ -282,7 +282,7 @@ The tool automatically creates and configures a full policy enforcement stack fo
 - **Model**: Nova 2 Lite (300K context, multimodal)
 - **Framework**: AWS Strands SDK
 - **Region**: eu-central-1 (configurable)
-- **Policy Engine**: AgentCore Policy Engine for tool access control (always enabled)
+- **Policy Engine**: AgentCore Policy Engine for tool access control (enabled when available, review continues without it if setup fails)
 
 ## References
 

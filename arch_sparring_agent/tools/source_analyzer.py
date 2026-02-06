@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from ..config import SOURCE_FILE_MAX_CHARS
+
 
 class SourceAnalyzer:
     """Reads source code files to understand business logic."""
@@ -38,8 +40,11 @@ class SourceAnalyzer:
 
         try:
             content = path.read_text(encoding="utf-8")
-            if len(content) > 50000:
-                return content[:50000] + f"\n\n... [truncated, file is {len(content)} chars]"
+            if len(content) > SOURCE_FILE_MAX_CHARS:
+                return (
+                    content[:SOURCE_FILE_MAX_CHARS]
+                    + f"\n\n... [truncated, file is {len(content)} chars]"
+                )
             return content
         except Exception as e:
             return f"Error reading {filename}: {e}"
