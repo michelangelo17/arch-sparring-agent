@@ -1,10 +1,12 @@
 """CLI entry point for architecture review tool."""
 
 import json
+import logging
 import os
 import shutil
 import sys
 from datetime import datetime
+from importlib.metadata import version
 from pathlib import Path
 
 import click
@@ -13,6 +15,26 @@ from .agents.remediation_agent import create_remediation_agent, run_remediation
 from .config import DEFAULT_REGION, MODEL_ID, get_inference_profile_arn
 from .orchestrator import ReviewOrchestrator
 from .state import ReviewState, extract_state_from_review
+
+
+def _configure_logging(verbose: bool) -> None:
+    """Configure logging level based on verbosity."""
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(message)s",
+    )
+    # Also set for our package specifically
+    logging.getLogger("arch_sparring_agent").setLevel(level)
+
+
+def get_version() -> str:
+    """Get package version from metadata."""
+    try:
+        return version("arch-sparring-agent")
+    except Exception:
+        return "unknown"
+
 
 # Exit codes
 EXIT_SUCCESS = 0
@@ -100,6 +122,7 @@ def _extract_verdict(review_text: str, strict: bool = False) -> tuple[str, int]:
 
 
 @click.command()
+@click.version_option(version=get_version(), prog_name="arch-review")
 @click.option(
     "--documents-dir",
     type=click.Path(file_okay=False, dir_okay=True),
@@ -194,6 +217,13 @@ def _extract_verdict(review_text: str, strict: bool = False) -> tuple[str, int]:
     default=False,
     help="Skip policy engine enforcement (development only - NOT recommended for production)",
 )
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    default=False,
+    help="Enable verbose output (show policy setup details, debug info)",
+)
 def main(
     documents_dir,
     templates_dir,
@@ -211,6 +241,7 @@ def main(
     json_output,
     strict,
     skip_policy_check,
+    verbose,
 ):
     """
     Architecture Review Sparring Partner
@@ -239,6 +270,7 @@ def main(
       arch-review --remediate
       arch-review --ci --keep-history  # CI with history archiving
     """
+    _configure_logging(verbose)
     os.environ["AWS_REGION"] = region
     ci_mode = ci or json_output
 

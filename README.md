@@ -99,6 +99,7 @@ arch-review --remediate
 | `--json`                  | Output as JSON (implies --ci)                       |
 | `--strict`                | Fail on any High impact risk (ignores verdict)      |
 | `--skip-policy-check`     | Skip policy engine setup (development only)         |
+| `-v`, `--verbose`         | Show detailed output (policy setup, debug info)     |
 | `--model`                 | Bedrock model ID (default: Nova 2 Lite)             |
 | `--region`                | AWS region (default: eu-central-1)                  |
 
