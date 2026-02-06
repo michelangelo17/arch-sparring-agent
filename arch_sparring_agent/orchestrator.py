@@ -38,6 +38,7 @@ class ReviewOrchestrator:
         region: str = "eu-central-1",
         ci_mode: bool = False,
         source_dir: str | None = None,
+        skip_policy_check: bool = False,
     ):
         self.documents_dir = documents_dir
         self.templates_dir = templates_dir
@@ -58,11 +59,17 @@ class ReviewOrchestrator:
         self.policy_engine_id = setup_architecture_review_policies(region=region)
         if self.policy_engine_id:
             print(f"\n✓ Policy Engine ID: {self.policy_engine_id}")
-        else:
+        elif skip_policy_check:
             print(
-                "\n⚠️  Policy Engine setup failed. Continuing without policy enforcement.\n"
-                "   Agents will not have Cedar tool-access restrictions applied.\n"
-                "   The review itself will still run normally."
+                "\n⚠️  Policy Engine setup failed (--skip-policy-check enabled).\n"
+                "   Agents will NOT have Cedar tool-access restrictions.\n"
+                "   Running without security policy enforcement."
+            )
+        else:
+            raise RuntimeError(
+                "Policy Engine setup failed. Cedar policies could not be created.\n"
+                "Agents cannot run without security policy enforcement.\n"
+                "To bypass this check (development only), use --skip-policy-check."
             )
         print("=" * 60 + "\n")
 

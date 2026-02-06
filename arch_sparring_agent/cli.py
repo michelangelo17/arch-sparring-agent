@@ -188,6 +188,12 @@ def _extract_verdict(review_text: str, strict: bool = False) -> tuple[str, int]:
     default=False,
     help="Strict mode: any High impact risk fails",
 )
+@click.option(
+    "--skip-policy-check",
+    is_flag=True,
+    default=False,
+    help="Skip policy engine enforcement (development only - NOT recommended for production)",
+)
 def main(
     documents_dir,
     templates_dir,
@@ -204,6 +210,7 @@ def main(
     ci,
     json_output,
     strict,
+    skip_policy_check,
 ):
     """
     Architecture Review Sparring Partner
@@ -271,6 +278,7 @@ def main(
         ci_mode=ci_mode,
         json_output=json_output,
         strict=strict,
+        skip_policy_check=skip_policy_check,
     )
 
 
@@ -322,6 +330,7 @@ def _run_review_mode(
     ci_mode: bool,
     json_output: bool,
     strict: bool,
+    skip_policy_check: bool = False,
 ):
     """Run review mode."""
     out_path = _get_output_dir(output_dir)
@@ -339,6 +348,7 @@ def _run_review_mode(
             model_id=model,
             region=region,
             ci_mode=ci_mode,
+            skip_policy_check=skip_policy_check,
         )
 
         result = orchestrator.run_review()

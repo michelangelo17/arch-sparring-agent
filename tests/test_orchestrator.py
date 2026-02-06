@@ -158,6 +158,29 @@ class TestReviewOrchestrator(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             ReviewOrchestrator(documents_dir="docs", templates_dir="tmpl", diagrams_dir="diag")
 
+    def test_init_fails_if_policy_setup_fails(self):
+        """Test that init raises RuntimeError if policy engine setup fails."""
+        self.mock_setup_policies.return_value = None
+
+        with self.assertRaises(RuntimeError) as ctx:
+            ReviewOrchestrator(documents_dir="docs", templates_dir="tmpl", diagrams_dir="diag")
+
+        self.assertIn("Policy Engine setup failed", str(ctx.exception))
+        self.assertIn("--skip-policy-check", str(ctx.exception))
+
+    def test_init_allows_skip_policy_check(self):
+        """Test that skip_policy_check=True allows init to succeed without policies."""
+        self.mock_setup_policies.return_value = None
+
+        orch = ReviewOrchestrator(
+            documents_dir="docs",
+            templates_dir="tmpl",
+            diagrams_dir="diag",
+            skip_policy_check=True,
+        )
+
+        self.assertIsNone(orch.policy_engine_id)
+
 
 if __name__ == "__main__":
     unittest.main()
