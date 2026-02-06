@@ -39,13 +39,13 @@ Call done_challenging when key issues are addressed.""",
     )
 
 
-def run_sparring(agent: Agent, req_summary: str, arch_summary: str, qa_context: str) -> str:
-    """Execute sparring phase."""
+def run_sparring(agent: Agent, req_findings: str, arch_findings: str, qa_findings: str) -> str:
+    """Execute sparring phase with extracted findings."""
     result = agent(
         f"""Challenge the gaps below. Be BRIEF in your responses - no code examples.
 
 GAPS TO CHALLENGE:
-{qa_context}
+{qa_findings}
 
 Keep each challenge to 2-3 sentences. Call done_challenging when done."""
     )

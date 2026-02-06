@@ -39,22 +39,23 @@ RULES:
 
 def generate_review(
     agent: Agent,
-    req_summary: str,
-    arch_summary: str,
-    qa_context: str = "",
-    sparring_context: str = "",
+    req_findings: str,
+    arch_findings: str,
+    qa_findings: str = "",
+    sparring_findings: str = "",
 ) -> str:
-    """Generate final architecture review."""
-    prompt = f"""Write review based on CONFIRMED gaps only.
+    """Generate final architecture review from extracted findings."""
+    prompt = "Write review based on CONFIRMED gaps only.\n"
 
-ARCHITECTURE (note "Features Verified" vs "Features Not Found"):
-{arch_summary}
-"""
-    if qa_context:
-        prompt += f"\nCONFIRMED GAPS:\n{qa_context}"
-    if sparring_context:
-        prompt += f"\nSPARRING DISCUSSION:\n{sparring_context}"
+    if qa_findings:
+        prompt += f"\nCONFIRMED GAPS:\n{qa_findings}"
+    if sparring_findings:
+        prompt += f"\nRISK ASSESSMENT & DECISIONS:\n{sparring_findings}"
 
-    prompt += "\n\nOnly report gaps from 'Features Not Found'. Verified features are NOT gaps."
+    # Include architecture findings as reference for component names
+    if arch_findings:
+        prompt += f"\nARCHITECTURE REFERENCE:\n{arch_findings}"
+
+    prompt += "\n\nOnly report gaps from 'Confirmed Gaps' or 'Features Not Found'. Verified features are NOT gaps."
 
     return str(agent(prompt))

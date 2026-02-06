@@ -38,14 +38,14 @@ Just summarize what was confirmed in 2-3 bullet points max.""",
     )
 
 
-def run_questions(agent: Agent, req_summary: str, arch_summary: str) -> str:
-    """Execute question phase."""
+def run_questions(agent: Agent, req_findings: str, arch_findings: str) -> str:
+    """Execute question phase with extracted findings."""
     result = agent(
         f"""Ask questions about items in "Features Not Found" only.
 Do NOT question features in "Features Verified" - those exist.
 
-ARCHITECTURE:
-{arch_summary}
+ARCHITECTURE FINDINGS:
+{arch_findings}
 
 Ask about gaps listed above. Call done_asking when ready."""
     )

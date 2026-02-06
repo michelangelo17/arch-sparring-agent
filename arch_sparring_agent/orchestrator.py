@@ -1,7 +1,5 @@
 """Orchestrates the 5-phase architecture review process."""
 
-from strands import Agent
-
 from .agents.architecture_agent import create_architecture_agent
 from .agents.ci_agents import (
     create_ci_question_agent,
@@ -20,6 +18,11 @@ from .config import (
     check_model_access,
     get_inference_profile_arn,
     setup_architecture_review_policies,
+)
+from .context_condenser import (
+    extract_architecture_findings,
+    extract_phase_findings,
+    extract_requirements,
 )
 
 
@@ -80,66 +83,6 @@ class ReviewOrchestrator:
         self.captured_output.append(content)
         print(content)
 
-    def _summarize_phase(self, content: str, phase_name: str) -> str:
-        """Summarize verbose phase output to prevent token overflow in later phases."""
-        if len(content) < 6000:
-            return content
-
-        summarizer = Agent(
-            name="PhaseSummarizer",
-            model=self.model_id,
-            system_prompt=f"""Summarize this {phase_name} output concisely.
-
-Preserve:
-- All confirmed gaps and verified features
-- Key decisions (what will be fixed, what risks are accepted)
-- Important reasoning for decisions
-
-Format:
-### Decisions
-- WILL FIX: [items agreed to fix]
-- ACCEPTED RISK: [acknowledged but not addressing]
-- VERIFIED: [features confirmed as implemented]
-- GAPS: [confirmed missing items]
-
-### Key Discussion Points
-2-3 sentences on important reasoning.
-
-Max 400 words.""",
-            tools=[],
-        )
-
-        try:
-            summary = str(summarizer(content))
-            return summary
-        except Exception as e:
-            # Fallback: chunked summarization if full content causes overflow
-            if "max_tokens" in str(e).lower() or "token" in str(e).lower():
-                return self._chunked_summarize(content, phase_name)
-            # Re-raise unexpected errors
-            raise
-
-    def _chunked_summarize(self, content: str, phase_name: str) -> str:
-        """Fallback: summarize in chunks if content is extremely long."""
-        chunk_size = 8000
-        chunks = [content[i : i + chunk_size] for i in range(0, len(content), chunk_size)]
-
-        chunk_summaries = []
-        for i, chunk in enumerate(chunks[:5]):  # Max 5 chunks
-            mini_summarizer = Agent(
-                name="ChunkSummarizer",
-                model=self.model_id,
-                system_prompt="Extract key decisions and findings. Max 100 words.",
-                tools=[],
-            )
-            try:
-                chunk_summaries.append(str(mini_summarizer(chunk)))
-            except Exception:
-                chunk_summaries.append(f"[Chunk {i + 1} could not be summarized]")
-
-        combined = "\n\n".join(chunk_summaries)
-        return f"### {phase_name} Summary (condensed)\n{combined}"
-
     def run_review(self) -> dict:
         """Execute the 5-phase review process."""
         self.captured_output = []
@@ -161,13 +104,16 @@ Max 400 words.""",
         req_summary = str(req_result)
         self._capture(req_summary)
 
+        # Extract structured requirements for downstream phases
+        req_findings = extract_requirements(req_summary, self.model_id)
+
         # Phase 2: Architecture
         self._capture("\n## Phase 2: Architecture Analysis\n")
         if self.ci_mode:
             arch_prompt = f"""Analyze templates/diagrams/source code.
 
 REQUIREMENTS TO VERIFY:
-{req_summary[:2000]}
+{req_findings}
 
 Tasks:
 1. List infrastructure components
@@ -187,51 +133,54 @@ Format:
             arch_prompt = f"""Analyze all templates, diagrams, and source code.
 
 REQUIREMENTS:
-{req_summary[:3000]}
+{req_findings}
 
 Summarize architecture, patterns, and verify which requirements have implementations."""
         arch_result = self.architecture_agent(arch_prompt)
         arch_summary = str(arch_result)
         self._capture(arch_summary)
 
+        # Extract structured architecture findings for downstream phases
+        arch_findings = extract_architecture_findings(arch_summary, self.model_id)
+
         # Phase 3: Questions/Gaps
         phase3_title = "Identified Gaps" if self.ci_mode else "Clarifying Questions"
         self._capture(f"\n## Phase 3: {phase3_title}\n")
         if self.ci_mode:
-            qa_context = run_ci_questions(self.question_agent, req_summary, arch_summary)
+            qa_context = run_ci_questions(self.question_agent, req_findings, arch_findings)
         else:
-            qa_context = run_questions(self.question_agent, req_summary, arch_summary)
+            qa_context = run_questions(self.question_agent, req_findings, arch_findings)
             self._capture(f"\n{qa_context}")
 
-        # Summarize Q&A context for sparring phase to prevent token overflow
-        qa_for_sparring = self._summarize_phase(qa_context, "Q&A")
+        # Extract structured Q&A findings
+        qa_findings = extract_phase_findings(qa_context, "Q&A", self.model_id)
 
         # Phase 4: Sparring/Challenges
         phase4_title = "Risk Analysis" if self.ci_mode else "Architecture Sparring"
         self._capture(f"\n## Phase 4: {phase4_title}\n")
         if self.ci_mode:
             sparring_context = run_ci_sparring(
-                self.sparring_agent, req_summary, arch_summary, qa_for_sparring
+                self.sparring_agent, req_findings, arch_findings, qa_findings
             )
         else:
             sparring_context = run_sparring(
-                self.sparring_agent, req_summary, arch_summary, qa_for_sparring
+                self.sparring_agent, req_findings, arch_findings, qa_findings
             )
             self._capture(f"\n{sparring_context}")
 
-        # Summarize sparring for final review to prevent token overflow
-        sparring_for_review = self._summarize_phase(sparring_context, "Sparring")
+        # Extract structured sparring findings
+        sparring_findings = extract_phase_findings(sparring_context, "Sparring", self.model_id)
 
         # Phase 5: Final Review
         self._capture("\n## Phase 5: Final Review\n")
         self._capture("=" * 60)
         if self.ci_mode:
             review_text = generate_ci_review(
-                self.review_agent, req_summary, arch_summary, qa_for_sparring, sparring_for_review
+                self.review_agent, req_findings, arch_findings, qa_findings, sparring_findings
             )
         else:
             review_text = generate_review(
-                self.review_agent, req_summary, arch_summary, qa_for_sparring, sparring_for_review
+                self.review_agent, req_findings, arch_findings, qa_findings, sparring_findings
             )
         self._capture(review_text)
         self._capture("=" * 60)
@@ -240,11 +189,13 @@ Summarize architecture, patterns, and verify which requirements have implementat
             "review": review_text,
             "full_session": self.get_full_session(),
             "requirements_summary": req_summary,
+            "requirements_findings": req_findings,
             "architecture_summary": arch_summary,
+            "architecture_findings": arch_findings,
             "gaps": qa_context,
-            "gaps_summarized": qa_for_sparring,
+            "gaps_findings": qa_findings,
             "risks": sparring_context,
-            "risks_summarized": sparring_for_review,
+            "risks_findings": sparring_findings,
             "ci_mode": self.ci_mode,
             "agents_used": [
                 "RequirementsAnalyst",

@@ -2,24 +2,7 @@
 
 from strands import Agent, tool
 
-
-def _chunk_summarize(content: str, agent: Agent, chunk_size: int = 50000) -> str:
-    """Summarize large content in chunks to avoid truncation."""
-    chunks = [content[i : i + chunk_size] for i in range(0, len(content), chunk_size)]
-    summaries = []
-
-    for i, chunk in enumerate(chunks, 1):
-        try:
-            prompt = (
-                f"Summarize Part {i}/{len(chunks)}. "
-                f"Preserve all requirements and constraints:\n\n{chunk}"
-            )
-            result = str(agent(prompt))
-            summaries.append(f"--- Part {i} Summary ---\n{result}")
-        except Exception as e:
-            summaries.append(f"--- Part {i} Error ---\nCould not summarize: {e}")
-
-    return "\n\n".join(summaries)
+from ..context_condenser import _chunked_extract
 
 
 def create_requirements_agent(
@@ -32,6 +15,11 @@ def create_requirements_agent(
 
     parser = DocumentParser(documents_dir)
 
+    summarize_prompt = (
+        "Summarize this document part. Preserve ALL requirements, constraints, "
+        "and technical details. Be concise but comprehensive."
+    )
+
     @tool
     def read_document(filename: str) -> str:
         """Read a markdown document. Summarizes if too long."""
@@ -43,24 +31,21 @@ def create_requirements_agent(
             summarizer = Agent(
                 name="DocSummarizer",
                 model=model_id,
-                system_prompt=(
-                    "Summarize this document part. Preserve ALL requirements, constraints, "
-                    "and technical details. Be concise but comprehensive."
-                ),
+                system_prompt=summarize_prompt,
                 tools=[],
             )
             try:
-                # Use chunked summarization for very large files (>100k chars)
+                # Use chunked extraction for very large files (>100k chars)
                 if len(content) > 100000:
-                    summary = _chunk_summarize(content, summarizer)
+                    summary = _chunked_extract(content, summarize_prompt, model_id)
                 else:
                     summary = str(summarizer(f"Summarize this content:\n\n{content}"))
 
                 return f"Content from {filename} (Summarized):\n\n{summary}"
             except Exception as e:
-                # Fallback: try chunking if single pass failed
+                # Fallback: try chunking with smaller chunks if single pass failed
                 try:
-                    summary = _chunk_summarize(content, summarizer, chunk_size=30000)
+                    summary = _chunked_extract(content, summarize_prompt, model_id)
                     return f"Content from {filename} (Chunk Summarized after error):\n\n{summary}"
                 except Exception as chunk_err:
                     return (
