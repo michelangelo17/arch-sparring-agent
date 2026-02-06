@@ -408,6 +408,7 @@ def setup_architecture_review_policies(
 
     logger.info("Verifying policies...")
     policies_created = []
+    policies_failed = []
 
     # RequirementsAnalyst: document and user interaction tools only
     requirements_cedar = f"""permit(
@@ -429,6 +430,8 @@ def setup_architecture_review_policies(
     )
     if policy_id:
         policies_created.append("RequirementsAgentToolRestrictions")
+    else:
+        policies_failed.append("RequirementsAgentToolRestrictions")
 
     # ArchitectureEvaluator: CFN and diagram tools only
     architecture_cedar = f"""permit(
@@ -456,6 +459,8 @@ def setup_architecture_review_policies(
     )
     if policy_id:
         policies_created.append("ArchitectureAgentToolRestrictions")
+    else:
+        policies_failed.append("ArchitectureAgentToolRestrictions")
 
     # ReviewModerator: agent-to-agent communication only
     moderator_cedar = f"""permit(
@@ -477,8 +482,10 @@ def setup_architecture_review_policies(
     )
     if policy_id:
         policies_created.append("ModeratorAgentToolRestrictions")
+    else:
+        policies_failed.append("ModeratorAgentToolRestrictions")
 
-    # Default deny: only registered agents are allowed
+    # Default deny: only registered agents are allowed (CRITICAL - must succeed)
     default_deny_cedar = f"""forbid(
     principal is AgentCore::OAuthUser,
     action,
@@ -502,6 +509,17 @@ def setup_architecture_review_policies(
     )
     if policy_id:
         policies_created.append("DefaultDenyUnknownAgents")
+    else:
+        policies_failed.append("DefaultDenyUnknownAgents")
+
+    # Fail if any policy failed - all policies are required for security
+    if policies_failed:
+        logger.error(
+            "Policy setup failed. %d policies could not be activated: %s",
+            len(policies_failed),
+            ", ".join(policies_failed),
+        )
+        return None
 
     if policies_created:
         logger.info("Verified %d policies:", len(policies_created))

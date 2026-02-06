@@ -19,7 +19,7 @@ from .state import ReviewState, extract_state_from_review
 
 def _configure_logging(verbose: bool) -> None:
     """Configure logging level based on verbosity."""
-    level = logging.DEBUG if verbose else logging.INFO
+    level = logging.INFO if verbose else logging.WARNING
     logging.basicConfig(
         level=level,
         format="%(message)s",
