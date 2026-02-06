@@ -674,7 +674,7 @@ def setup_gateway(
         import time
 
         logger.debug("Waiting for IAM propagation...")
-        for i in range(30):
+        for _ in range(30):
             time.sleep(1)
         logger.debug("IAM propagation wait complete.")
 

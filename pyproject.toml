@@ -1,6 +1,6 @@
 [project]
 name = "arch-sparring-agent"
-version = "0.1.3"
+version = "0.2.1"
 description = "Multi-agent architecture review system using AWS Bedrock"
 readme = "README.md"
 license = { text = "MIT" }
