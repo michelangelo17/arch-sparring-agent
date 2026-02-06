@@ -56,7 +56,7 @@ class ReviewOrchestrator:
         if self.policy_engine_id:
             print(f"\n✓ Policy Engine ID: {self.policy_engine_id}")
         else:
-            print("\n⚠️  Policy Engine setup failed. Review may have limited security controls.")
+            raise RuntimeError("Policy Engine setup failed.")
         print("=" * 60 + "\n")
 
         self.requirements_agent = create_requirements_agent(documents_dir, self.model_id)

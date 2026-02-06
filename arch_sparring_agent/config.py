@@ -194,6 +194,47 @@ def setup_policy_engine(
         return None
 
 
+def _wait_for_policy_active(client, policy_engine_id: str, policy_id: str) -> bool:
+    """Wait for policy to become ACTIVE."""
+    import time
+
+    print("  Verifying status...", end="", flush=True)
+    for _ in range(120):  # 120 * 0.5s = 60s max
+        try:
+            response = client.get_policy(policyEngineId=policy_engine_id, policyId=policy_id)
+            # Check possible keys for status since GetPolicy response structure varies
+            policy_data = response.get("policy") or response
+            status = (policy_data.get("status") or policy_data.get("policyStatus") or "").upper()
+
+            if status == "ACTIVE":
+                print(" OK!")
+                return True
+            if "FAIL" in status:
+                print(f"\n  ❌ Failed. Status: {status}")
+                if "failureReason" in policy_data:
+                    print(f"  Reason: {policy_data['failureReason']}")
+                return False
+
+            # Print status only if not just updating/creating to avoid noise
+            if status not in ["UPDATING", "CREATING"]:
+                print(f"[{status}]", end="", flush=True)
+            else:
+                print(".", end="", flush=True)
+
+            time.sleep(0.5)
+        except Exception:
+            print("!", end="", flush=True)  # Show errors
+            pass
+
+    print(" (Timeout checking status)")
+    return False  # Fail if we time out and didn't get ACTIVE
+
+
+def _normalize_cedar(text: str) -> str:
+    """Normalize cedar policy text for comparison."""
+    return " ".join(text.split())
+
+
 def create_policy(
     policy_engine_id: str,
     policy_name: str,
@@ -214,33 +255,65 @@ def create_policy(
         )
         policy_id = response.get("policyId")
         print(f"✓ Created (ID: {policy_id})")
-        return policy_id
+
+        if _wait_for_policy_active(client, policy_engine_id, policy_id):
+            return policy_id
+        return None  # Failed verification
     except Exception as e:
         error_msg = str(e).lower()
         # Handle "already exists" as success
         if "already exists" in error_msg or "conflictexception" in error_msg:
-            print(f"  Policy '{policy_name}' exists. Updating...", end=" ", flush=True)
+            print(f"  Policy '{policy_name}' exists.", end=" ", flush=True)
             try:
-                # Find policy ID
-                response = client.list_policies(policyEngineId=policy_engine_id)
-                existing_policy = next(
-                    (p for p in response.get("items", []) if p.get("name") == policy_name), None
-                )
+                # Find policy ID with pagination
+                policy_id = None
+                next_token = None
 
-                if existing_policy:
-                    policy_id = existing_policy.get("policyId") or existing_policy.get("id")
+                while True:
+                    kwargs = {"policyEngineId": policy_engine_id}
+                    if next_token:
+                        kwargs["nextToken"] = next_token
+
+                    response = client.list_policies(**kwargs)
+                    # Try common keys for list response
+                    policies = (
+                        response.get("items")
+                        or response.get("policies")
+                        or response.get("policySummaries")
+                        or []
+                    )
+
+                    existing_policy = next(
+                        (p for p in policies if p.get("name") == policy_name), None
+                    )
+
+                    if existing_policy:
+                        policy_id = existing_policy.get("policyId") or existing_policy.get("id")
+                        break
+
+                    next_token = response.get("nextToken")
+                    if not next_token:
+                        break
+
+                if policy_id:
+                    print("Updating...", end=" ", flush=True)
                     # Update policy
                     client.update_policy(
                         policyEngineId=policy_engine_id,
                         policyId=policy_id,
-                        name=policy_name,
                         definition={"cedar": {"statement": cedar_statement}},
                         description=description or f"Policy for {policy_name}",
+                        validationMode="FAIL_ON_ANY_FINDINGS",
                     )
                     print(f"✓ Updated (ID: {policy_id})")
-                    return policy_id
+
+                    if _wait_for_policy_active(client, policy_engine_id, policy_id):
+                        return policy_id
+                    return None  # Failed verification
                 else:
                     print(f"\n  ❌ Error: Could not find existing policy ID for '{policy_name}'")
+                    # Debug output to help identify correct response key if needed
+                    print(f"  Debug: Response keys were {list(response.keys())}")
                     return None
             except Exception as update_error:
                 print(f"\n  ❌ Error updating policy: {update_error}")
@@ -309,14 +382,12 @@ def setup_architecture_review_policies(
     # RequirementsAnalyst: document and user interaction tools only
     requirements_cedar = f"""permit(
     principal is AgentCore::OAuthUser,
-    action in [
-        AgentCore::Action::"read_document",
-        AgentCore::Action::"list_available_documents",
-        AgentCore::Action::"ask_user_question"
-    ],
+    action,
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context has agentName && context.agentName == "RequirementsAnalyst"
+    context has agentName && context.agentName == "RequirementsAnalyst" &&
+    context has toolName &&
+    ["read_document", "list_available_documents", "ask_user_question"].contains(context.toolName)
 }};"""
 
     policy_id = create_policy(
@@ -332,16 +403,18 @@ def setup_architecture_review_policies(
     # ArchitectureEvaluator: CFN and diagram tools only
     architecture_cedar = f"""permit(
     principal is AgentCore::OAuthUser,
-    action in [
-        AgentCore::Action::"read_cloudformation_template",
-        AgentCore::Action::"list_cloudformation_templates",
-        AgentCore::Action::"read_architecture_diagram",
-        AgentCore::Action::"list_architecture_diagrams",
-        AgentCore::Action::"ask_user_question"
-    ],
+    action,
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context has agentName && context.agentName == "ArchitectureEvaluator"
+    context has agentName && context.agentName == "ArchitectureEvaluator" &&
+    context has toolName &&
+    [
+        "read_cloudformation_template",
+        "list_cloudformation_templates",
+        "read_architecture_diagram",
+        "list_architecture_diagrams",
+        "ask_user_question"
+    ].contains(context.toolName)
 }};"""
 
     policy_id = create_policy(
@@ -357,13 +430,12 @@ def setup_architecture_review_policies(
     # ReviewModerator: agent-to-agent communication only
     moderator_cedar = f"""permit(
     principal is AgentCore::OAuthUser,
-    action in [
-        AgentCore::Action::"get_requirements_analysis",
-        AgentCore::Action::"get_architecture_analysis"
-    ],
+    action,
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context has agentName && context.agentName == "ReviewModerator"
+    context has agentName && context.agentName == "ReviewModerator" &&
+    context has toolName &&
+    ["get_requirements_analysis", "get_architecture_analysis"].contains(context.toolName)
 }};"""
 
     policy_id = create_policy(
