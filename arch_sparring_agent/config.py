@@ -281,6 +281,10 @@ def create_policy(
         )
         policy_id = response.get("policyId")
         logger.info("Created policy %s (ID: %s)", policy_name, policy_id)
+        # Verify policy becomes ACTIVE before returning
+        if not _wait_for_policy_active(client, policy_engine_id, policy_id):
+            logger.error("Policy %s failed to become ACTIVE", policy_name)
+            return None
         return policy_id
     except Exception as e:
         error_msg = str(e).lower()
@@ -329,6 +333,10 @@ def create_policy(
                         validationMode="FAIL_ON_ANY_FINDINGS",
                     )
                     logger.info("Updated policy %s (ID: %s)", policy_name, policy_id)
+                    # Verify policy becomes ACTIVE before returning
+                    if not _wait_for_policy_active(client, policy_engine_id, policy_id):
+                        logger.error("Policy %s failed to become ACTIVE after update", policy_name)
+                        return None
                     return policy_id
                 else:
                     logger.error("Could not find existing policy ID for '%s'", policy_name)
