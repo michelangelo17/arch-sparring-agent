@@ -1,5 +1,7 @@
 """Orchestrates the 5-phase architecture review process."""
 
+import logging
+
 from .agents.architecture_agent import create_architecture_agent
 from .agents.ci_agents import (
     create_ci_question_agent,
@@ -24,6 +26,8 @@ from .context_condenser import (
     extract_phase_findings,
     extract_requirements,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ReviewOrchestrator:
@@ -50,20 +54,18 @@ class ReviewOrchestrator:
         inference_profile_arn = get_inference_profile_arn(model_id)
         self.model_id = inference_profile_arn or model_id
 
-        if not check_model_access(model_id):
+        if not check_model_access(model_id, region=region):
             raise RuntimeError(f"Model {model_id} not accessible.")
 
-        print("\n" + "=" * 60)
-        print("Setting up Policy Engine and Policies")
-        print("=" * 60)
+        logger.info("Setting up Policy Engine and Policies")
         self.policy_engine_id = setup_architecture_review_policies(region=region)
         if self.policy_engine_id:
-            print(f"\n✓ Policy Engine ID: {self.policy_engine_id}")
+            logger.info("Policy Engine ID: %s", self.policy_engine_id)
         elif skip_policy_check:
-            print(
-                "\n⚠️  Policy Engine setup failed (--skip-policy-check enabled).\n"
-                "   Agents will NOT have Cedar tool-access restrictions.\n"
-                "   Running without security policy enforcement."
+            logger.warning(
+                "Policy Engine setup failed (--skip-policy-check enabled). "
+                "Agents will NOT have Cedar tool-access restrictions. "
+                "Running without security policy enforcement."
             )
         else:
             raise RuntimeError(
@@ -71,7 +73,6 @@ class ReviewOrchestrator:
                 "Agents cannot run without security policy enforcement.\n"
                 "To bypass this check (development only), use --skip-policy-check."
             )
-        print("=" * 60 + "\n")
 
         self.requirements_agent = create_requirements_agent(documents_dir, self.model_id)
         self.architecture_agent = create_architecture_agent(
