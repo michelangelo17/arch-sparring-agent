@@ -67,6 +67,18 @@ def create_remediation_agent(
         )
         if memory_config:
             session_manager = create_session_manager(memory_config)
+            print(f"✓ Session memory active (project: {state.project_name})")
+        else:
+            print(
+                "⚠️  WARNING: Session memory could not be set up. "
+                "Cross-session context will NOT be preserved. "
+                "This session's discussions will be lost when you exit."
+            )
+    else:
+        print(
+            "⚠️  WARNING: No project name in review state. "
+            "Session memory requires a project name for persistence."
+        )
 
     # Build context
     gaps_text = _format_list(state.gaps, "severity")

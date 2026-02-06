@@ -4,6 +4,10 @@ from unittest.mock import MagicMock, patch
 
 # Mock external dependencies before importing application code
 sys.modules["strands"] = MagicMock()
+sys.modules["strands.types"] = MagicMock()
+sys.modules["strands.types.exceptions"] = MagicMock()
+sys.modules["botocore"] = MagicMock()
+sys.modules["botocore.exceptions"] = MagicMock()
 sys.modules["PIL"] = MagicMock()
 sys.modules["boto3"] = MagicMock()
 sys.modules["frontmatter"] = MagicMock()

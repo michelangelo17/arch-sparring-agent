@@ -3,22 +3,18 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 # Mock strands and others to prevent ImportError
-if "strands" not in sys.modules:
-    sys.modules["strands"] = MagicMock()
-if "arch_sparring_agent.tools.document_parser" not in sys.modules:
-    sys.modules["arch_sparring_agent.tools.document_parser"] = MagicMock()
-if "frontmatter" not in sys.modules:
-    sys.modules["frontmatter"] = MagicMock()
-if "bedrock_agentcore" not in sys.modules:
-    sys.modules["bedrock_agentcore"] = MagicMock()
-if "bedrock_agentcore.memory" not in sys.modules:
-    sys.modules["bedrock_agentcore.memory"] = MagicMock()
-if "bedrock_agentcore.memory.integrations.strands" not in sys.modules:
-    sys.modules["bedrock_agentcore.memory.integrations.strands"] = MagicMock()
-if "bedrock_agentcore.memory.integrations.strands.config" not in sys.modules:
-    sys.modules["bedrock_agentcore.memory.integrations.strands.config"] = MagicMock()
-if "bedrock_agentcore.memory.integrations.strands.session_manager" not in sys.modules:
-    sys.modules["bedrock_agentcore.memory.integrations.strands.session_manager"] = MagicMock()
+for mod in [
+    "strands", "strands.types", "strands.types.exceptions",
+    "botocore", "botocore.exceptions",
+    "arch_sparring_agent.tools.document_parser",
+    "frontmatter",
+    "bedrock_agentcore", "bedrock_agentcore.memory",
+    "bedrock_agentcore.memory.integrations.strands",
+    "bedrock_agentcore.memory.integrations.strands.config",
+    "bedrock_agentcore.memory.integrations.strands.session_manager",
+]:
+    if mod not in sys.modules:
+        sys.modules[mod] = MagicMock()
 
 from arch_sparring_agent.agents.requirements_agent import create_requirements_agent
 

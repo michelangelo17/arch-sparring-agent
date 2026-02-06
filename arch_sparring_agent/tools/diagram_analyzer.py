@@ -42,12 +42,16 @@ class DiagramAnalyzer:
             raise ValueError(f"Unsupported format: {filename}. Use PNG or JPEG.")
 
         inference_profile_arn = get_inference_profile_arn(MODEL_ID)
-        if not inference_profile_arn:
-            raise RuntimeError("Could not get inference profile ARN.")
 
         try:
+            # Use inference profile if available, otherwise fall back to direct model ID
+            model_param = (
+                {"inferenceProfileArn": inference_profile_arn}
+                if inference_profile_arn
+                else {"modelId": MODEL_ID}
+            )
             response = self.bedrock_client.converse(
-                inferenceProfileArn=inference_profile_arn,
+                **model_param,
                 messages=[
                     {
                         "role": "user",

@@ -5,7 +5,9 @@ structured findings from each phase's raw output. Every item is preserved as a c
 bullet point — no mid-sentence cuts, no lost findings.
 """
 
+from botocore.exceptions import ClientError
 from strands import Agent
+from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
 # Below this character count, skip extraction (already compact enough)
 PASSTHROUGH_THRESHOLD = 2000
@@ -67,8 +69,12 @@ def _extract(content: str, system_prompt: str, model_id: str) -> str:
 
     try:
         return str(extractor(content))
-    except Exception as e:
-        if "max_tokens" in str(e).lower() or "token" in str(e).lower():
+    except (ContextWindowOverflowException, MaxTokensReachedException):
+        return _chunked_extract(content, system_prompt, model_id)
+    except ClientError as e:
+        # Bedrock token limit errors surface as ClientError with specific error codes
+        error_code = e.response.get("Error", {}).get("Code", "")
+        if error_code in ("ValidationException", "ModelErrorException"):
             return _chunked_extract(content, system_prompt, model_id)
         raise
 
