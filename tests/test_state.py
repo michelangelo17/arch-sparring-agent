@@ -73,7 +73,10 @@ class TestExtractionLogic(unittest.TestCase):
         self.assertEqual(
             _extract_verdict("Verdict: PASS WITH CONCERNS due to latency"), "PASS WITH CONCERNS"
         )
-        self.assertEqual(_extract_verdict("No clear result"), "UNKNOWN")
+        # Fallback: infer from content
+        self.assertEqual(_extract_verdict("No clear result"), "PASS")  # Default
+        self.assertEqual(_extract_verdict("Critical security flaw found"), "FAIL")
+        self.assertEqual(_extract_verdict("Risk Impact: High severity"), "PASS WITH CONCERNS")
 
     def test_extract_gaps(self):
         review_text = """

@@ -197,6 +197,7 @@ def _extract_verdict(review_text: str) -> str:
     """Extract verdict from review."""
     review_lower = review_text.lower()
 
+    # Check explicit verdict
     if "verdict" in review_lower:
         after_verdict = review_lower.split("verdict")[-1][:100]
         if "fail" in after_verdict:
@@ -206,4 +207,14 @@ def _extract_verdict(review_text: str) -> str:
         elif "pass" in after_verdict:
             return "PASS"
 
-    return "UNKNOWN"
+    # Fallback: infer from content
+    critical_terms = ["critical", "severe", "major vulnerability", "security vulnerability"]
+    if any(term in review_lower for term in critical_terms):
+        return "FAIL"
+
+    has_high_impact = "impact: high" in review_lower or "impact high" in review_lower
+    if has_high_impact:
+        return "PASS WITH CONCERNS"
+
+    # Default to PASS if no concerning signals
+    return "PASS"
