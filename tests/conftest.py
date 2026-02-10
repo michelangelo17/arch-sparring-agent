@@ -51,6 +51,10 @@ class FakeClientError(Exception):
         super().__init__(f"ClientError: {error_code}")
 
 
+class FakeBotoCoreError(Exception):
+    """Fake botocore BotoCoreError for tests."""
+
+
 def _setup_mocks() -> None:
     """Install mocked modules into sys.modules."""
     for mod in _MOCKED_MODULES:
@@ -63,6 +67,14 @@ def _setup_mocks() -> None:
     ].ContextWindowOverflowException = FakeContextWindowOverflow
     sys.modules["strands.types.exceptions"].MaxTokensReachedException = FakeMaxTokensReached
     sys.modules["botocore.exceptions"].ClientError = FakeClientError
+    sys.modules["botocore.exceptions"].BotoCoreError = FakeBotoCoreError
+
+    # Wire PIL exceptions
+    pil_mock = sys.modules["PIL"]
+    pil_image_mock = MagicMock()
+    pil_image_mock.UnidentifiedImageError = type("UnidentifiedImageError", (OSError,), {})
+    pil_mock.Image = pil_image_mock
+    pil_mock.UnidentifiedImageError = pil_image_mock.UnidentifiedImageError
 
 
 # Install mocks at import time so all test modules can import application code

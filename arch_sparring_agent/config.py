@@ -5,37 +5,56 @@ import os
 from typing import Any
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 logger = logging.getLogger(__name__)
 
 MODEL_ID = "amazon.nova-2-lite-v1:0"
 DEFAULT_REGION = "eu-central-1"
 
+
+def _int_env(var: str, default: int) -> int:
+    """Read an integer from an environment variable with validation."""
+    raw = os.getenv(var)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("Invalid integer for %s='%s', using default %d", var, raw, default)
+        return default
+
+
 # --- Tuning constants (override via environment variables) ---
 
 # Context condenser: skip extraction for content shorter than this (chars)
-CONDENSER_PASSTHROUGH_THRESHOLD = int(os.getenv("ARCH_REVIEW_PASSTHROUGH_THRESHOLD", "2000"))
+CONDENSER_PASSTHROUGH_THRESHOLD = _int_env("ARCH_REVIEW_PASSTHROUGH_THRESHOLD", 2000)
 
 # Context condenser: chunk size for fallback chunked extraction (chars)
-CONDENSER_CHUNK_SIZE = int(os.getenv("ARCH_REVIEW_CHUNK_SIZE", "8000"))
+CONDENSER_CHUNK_SIZE = _int_env("ARCH_REVIEW_CHUNK_SIZE", 8000)
 
 # Context condenser: max chunks to process in fallback mode
-CONDENSER_MAX_CHUNKS = int(os.getenv("ARCH_REVIEW_MAX_CHUNKS", "5"))
+CONDENSER_MAX_CHUNKS = _int_env("ARCH_REVIEW_MAX_CHUNKS", 5)
 
 # Requirements agent: summarize documents longer than this (chars, ~6k tokens)
-DOC_SUMMARY_THRESHOLD = int(os.getenv("ARCH_REVIEW_DOC_SUMMARY_THRESHOLD", "25000"))
+DOC_SUMMARY_THRESHOLD = _int_env("ARCH_REVIEW_DOC_SUMMARY_THRESHOLD", 25000)
 
 # Requirements agent: use chunked summarization for documents longer than this (chars)
-DOC_CHUNK_SUMMARY_THRESHOLD = int(os.getenv("ARCH_REVIEW_DOC_CHUNK_THRESHOLD", "100000"))
+DOC_CHUNK_SUMMARY_THRESHOLD = _int_env("ARCH_REVIEW_DOC_CHUNK_THRESHOLD", 100000)
 
-# Source analyzer: truncate source files longer than this (chars)
-SOURCE_FILE_MAX_CHARS = int(os.getenv("ARCH_REVIEW_SOURCE_MAX_CHARS", "50000"))
+# Source analyzer: max source file size (chars)
+SOURCE_FILE_MAX_CHARS = _int_env("ARCH_REVIEW_SOURCE_MAX_CHARS", 50000)
 
 # Diagram analyzer: max tokens for diagram analysis response
-DIAGRAM_MAX_TOKENS = int(os.getenv("ARCH_REVIEW_DIAGRAM_MAX_TOKENS", "4000"))
+DIAGRAM_MAX_TOKENS = _int_env("ARCH_REVIEW_DIAGRAM_MAX_TOKENS", 4000)
 
 # Gateway: max seconds to wait for IAM propagation after gateway creation
-IAM_PROPAGATION_TIMEOUT = int(os.getenv("ARCH_REVIEW_IAM_WAIT_TIMEOUT", "60"))
+IAM_PROPAGATION_TIMEOUT = _int_env("ARCH_REVIEW_IAM_WAIT_TIMEOUT", 60)
+
+# File size limits for tools
+CFN_MAX_CHARS = _int_env("ARCH_REVIEW_CFN_MAX_CHARS", 500_000)
+DOC_MAX_CHARS = _int_env("ARCH_REVIEW_DOC_MAX_CHARS", 500_000)
+DIAGRAM_MAX_BYTES = _int_env("ARCH_REVIEW_DIAGRAM_MAX_BYTES", 10_000_000)
 
 
 def get_bedrock_client(region: str | None = None) -> Any:
@@ -62,7 +81,7 @@ def check_model_access(model_id: str = MODEL_ID, region: str = DEFAULT_REGION) -
                 "Model %s is not accessible. Available models: %d", model_id, len(available_models)
             )
         return has_access
-    except Exception as e:
+    except (ClientError, BotoCoreError) as e:
         logger.error("Error checking model access: %s", e)
         return False
 
@@ -75,6 +94,6 @@ def get_inference_profile_arn(model_id: str = MODEL_ID, region: str = DEFAULT_RE
         profile_arn = f"arn:aws:bedrock:{region}:{account_id}:inference-profile/global.{model_id}"
         logger.info("Using inference profile: %s", profile_arn)
         return profile_arn
-    except Exception as e:
+    except (ClientError, BotoCoreError) as e:
         logger.warning("Could not get inference profile ARN: %s", e)
         return None

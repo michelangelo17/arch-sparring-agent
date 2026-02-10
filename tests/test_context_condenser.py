@@ -223,7 +223,7 @@ class TestChunkedExtract(unittest.TestCase):
             call_count[0] += 1
             mock = MagicMock()
             if call_count[0] == 1:
-                mock.side_effect = RuntimeError("boom")
+                mock.side_effect = FakeClientError("ServiceUnavailable")
             else:
                 mock.return_value = "ok"
             return mock

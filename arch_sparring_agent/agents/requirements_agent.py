@@ -1,6 +1,8 @@
 """Requirements analysis agent for Phase 1."""
 
+from botocore.exceptions import ClientError
 from strands import Agent, tool
+from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
 from ..config import DOC_CHUNK_SUMMARY_THRESHOLD, DOC_SUMMARY_THRESHOLD, MODEL_ID
 from ..context_condenser import _chunked_extract
@@ -43,12 +45,16 @@ def create_requirements_agent(
                     summary = str(summarizer(f"Summarize this content:\n\n{content}"))
 
                 return f"Content from {filename} (Summarized):\n\n{summary}"
-            except Exception as e:
+            except (ContextWindowOverflowException, MaxTokensReachedException, ClientError) as e:
                 # Fallback: try chunking with smaller chunks if single pass failed
                 try:
                     summary = _chunked_extract(content, summarize_prompt, model_id)
                     return f"Content from {filename} (Chunk Summarized after error):\n\n{summary}"
-                except Exception as chunk_err:
+                except (
+                    ContextWindowOverflowException,
+                    MaxTokensReachedException,
+                    ClientError,
+                ) as chunk_err:
                     return (
                         f"Error reading {filename}: Could not summarize ({e}) "
                         f"or chunk-summarize ({chunk_err})"

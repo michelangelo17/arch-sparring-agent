@@ -164,7 +164,7 @@ Summarize architecture, patterns, and verify which requirements have implementat
         phase3_title = "Identified Gaps" if self.ci_mode else "Clarifying Questions"
         self._capture(f"\n## Phase 3: {phase3_title}\n")
         if self.ci_mode:
-            qa_context = run_ci_questions(self.question_agent, req_findings, arch_findings)
+            qa_context = run_ci_questions(self.question_agent, arch_findings)
         else:
             qa_context = run_questions(self.question_agent, req_findings, arch_findings)
             self._capture(f"\n{qa_context}")
@@ -176,9 +176,7 @@ Summarize architecture, patterns, and verify which requirements have implementat
         phase4_title = "Risk Analysis" if self.ci_mode else "Architecture Sparring"
         self._capture(f"\n## Phase 4: {phase4_title}\n")
         if self.ci_mode:
-            sparring_context = run_ci_sparring(
-                self.sparring_agent, req_findings, arch_findings, qa_findings
-            )
+            sparring_context = run_ci_sparring(self.sparring_agent, qa_findings)
         else:
             sparring_context = run_sparring(
                 self.sparring_agent, req_findings, arch_findings, qa_findings
@@ -193,7 +191,7 @@ Summarize architecture, patterns, and verify which requirements have implementat
         self._capture("=" * 60)
         if self.ci_mode:
             review_text = generate_ci_review(
-                self.review_agent, req_findings, arch_findings, qa_findings, sparring_findings
+                self.review_agent, qa_findings, sparring_findings
             )
         else:
             review_text = generate_review(

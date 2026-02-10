@@ -4,7 +4,9 @@ import logging
 import re
 from collections.abc import Callable
 
+from botocore.exceptions import ClientError
 from strands import Agent
+from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
 from ..memory import create_session_manager, setup_agentcore_memory
 from ..state import ReviewState
@@ -197,7 +199,7 @@ def run_remediation(
         summary = str(agent(prompt))
         notes.append(f"\n## Session Summary\n{summary}")
         _emit(f"\n{'=' * 60}\nSummary:\n{summary}\n{'=' * 60}")
-    except Exception as e:
+    except (ContextWindowOverflowException, MaxTokensReachedException, ClientError) as e:
         logger.warning("Could not generate session summary: %s", e)
 
     return "\n\n".join(notes)

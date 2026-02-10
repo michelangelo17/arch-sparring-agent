@@ -9,6 +9,7 @@ from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemory
 from bedrock_agentcore.memory.integrations.strands.session_manager import (
     AgentCoreMemorySessionManager,
 )
+from botocore.exceptions import BotoCoreError, ClientError
 
 from .config import DEFAULT_REGION
 
@@ -112,7 +113,7 @@ def setup_agentcore_memory(
         )
         return memory_config, memory_id
 
-    except Exception as e:
+    except (ClientError, BotoCoreError) as e:
         logger.warning("Could not set up AgentCore Memory: %s", e)
         logger.warning("Continuing without memory.")
         return None, None

@@ -6,7 +6,7 @@ import os
 import shutil
 import sys
 from datetime import datetime
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import click
@@ -33,7 +33,7 @@ def get_version() -> str:
     """Get package version from metadata."""
     try:
         return version("arch-sparring-agent")
-    except Exception:
+    except PackageNotFoundError:
         return "unknown"
 
 
@@ -74,7 +74,7 @@ def _archive_previous(output_dir: Path) -> None:
         try:
             state = ReviewState.from_file(state_file)
             date_str = state.timestamp[:10]
-        except Exception:
+        except (json.JSONDecodeError, OSError, KeyError, ValueError):
             date_str = datetime.now().strftime("%Y-%m-%d")
     else:
         date_str = datetime.now().strftime("%Y-%m-%d")
@@ -343,7 +343,10 @@ def _run_remediation_mode(
             remediation_path.write_text(notes)
             click.echo(f"\n✓ Remediation notes saved to: {remediation_path}")
 
-    except Exception as e:
+    except ArchReviewError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(EXIT_ERROR)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(EXIT_ERROR)
 

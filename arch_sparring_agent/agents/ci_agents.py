@@ -25,7 +25,7 @@ Output exactly what's in "Features Not Found", nothing more.""",
     )
 
 
-def run_ci_questions(agent: Agent, req_findings: str, arch_findings: str) -> str:
+def run_ci_questions(agent: Agent, arch_findings: str) -> str:
     """Execute CI question phase - identifies gaps without user interaction."""
     result = agent(
         f"""Copy the items from "Features Not Found" below. Do not add anything else.
@@ -58,7 +58,7 @@ Format per gap:
     )
 
 
-def run_ci_sparring(agent: Agent, req_findings: str, arch_findings: str, qa_findings: str) -> str:
+def run_ci_sparring(agent: Agent, qa_findings: str) -> str:
     """Execute CI sparring phase - challenges architecture without user interaction."""
     result = agent(
         f"""Assess risks ONLY for these confirmed gaps:
@@ -103,8 +103,6 @@ RULES:
 
 def generate_ci_review(
     agent: Agent,
-    req_findings: str,
-    arch_findings: str,
     qa_findings: str = "",
     sparring_findings: str = "",
 ) -> str:

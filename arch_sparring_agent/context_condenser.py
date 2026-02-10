@@ -31,7 +31,7 @@ def _chunked_extract(content: str, system_prompt: str, model_id: str) -> str:
         )
         try:
             chunk_results.append(str(extractor(chunk)))
-        except Exception:
+        except (ContextWindowOverflowException, MaxTokensReachedException, ClientError):
             chunk_results.append(f"[Chunk {i + 1} could not be processed]")
 
     # Merge: deduplicate by running one final extraction over the combined chunk results
@@ -50,7 +50,7 @@ def _chunked_extract(content: str, system_prompt: str, model_id: str) -> str:
     )
     try:
         return str(merger(combined))
-    except Exception:
+    except (ContextWindowOverflowException, MaxTokensReachedException, ClientError):
         # If merge fails, return raw combined (better than nothing)
         return combined
 

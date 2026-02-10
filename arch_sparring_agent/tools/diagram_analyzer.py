@@ -2,9 +2,16 @@
 
 from pathlib import Path
 
-from PIL import Image
+from botocore.exceptions import BotoCoreError, ClientError
+from PIL import Image, UnidentifiedImageError
 
-from ..config import DIAGRAM_MAX_TOKENS, MODEL_ID, get_bedrock_client, get_inference_profile_arn
+from ..config import (
+    DIAGRAM_MAX_BYTES,
+    DIAGRAM_MAX_TOKENS,
+    MODEL_ID,
+    get_bedrock_client,
+    get_inference_profile_arn,
+)
 from ..exceptions import ToolError
 
 
@@ -35,9 +42,21 @@ class DiagramAnalyzer:
         if not image_path.exists():
             raise ToolError(f"Diagram not found: {filename}")
 
+        # Check file size before reading
+        file_size = image_path.stat().st_size
+        if file_size > DIAGRAM_MAX_BYTES:
+            size_mb = file_size / 1_000_000
+            limit_mb = DIAGRAM_MAX_BYTES / 1_000_000
+            raise ToolError(
+                f"Diagram '{filename}' is {size_mb:.1f}MB which exceeds the "
+                f"{limit_mb:.1f}MB limit. Reduce the image size or increase the "
+                f"limit with ARCH_REVIEW_DIAGRAM_MAX_BYTES."
+            )
+
         try:
-            Image.open(image_path)
-        except Exception as e:
+            with Image.open(image_path) as img:
+                img.verify()
+        except (OSError, UnidentifiedImageError) as e:
             raise ToolError(f"Invalid image: {e}") from e
 
         image_bytes = self._read_image_bytes(image_path)
@@ -88,7 +107,7 @@ class DiagramAnalyzer:
                 return "\n".join(item.get("text", "") for item in content if "text" in item)
             return str(response)
 
-        except Exception as e:
+        except (ClientError, BotoCoreError) as e:
             raise ToolError(f"Bedrock API error: {e}") from e
 
     def list_diagrams(self) -> list[str]:

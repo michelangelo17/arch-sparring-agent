@@ -51,13 +51,17 @@ class SourceAnalyzer:
         if path.suffix not in self.SUPPORTED_EXTENSIONS:
             raise ToolError(f"Unsupported file type: {path.suffix}")
 
-        content = path.read_text(encoding="utf-8")
-        if len(content) > SOURCE_FILE_MAX_CHARS:
-            return (
-                content[:SOURCE_FILE_MAX_CHARS]
-                + f"\n\n... [truncated, file is {len(content)} chars]"
+        file_size = path.stat().st_size
+        if file_size > SOURCE_FILE_MAX_CHARS:
+            size_kb = file_size / 1_000
+            limit_kb = SOURCE_FILE_MAX_CHARS / 1_000
+            raise ToolError(
+                f"Source file '{filename}' is {size_kb:.0f}KB which exceeds the "
+                f"{limit_kb:.0f}KB limit. Split large files or increase the "
+                f"limit with ARCH_REVIEW_SOURCE_MAX_CHARS."
             )
-        return content
+
+        return path.read_text(encoding="utf-8")
 
     def search_source(self, pattern: str) -> str:
         """Search for a pattern across all source files."""

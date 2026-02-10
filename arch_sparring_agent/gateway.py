@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 from .config import DEFAULT_REGION, IAM_PROPAGATION_TIMEOUT
 from .exceptions import PolicySetupError
@@ -19,7 +20,7 @@ def list_gateways(region: str = DEFAULT_REGION) -> list:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
         response = client.list_gateways()
         return response.get("items", [])
-    except Exception as e:
+    except (ClientError, BotoCoreError) as e:
         logger.warning("Could not list Gateways: %s", e)
         return []
 
@@ -81,9 +82,9 @@ def _wait_for_iam_propagation(
             elapsed = time.monotonic() - start
             logger.debug("IAM propagation confirmed after %.1fs", elapsed)
             return True
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "accessdenied" in error_msg or "unauthorized" in error_msg:
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code in ("AccessDeniedException", "UnauthorizedException"):
                 logger.debug("IAM not yet propagated, retrying in %.1fs...", delay)
                 time.sleep(delay)
                 delay = min(delay * 2, max_delay)
@@ -91,6 +92,9 @@ def _wait_for_iam_propagation(
                 # Non-IAM error -- propagation may already be done
                 logger.debug("Gateway check returned non-IAM error: %s", e)
                 return True
+        except BotoCoreError as e:
+            logger.debug("Gateway check returned non-IAM error: %s", e)
+            return True
 
     logger.warning("IAM propagation timed out after %ds. Continuing anyway (best-effort).", timeout)
     return False
@@ -135,7 +139,7 @@ def associate_gateway_with_policy_engine(
         logger.debug("Policy Engine ARN: %s", policy_engine_arn)
         logger.debug("Enforcement mode: %s", enforcement_mode)
         return True
-    except Exception as e:
+    except (ClientError, BotoCoreError) as e:
         logger.warning("Could not associate Gateway with Policy Engine: %s", e)
         logger.warning("You may need to associate them manually via the AWS Console.")
         return False
@@ -188,7 +192,7 @@ def setup_gateway(
                 enable_semantic_search=False,
             )
 
-        except Exception as create_error:
+        except (ClientError, BotoCoreError) as create_error:
             if "already exists" in str(create_error).lower():
                 gateway_arn, gateway_id, gateway_url = _find_gateway_by_name(gateway_name, region)
                 if gateway_id:
@@ -233,7 +237,7 @@ def setup_gateway(
         logger.warning("bedrock-agentcore-starter-toolkit not installed.")
         logger.warning("Run: pip install bedrock-agentcore-starter-toolkit")
         return None, None
-    except Exception as e:
+    except (ClientError, BotoCoreError, PolicySetupError) as e:
         import traceback
 
         logger.warning("Could not set up Gateway: %s", e)
@@ -271,5 +275,5 @@ def cleanup_gateway(region: str = DEFAULT_REGION) -> None:
         client.cleanup_gateway(config["gateway_id"], config.get("client_info"))
         logger.info("Gateway cleanup complete!")
         config_path.unlink()
-    except Exception as e:
+    except (ClientError, BotoCoreError, json.JSONDecodeError, OSError, KeyError) as e:
         logger.warning("Could not clean up Gateway: %s", e)

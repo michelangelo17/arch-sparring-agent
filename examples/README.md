@@ -17,7 +17,7 @@ uv run arch-review \
     --documents-dir ./examples/documents \
     --templates-dir ./examples/templates \
     --diagrams-dir ./examples/diagrams \
-    --output review.md
+    --output-dir .arch-review
 ```
 
 ## Adding Diagrams

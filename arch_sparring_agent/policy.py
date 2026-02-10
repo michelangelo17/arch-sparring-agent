@@ -4,6 +4,7 @@ import logging
 import time
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 from .config import DEFAULT_REGION
 from .gateway import associate_gateway_with_policy_engine, setup_gateway
@@ -39,7 +40,7 @@ def setup_policy_engine(
 
         return engine_id
 
-    except Exception as e:
+    except (ClientError, BotoCoreError) as e:
         logger.warning("Could not set up Policy Engine: %s", e)
         logger.warning("Continuing without policy controls.")
         return None
@@ -79,7 +80,7 @@ def _wait_for_policy_active(
 
             logger.debug("Policy '%s' status: %s", policy_name, status)
             time.sleep(0.5)
-        except Exception as e:
+        except (ClientError, BotoCoreError) as e:
             logger.debug("Error checking policy '%s' status: %s", policy_name, e)
             time.sleep(0.5)
 
@@ -117,10 +118,10 @@ def create_policy(
             logger.error("Policy '%s' failed to become ACTIVE", policy_name)
             return None
         return policy_id
-    except Exception as e:
-        error_msg = str(e).lower()
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "")
         # Handle "already exists" as success
-        if "already exists" in error_msg or "conflictexception" in error_msg:
+        if error_code in ("ConflictException", "ResourceAlreadyExistsException"):
             return _update_existing_policy(
                 client,
                 policy_engine_id,
@@ -129,7 +130,9 @@ def create_policy(
                 description,
                 validation_mode,
             )
-
+        logger.error("Error creating policy '%s': %s", policy_name, e)
+        return None
+    except BotoCoreError as e:
         logger.error("Error creating policy '%s': %s", policy_name, e)
         return None
 
@@ -195,7 +198,7 @@ def _update_existing_policy(
         else:
             logger.error("Could not find existing policy ID for '%s'", policy_name)
             return None
-    except Exception as update_error:
+    except (ClientError, BotoCoreError) as update_error:
         logger.error("Error updating policy '%s': %s", policy_name, update_error)
         return None
 
