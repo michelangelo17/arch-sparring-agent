@@ -102,7 +102,9 @@ def create_question_agent(
 
 4. CRITICAL: You MUST use the ask_user tool for ALL communication with the user.
    NEVER output analysis text directly -- always go through ask_user.
-5. One question at a time via ask_user
+5. CRITICAL: Call ask_user exactly ONCE per turn. Wait for the user's response
+   before issuing the next question. NEVER batch multiple ask_user calls in a
+   single response.
 6. If user says "no" or "none", move on
 7. Call done_asking when done
 
