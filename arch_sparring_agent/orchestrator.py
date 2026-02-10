@@ -190,9 +190,7 @@ Summarize architecture, patterns, and verify which requirements have implementat
         self._capture("\n## Phase 5: Final Review\n")
         self._capture("=" * 60)
         if self.ci_mode:
-            review_text = generate_ci_review(
-                self.review_agent, qa_findings, sparring_findings
-            )
+            review_text = generate_ci_review(self.review_agent, qa_findings, sparring_findings)
         else:
             review_text = generate_review(
                 self.review_agent, req_findings, arch_findings, qa_findings, sparring_findings
