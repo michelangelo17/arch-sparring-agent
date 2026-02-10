@@ -11,6 +11,7 @@ def create_review_agent(model_id: str = MODEL_ID) -> Agent:
     return Agent(
         name="ReviewAgent",
         model=model_id,
+        callback_handler=None,
         system_prompt="""Write architecture review based on CONFIRMED gaps only.
 
 Format:

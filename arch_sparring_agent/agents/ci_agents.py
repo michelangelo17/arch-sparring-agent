@@ -10,6 +10,7 @@ def create_ci_question_agent(model_id: str = MODEL_ID) -> Agent:
     return Agent(
         name="QuestionAgent",
         model=model_id,
+        callback_handler=None,
         system_prompt="""You are a strict extractor. Your ONLY job is to copy items from
 "Features Not Found" verbatim.
 
@@ -43,6 +44,7 @@ def create_ci_sparring_agent(model_id: str = MODEL_ID) -> Agent:
     return Agent(
         name="SparringAgent",
         model=model_id,
+        callback_handler=None,
         system_prompt="""Assess risks for the CONFIRMED GAPS provided.
 
 RULES:
@@ -77,6 +79,7 @@ def create_ci_review_agent(model_id: str = MODEL_ID) -> Agent:
     return Agent(
         name="ReviewAgent",
         model=model_id,
+        callback_handler=None,
         system_prompt="""Write a brief architecture review based ONLY on provided gaps/risks.
 
 ## Summary

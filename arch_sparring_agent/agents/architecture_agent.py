@@ -105,6 +105,7 @@ List from CloudFormation + SDK calls observed in source code
     return Agent(
         name="ArchitectureEvaluator",
         model=model_id,
+        callback_handler=None,
         system_prompt=base_prompt,
         tools=tools,
     )

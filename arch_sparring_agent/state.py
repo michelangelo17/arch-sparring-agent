@@ -60,6 +60,17 @@ def _is_duplicate(text: str, items: list[dict], key: str = "description") -> boo
     return any(prefix in item[key] for item in items)
 
 
+def _strip_markdown(text: str) -> str:
+    """Remove common markdown inline formatting."""
+    text = text.strip()
+    # Remove bold/italic markers: **text**, *text*, __text__, _text_
+    text = re.sub(r"\*{1,2}(.*?)\*{1,2}", r"\1", text)
+    text = re.sub(r"_{1,2}(.*?)_{1,2}", r"\1", text)
+    # Remove inline code backticks
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    return text.strip()
+
+
 def _is_section_header(line: str, keyword: str) -> bool:
     """Check if a line is a section header containing the keyword (case-insensitive).
 
@@ -151,7 +162,7 @@ def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
                 continue
 
             if in_gaps_section and _is_list_item(line):
-                gap_text = _extract_list_text(line)
+                gap_text = _strip_markdown(_extract_list_text(line))
                 if gap_text and len(gap_text) > 5 and not _is_duplicate(gap_text, gaps):
                     gaps.append(
                         {
@@ -174,7 +185,7 @@ def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
                 in_not_found = False
                 continue
             if in_not_found and _is_list_item(line):
-                gap_text = _extract_list_text(line)
+                gap_text = _strip_markdown(_extract_list_text(line))
                 if gap_text and len(gap_text) > 5 and not _is_duplicate(gap_text, gaps):
                     gaps.append(
                         {
@@ -206,7 +217,7 @@ def _extract_risks(review_text: str, risks_context: str) -> list[dict]:
                 continue
 
             if in_risks_section and _is_list_item(line):
-                risk_text = _extract_list_text(line)
+                risk_text = _strip_markdown(_extract_list_text(line))
                 if risk_text and len(risk_text) > 10 and not _is_duplicate(risk_text, risks):
                     risks.append(
                         {
@@ -235,7 +246,7 @@ def _extract_recommendations(review_text: str) -> list[str]:
             continue
 
         if in_recommendations and _is_list_item(line):
-            rec_text = _extract_list_text(line)
+            rec_text = _strip_markdown(_extract_list_text(line))
             if rec_text and len(rec_text) > 10:
                 recommendations.append(rec_text[:300])
 

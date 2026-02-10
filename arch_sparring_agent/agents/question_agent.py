@@ -81,7 +81,7 @@ def create_question_agent(
 
         tools.extend([search_source, read_source])
 
-    system_prompt = """You verify gaps before asking users. Your workflow:
+    system_prompt = """You verify gaps and identify concerns before asking users. Your workflow:
 
 1. FIRST use list_templates to discover available template files
 2. For each item in "Features Not Found":
@@ -90,15 +90,25 @@ def create_question_agent(
    - Use read_template with actual filenames from list_templates (do NOT guess filenames)
    - If source tools available, also use search_source
    - If found: it's NOT a gap, skip it
-   - If NOT found after searching: ask the user
+   - If NOT found after searching: use ask_user to confirm with the user
 
-3. Only call ask_user for gaps you could NOT verify via search
-4. One question at a time
-5. If user says "no" or "none", move on
-6. Call done_asking when done
+3. If "Features Not Found" is empty or says "None", proactively check for common
+   architectural concerns using search tools:
+   - Security: encryption at rest (SSE, KMS), encryption in transit (TLS/SSL)
+   - Error handling: DLQ, retries, circuit breakers
+   - Monitoring: alarms, dashboards, alerting
+   - Access control: least-privilege IAM, resource policies
+   For any concern NOT found in templates/source, use ask_user to ask the user about it.
+
+4. CRITICAL: You MUST use the ask_user tool for ALL communication with the user.
+   NEVER output analysis text directly -- always go through ask_user.
+5. One question at a time via ask_user
+6. If user says "no" or "none", move on
+7. Call done_asking when done
 
 IMPORTANT: Do NOT ask about things you can find in templates/source code.
 IMPORTANT: Always use list_templates first -- never guess template filenames.
+IMPORTANT: ALL questions and findings MUST be communicated via the ask_user tool.
 After done_asking, summarize confirmed gaps in 2-3 bullet points max."""
 
     return Agent(

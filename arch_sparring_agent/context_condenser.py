@@ -26,6 +26,7 @@ def _chunked_extract(content: str, system_prompt: str, model_id: str) -> str:
         extractor = Agent(
             name="ChunkExtractor",
             model=model_id,
+            callback_handler=None,
             system_prompt=system_prompt,
             tools=[],
         )
@@ -42,6 +43,7 @@ def _chunked_extract(content: str, system_prompt: str, model_id: str) -> str:
     merger = Agent(
         name="FindingsMerger",
         model=model_id,
+        callback_handler=None,
         system_prompt=(
             "Merge these extracted findings into a single deduplicated list. "
             "Remove duplicates. Keep every unique item. Use the same format as the input."
@@ -63,6 +65,7 @@ def _extract(content: str, system_prompt: str, model_id: str) -> str:
     extractor = Agent(
         name="FindingsExtractor",
         model=model_id,
+        callback_handler=None,
         system_prompt=system_prompt,
         tools=[],
     )

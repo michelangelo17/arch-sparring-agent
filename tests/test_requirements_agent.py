@@ -89,6 +89,7 @@ class TestRequirementsAgent(unittest.TestCase):
         self.mock_agent_cls.assert_called_with(
             name="DocSummarizer",
             model=MODEL_ID,
+            callback_handler=None,
             system_prompt=unittest.mock.ANY,
             tools=[],
         )

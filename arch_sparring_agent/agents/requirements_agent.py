@@ -34,6 +34,7 @@ def create_requirements_agent(
             summarizer = Agent(
                 name="DocSummarizer",
                 model=model_id,
+                callback_handler=None,
                 system_prompt=summarize_prompt,
                 tools=[],
             )
@@ -70,6 +71,7 @@ def create_requirements_agent(
     return Agent(
         name="RequirementsAnalyst",
         model=model_id,
+        callback_handler=None,
         system_prompt="""Analyze requirements documents.
 
 Tasks:
