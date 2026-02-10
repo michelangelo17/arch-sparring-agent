@@ -60,6 +60,12 @@ def _is_duplicate(text: str, items: list[dict], key: str = "description") -> boo
     return any(prefix in item[key] for item in items)
 
 
+def _is_duplicate_str(text: str, items: list[str]) -> bool:
+    """Check for duplicates in a string list."""
+    prefix = text[:50]
+    return any(prefix in item for item in items)
+
+
 def _strip_markdown(text: str) -> str:
     """Remove common markdown inline formatting."""
     text = text.strip()
@@ -71,6 +77,12 @@ def _strip_markdown(text: str) -> str:
     return text.strip()
 
 
+def _header_level(line: str) -> int:
+    """Return the markdown header level (1-6), or 0 if not a header."""
+    match = re.match(r"^(#{1,6})\s+", line.strip())
+    return len(match.group(1)) if match else 0
+
+
 def _is_section_header(line: str, keyword: str) -> bool:
     """Check if a line is a section header containing the keyword (case-insensitive).
 
@@ -80,12 +92,34 @@ def _is_section_header(line: str, keyword: str) -> bool:
     if not stripped:
         return False
     # Markdown header: any level of # containing the keyword
-    if re.match(r"^#{1,6}\s+", stripped) and keyword.lower() in stripped.lower():
+    if _header_level(stripped) > 0 and keyword.lower() in stripped.lower():
         return True
     # Bold header or keyword at start: **Gaps**, Key Gaps, etc.
-    if keyword.lower() in stripped.lower() and (
-        stripped.startswith("**") or stripped.startswith("#")
-    ):
+    if keyword.lower() in stripped.lower() and stripped.startswith("**"):
+        return True
+    return False
+
+
+def _is_gap_section_header(line: str) -> bool:
+    """Check if a line is a gap list section header (not a numbered gap reference).
+
+    Matches: "## Confirmed Gaps", "### Key Gaps", "## Gaps"
+    Rejects: "##### Gap 1: Feature - ..." (a sub-header referencing a specific gap)
+    """
+    stripped = line.strip()
+    if not stripped:
+        return False
+    lower = stripped.lower()
+    # Must contain "gap" in a section-title sense
+    if "gap" not in lower:
+        return False
+    # Reject numbered gap references like "Gap 1:", "Gap 2:"
+    if re.search(r"gap\s*\d+\s*:", lower):
+        return False
+    # Accept markdown headers or bold headers
+    if _header_level(stripped) > 0:
+        return True
+    if stripped.startswith("**"):
         return True
     return False
 
@@ -117,9 +151,14 @@ def _extract_list_text(line: str) -> str:
     return stripped
 
 
-def _is_next_section(line: str) -> bool:
-    """Check if a line starts a new section (any markdown header)."""
-    return bool(re.match(r"^#{1,6}\s+", line.strip()))
+def _is_next_section_at_level(line: str, max_level: int) -> bool:
+    """Check if a line starts a section at the given level or higher (lower number).
+
+    For example, if we're in a #### section, only ## or ### would end it,
+    not ##### sub-headers within it.
+    """
+    level = _header_level(line)
+    return level > 0 and level <= max_level
 
 
 def extract_state_from_review(review_result: dict) -> ReviewState:
@@ -152,12 +191,15 @@ def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
     for source in [review_text, gaps_context]:
         lines = source.split("\n")
         in_gaps_section = False
+        section_level = 0
 
         for line in lines:
-            if _is_section_header(line, "gap"):
+            if _is_gap_section_header(line):
                 in_gaps_section = True
+                section_level = _header_level(line) or 2
                 continue
-            if in_gaps_section and _is_next_section(line):
+            # Only exit on a header at the same level or higher (not sub-headers)
+            if in_gaps_section and _is_next_section_at_level(line, section_level):
                 in_gaps_section = False
                 continue
 
@@ -177,11 +219,13 @@ def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
     if "not found" in review_text.lower():
         lines = review_text.split("\n")
         in_not_found = False
+        section_level = 0
         for line in lines:
             if _is_section_header(line, "not found"):
                 in_not_found = True
+                section_level = _header_level(line) or 2
                 continue
-            if in_not_found and _is_next_section(line):
+            if in_not_found and _is_next_section_at_level(line, section_level):
                 in_not_found = False
                 continue
             if in_not_found and _is_list_item(line):
@@ -200,24 +244,41 @@ def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
 
 
 def _extract_risks(review_text: str, risks_context: str) -> list[dict]:
-    """Extract risks from review."""
+    """Extract risks from review.
+
+    Handles two common formats:
+    1. Flat list: "## Risks" followed by bullet points
+    2. Nested: "#### Risks & Mitigations" with "##### Gap N:" sub-headers
+       containing "- **Risk**: ..." bullets
+    """
     risks = []
     risk_id = 1
 
     for source in [review_text, risks_context]:
         lines = source.split("\n")
         in_risks_section = False
+        section_level = 0
 
         for line in lines:
             if _is_section_header(line, "risk"):
                 in_risks_section = True
+                section_level = _header_level(line) or 2
                 continue
-            if in_risks_section and _is_next_section(line):
+            # Only exit on headers at the same level or higher -- allow sub-headers
+            if in_risks_section and _is_next_section_at_level(line, section_level):
                 in_risks_section = False
                 continue
 
             if in_risks_section and _is_list_item(line):
                 risk_text = _strip_markdown(_extract_list_text(line))
+                # Skip "Impact:" and "Mitigation:" lines -- only extract "Risk:" lines
+                # or general risk descriptions
+                risk_lower = risk_text.lower()
+                if risk_lower.startswith("impact:") or risk_lower.startswith("mitigation:"):
+                    continue
+                # Strip leading "Risk:" prefix if present
+                if risk_lower.startswith("risk:"):
+                    risk_text = risk_text[5:].strip()
                 if risk_text and len(risk_text) > 10 and not _is_duplicate(risk_text, risks):
                     risks.append(
                         {
@@ -232,16 +293,22 @@ def _extract_risks(review_text: str, risks_context: str) -> list[dict]:
 
 
 def _extract_recommendations(review_text: str) -> list[str]:
-    """Extract recommendations from review."""
+    """Extract recommendations from review.
+
+    Looks for a "Recommendations" section first. If not found, falls back to
+    extracting "Mitigation:" entries from "Risks" sections.
+    """
     recommendations = []
     lines = review_text.split("\n")
     in_recommendations = False
+    section_level = 0
 
     for line in lines:
         if _is_section_header(line, "recommendation"):
             in_recommendations = True
+            section_level = _header_level(line) or 2
             continue
-        if in_recommendations and _is_next_section(line):
+        if in_recommendations and _is_next_section_at_level(line, section_level):
             in_recommendations = False
             continue
 
@@ -250,7 +317,42 @@ def _extract_recommendations(review_text: str) -> list[str]:
             if rec_text and len(rec_text) > 10:
                 recommendations.append(rec_text[:300])
 
+    # Fallback: extract mitigations from risks section if no recommendations found
+    if not recommendations:
+        recommendations = _extract_mitigations_as_recommendations(review_text)
+
     return recommendations[:10]
+
+
+def _extract_mitigations_as_recommendations(review_text: str) -> list[str]:
+    """Extract mitigation entries from risk sections as recommendations."""
+    recommendations = []
+    lines = review_text.split("\n")
+    in_risks_section = False
+    section_level = 0
+
+    for line in lines:
+        if _is_section_header(line, "risk") or _is_section_header(line, "mitigation"):
+            in_risks_section = True
+            section_level = _header_level(line) or 2
+            continue
+        if in_risks_section and _is_next_section_at_level(line, section_level):
+            in_risks_section = False
+            continue
+
+        if in_risks_section and _is_list_item(line):
+            item_text = _strip_markdown(_extract_list_text(line))
+            item_lower = item_text.lower()
+            if item_lower.startswith("mitigation:"):
+                rec_text = item_text[11:].strip()
+                if (
+                    rec_text
+                    and len(rec_text) > 10
+                    and not _is_duplicate_str(rec_text, recommendations)
+                ):
+                    recommendations.append(rec_text[:300])
+
+    return recommendations
 
 
 def extract_verdict(review_text: str) -> str:
