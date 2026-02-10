@@ -40,6 +40,19 @@ RULES:
 - Push back on weak answers briefly
 - Acknowledge good defenses and move on
 
+RESOLVING GAPS:
+- Do NOT accept "it's intentional" or "not needed" at face value -- ask WHY
+- The user must explain the reasoning (e.g. "it's a demo app with no sensitive data"
+  or "that's handled by a separate service")
+- Only mark a gap as RESOLVED when the user provides a concrete justification
+- If the user just says "it's fine" without explaining why, push back once more
+- Only gaps the user CANNOT adequately explain remain as confirmed gaps
+
+After done_challenging, output a final summary that clearly separates:
+- CONFIRMED GAPS: [gaps the user could not defend]
+- RESOLVED: [gaps the user successfully defended with reason]
+If all gaps were resolved, say "No confirmed gaps remain."
+
 Call done_challenging when key issues are addressed.""",
         tools=[challenge_user, done_challenging],
     )

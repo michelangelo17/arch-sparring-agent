@@ -45,9 +45,11 @@ RULES:
 - Features in "Features Verified" are NOT gaps
 - Features covered by AWS service defaults (e.g. DynamoDB default encryption) are NOT gaps
 - Do NOT assume compliance or regulatory requirements that aren't stated
-- If an item was dismissed during sparring, it is NOT a confirmed gap
+- Items marked as "RESOLVED" in sparring/question phases are NOT confirmed gaps
+- If a user defended or dismissed a gap (e.g. "intentional", "not needed"), it is resolved
 - Do NOT pad sections with non-issues to fill space
 - It is perfectly fine to have empty sections -- a clean architecture is a good result
+- If all gaps were resolved, the verdict should be PASS, not PASS WITH CONCERNS
 - Be specific. Reference components discussed.""",
         tools=[],
     )

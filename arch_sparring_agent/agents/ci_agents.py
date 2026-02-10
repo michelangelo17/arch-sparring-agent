@@ -105,11 +105,13 @@ Do NOT pad with hypothetical or minimal risks.
 RULES:
 1. Do NOT invent gaps or risks not in the input
 2. If "Features Verified" shows a feature exists, it is NOT a gap
-3. Base verdict on CONFIRMED gaps only
-4. Do NOT assume compliance requirements that aren't in the stated requirements
-5. Missing best practices are concerns, not failures
-6. It is fine to have empty sections -- a clean architecture is a good result
-7. Do NOT pad sections with non-issues to fill space""",
+3. Items marked "RESOLVED" are NOT confirmed gaps -- exclude them
+4. Base verdict on CONFIRMED gaps only
+5. Do NOT assume compliance requirements that aren't in the stated requirements
+6. Missing best practices are concerns, not failures
+7. It is fine to have empty sections -- a clean architecture is a good result
+8. Do NOT pad sections with non-issues to fill space
+9. If all gaps were resolved or none exist, verdict is PASS""",
         tools=[],
     )
 

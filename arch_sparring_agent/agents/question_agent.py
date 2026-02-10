@@ -111,7 +111,18 @@ def create_question_agent(
 IMPORTANT: Do NOT ask about things you can find in templates/source code.
 IMPORTANT: Always use list_templates first -- never guess template filenames.
 IMPORTANT: ALL questions and findings MUST be communicated via the ask_user tool.
-After done_asking, summarize confirmed gaps in 2-3 bullet points max."""
+
+HANDLING USER RESPONSES:
+- Record the user's response as-is and pass it along
+- If the user says something is intentional or not needed, note their reasoning
+- Do NOT challenge or debate -- that is the sparring agent's job
+- Include the user's responses alongside the gaps so the sparring agent has context
+
+After done_asking, summarize ALL gaps with the user's responses so the sparring
+agent has full context. Format:
+- Gap: [description] -- User response: [what the user said]
+- Gap: [description] -- Not addressed by user
+Items verified in templates/source (not gaps) can be omitted."""
 
     return Agent(
         name="QuestionAgent",
