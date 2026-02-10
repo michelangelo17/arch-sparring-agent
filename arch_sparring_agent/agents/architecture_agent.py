@@ -92,15 +92,25 @@ Tasks:
 
     base_prompt += """
 
+IMPORTANT - AWS Service Defaults:
+- Many AWS services have secure defaults that don't require explicit CloudFormation config.
+  For example, DynamoDB encrypts all data at rest by default (AWS-owned keys) even without
+  SSESpecification. S3 encrypts all new objects by default since Jan 2023.
+- Do NOT flag a feature as "not found" just because it isn't explicitly configured in
+  CloudFormation, if the AWS service provides that feature by default.
+- Only list something in "Features Not Found" if the requirement is genuinely unmet,
+  not merely implicit via AWS defaults.
+
 Output format:
 ### Components
 List from CloudFormation + SDK calls observed in source code
 
 ### Features Verified
 - Feature: [evidence from CFN or source code]
+- Include features satisfied by AWS service defaults (note "via AWS default" as evidence)
 
 ### Features Not Found
-- Feature: [only if searched and not found]"""
+- Feature: [only if searched AND not covered by AWS service defaults]"""
 
     return Agent(
         name="ArchitectureEvaluator",

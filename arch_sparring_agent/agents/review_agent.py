@@ -32,9 +32,17 @@ Format:
 2. Specific, actionable recommendation
 3. Specific, actionable recommendation
 
+## Verdict
+- PASS: No gaps, or only minor gaps
+- PASS WITH CONCERNS: Has gaps that warrant attention but no active vulnerabilities
+- FAIL: Only for actively exploitable security vulnerabilities or violations of
+  STATED requirements. Do NOT fail for missing best practices alone.
+
 RULES:
 - Only report gaps that were confirmed missing
 - Features in "Features Verified" are NOT gaps
+- Do NOT assume compliance or regulatory requirements that aren't stated
+- Missing best practices are concerns, not failures
 - Be specific. Reference components discussed.""",
         tools=[],
     )

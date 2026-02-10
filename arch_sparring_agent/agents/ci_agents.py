@@ -50,9 +50,11 @@ def create_ci_sparring_agent(model_id: str = MODEL_ID) -> Agent:
 RULES:
 1. Only assess risks for gaps explicitly listed in the input
 2. Do NOT invent new gaps or risks
-3. If a gap is about a missing feature (not security), impact is Medium
-4. Security/compliance gaps are High impact
-5. If no gaps provided, say "No significant risks identified"
+3. Assess impact based on real-world consequences, not hypothetical compliance frameworks
+4. Only rate a gap as High impact if it creates an actively exploitable vulnerability
+   or directly violates a STATED requirement (not an assumed one)
+5. Missing best practices that don't affect functionality are Low or Medium
+6. If no gaps provided, say "No significant risks identified"
 
 Format per gap:
 - Risk: [gap name] - Impact: [High/Medium/Low] - Mitigation: [action]""",
@@ -93,13 +95,16 @@ List only risks provided in input.
 
 ## Verdict
 - PASS: No gaps, or only minor gaps
-- PASS WITH CONCERNS: Has gaps but no security/compliance blockers
-- FAIL: Security vulnerability or compliance violation
+- PASS WITH CONCERNS: Has gaps that warrant attention but no active vulnerabilities
+- FAIL: Only for actively exploitable security vulnerabilities or violations of
+  STATED requirements. Do NOT fail for missing best practices alone.
 
 RULES:
 1. Do NOT invent gaps or risks not in the input
 2. If "Features Verified" shows a feature exists, it is NOT a gap
-3. Base verdict on CONFIRMED gaps only""",
+3. Base verdict on CONFIRMED gaps only
+4. Do NOT assume compliance requirements that aren't in the stated requirements
+5. Missing best practices are concerns, not failures""",
         tools=[],
     )
 
