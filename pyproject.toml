@@ -45,6 +45,9 @@ otel = ["strands-agents[otel]>=1.19.0"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
@@ -71,7 +74,7 @@ ignore = []
 known-first-party = ["arch_sparring_agent"]
 
 [dependency-groups]
-dev = ["ruff>=0.14.8"]
+dev = ["ruff>=0.14.8", "pytest>=8.0.0"]
 
 [project.scripts]
 arch-review = "arch_sparring_agent.cli:main"

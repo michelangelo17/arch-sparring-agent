@@ -2,8 +2,10 @@
 
 from strands import Agent
 
+from ..config import MODEL_ID
 
-def create_review_agent(model_id: str = "amazon.nova-2-lite-v1:0") -> Agent:
+
+def create_review_agent(model_id: str = MODEL_ID) -> Agent:
     """Create agent for generating final review."""
 
     return Agent(

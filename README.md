@@ -120,11 +120,12 @@ All options can be set via environment variables:
 
 ### Exit Codes
 
-| Code | Meaning                             |
-| ---- | ----------------------------------- |
-| 0    | PASS or PASS WITH CONCERNS          |
-| 1    | FAIL (or --strict with High impact) |
-| 3    | Error during execution              |
+| Code | Meaning                                          |
+| ---- | ------------------------------------------------ |
+| 0    | PASS - no significant issues found               |
+| 1    | FAIL (or --strict with High impact)              |
+| 2    | PASS WITH CONCERNS - gaps found but non-critical |
+| 3    | Error during execution                           |
 
 ## AWS Credentials
 
@@ -161,18 +162,52 @@ Each platform has its own credential mechanism:
 
 ### Required IAM Permissions
 
+> **Note**: For production use, scope `Resource` to your specific account/region ARNs.
+
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "BedrockModelAccess",
       "Effect": "Allow",
       "Action": [
         "bedrock:InvokeModel",
-        "bedrock:ListFoundationModels",
-        "bedrock-agentcore:*",
-        "sts:GetCallerIdentity"
+        "bedrock:Converse",
+        "bedrock:ListFoundationModels"
       ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AgentCorePolicyAndGateway",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:CreatePolicyEngine",
+        "bedrock-agentcore:ListPolicyEngines",
+        "bedrock-agentcore:CreatePolicy",
+        "bedrock-agentcore:UpdatePolicy",
+        "bedrock-agentcore:GetPolicy",
+        "bedrock-agentcore:ListPolicies",
+        "bedrock-agentcore:CreateGateway",
+        "bedrock-agentcore:GetGateway",
+        "bedrock-agentcore:UpdateGateway",
+        "bedrock-agentcore:ListGateways"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AgentCoreMemory",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:CreateMemory",
+        "bedrock-agentcore:ListMemories"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CallerIdentity",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
       "Resource": "*"
     }
   ]
@@ -249,7 +284,11 @@ arch_sparring_agent/
 │   ├── diagram_analyzer.py    # Diagram analysis via Bedrock
 │   └── source_analyzer.py     # Lambda/application source code reader
 ├── orchestrator.py            # Phase orchestration
-├── config.py                  # AWS/Bedrock configuration
+├── config.py                  # Constants and AWS client setup
+├── policy.py                  # Cedar policy management
+├── gateway.py                 # Gateway setup and lifecycle
+├── memory.py                  # AgentCore memory for sessions
+├── exceptions.py              # Custom exception hierarchy
 ├── context_condenser.py       # Handles large inputs
 ├── state.py                   # Review state persistence
 └── cli.py                     # CLI entry point

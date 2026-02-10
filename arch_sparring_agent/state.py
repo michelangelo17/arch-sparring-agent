@@ -60,7 +60,7 @@ def extract_state_from_review(review_result: dict) -> ReviewState:
     gaps = _extract_gaps(review_text, review_result.get("gaps", ""))
     risks = _extract_risks(review_text, review_result.get("risks", ""))
     recommendations = _extract_recommendations(review_text)
-    verdict = _extract_verdict(review_text)
+    verdict = extract_verdict(review_text)
 
     return ReviewState(
         timestamp=datetime.now().isoformat(),
@@ -126,6 +126,7 @@ def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
                             "severity": "medium",
                         }
                     )
+                    gap_id += 1
                     gap_id += 1
 
     return gaps[:20]
@@ -193,8 +194,11 @@ def _extract_recommendations(review_text: str) -> list[str]:
     return recommendations[:10]
 
 
-def _extract_verdict(review_text: str) -> str:
-    """Extract verdict from review."""
+def extract_verdict(review_text: str) -> str:
+    """Extract verdict string from review text.
+
+    Returns one of: "PASS", "PASS WITH CONCERNS", "FAIL".
+    """
     review_lower = review_text.lower()
 
     # Check explicit verdict

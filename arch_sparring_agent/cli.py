@@ -13,8 +13,9 @@ import click
 
 from .agents.remediation_agent import create_remediation_agent, run_remediation
 from .config import DEFAULT_REGION, MODEL_ID, get_inference_profile_arn
+from .exceptions import ArchReviewError
 from .orchestrator import ReviewOrchestrator
-from .state import ReviewState, extract_state_from_review
+from .state import ReviewState, extract_state_from_review, extract_verdict
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -95,28 +96,26 @@ def _archive_previous(output_dir: Path) -> None:
     click.echo(f"📁 Archived previous review to: {history_dir}")
 
 
-def _extract_verdict(review_text: str, strict: bool = False) -> tuple[str, int]:
-    """Extract verdict from review text and determine exit code."""
-    text_lower = review_text.lower()
-    has_high_impact = "impact: high" in text_lower or "impact high" in text_lower
+def _get_verdict_and_exit_code(review_text: str, strict: bool = False) -> tuple[str, int]:
+    """Map verdict string to exit code, applying strict mode logic.
 
-    # Check explicit verdict
-    if "verdict" in text_lower:
-        after_verdict = text_lower.split("verdict")[-1][:50]
-        if "fail" in after_verdict:
-            return "FAIL", EXIT_HIGH_RISK
-        if "pass with concerns" in after_verdict:
-            verdict = "FAIL" if strict and has_high_impact else "PASS WITH CONCERNS"
-            return verdict, EXIT_HIGH_RISK if verdict == "FAIL" else EXIT_SUCCESS
-        return "PASS", EXIT_SUCCESS
+    Uses the canonical _extract_verdict from state.py for verdict extraction,
+    then maps to exit codes:
+      PASS              -> EXIT_SUCCESS (0)
+      PASS WITH CONCERNS -> EXIT_MEDIUM_RISK (2), or EXIT_HIGH_RISK (1) if strict + high impact
+      FAIL              -> EXIT_HIGH_RISK (1)
+    """
+    verdict = extract_verdict(review_text)
 
-    # Fallback: infer from content
-    critical_terms = ["critical", "severe", "major vulnerability"]
-    if any(term in text_lower for term in critical_terms):
+    if verdict == "FAIL":
         return "FAIL", EXIT_HIGH_RISK
-    if has_high_impact:
-        verdict = "FAIL" if strict else "PASS WITH CONCERNS"
-        return verdict, EXIT_HIGH_RISK if verdict == "FAIL" else EXIT_SUCCESS
+
+    if verdict == "PASS WITH CONCERNS":
+        text_lower = review_text.lower()
+        has_high_impact = "impact: high" in text_lower or "impact high" in text_lower
+        if strict and has_high_impact:
+            return "FAIL", EXIT_HIGH_RISK
+        return "PASS WITH CONCERNS", EXIT_MEDIUM_RISK
 
     return "PASS", EXIT_SUCCESS
 
@@ -337,7 +336,7 @@ def _run_remediation_mode(
         model_id = inference_profile or model
 
         agent = create_remediation_agent(state=state, model_id=model_id, region=region)
-        notes = run_remediation(agent, state)
+        notes = run_remediation(agent, state, output_fn=click.echo)
 
         if not no_remediation_output:
             remediation_path = out_path / DEFAULT_REMEDIATION_FILE
@@ -381,10 +380,11 @@ def _run_review_mode(
             region=region,
             ci_mode=ci_mode,
             skip_policy_check=skip_policy_check,
+            output_fn=click.echo,
         )
 
         result = orchestrator.run_review()
-        verdict, exit_code = _extract_verdict(result["review"], strict=strict)
+        verdict, exit_code = _get_verdict_and_exit_code(result["review"], strict=strict)
 
         if json_output:
             json_result = {
@@ -421,11 +421,20 @@ def _run_review_mode(
 
     except click.UsageError:
         raise
-    except Exception as e:
+    except ArchReviewError as e:
         if json_output:
             click.echo(json.dumps({"error": str(e), "exit_code": EXIT_ERROR}))
         else:
             click.echo(f"Error: {e}", err=True)
+        sys.exit(EXIT_ERROR)
+    except Exception as e:
+        if json_output:
+            click.echo(json.dumps({"error": str(e), "exit_code": EXIT_ERROR}))
+        else:
+            click.echo(f"Unexpected error: {e}", err=True)
+            import traceback
+
+            click.echo(traceback.format_exc(), err=True)
         sys.exit(EXIT_ERROR)
 
 

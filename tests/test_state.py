@@ -7,10 +7,10 @@ from arch_sparring_agent.state import (
     _extract_gaps,
     _extract_recommendations,
     _extract_risks,
-    _extract_verdict,
     _infer_severity,
     _is_duplicate,
     extract_state_from_review,
+    extract_verdict,
 )
 
 
@@ -68,15 +68,15 @@ class TestExtractionLogic(unittest.TestCase):
         self.assertFalse(_is_duplicate("Something completely new", items))
 
     def test_extract_verdict(self):
-        self.assertEqual(_extract_verdict("Overall Verdict: PASS"), "PASS")
-        self.assertEqual(_extract_verdict("Verdict: FAIL because of security"), "FAIL")
+        self.assertEqual(extract_verdict("Overall Verdict: PASS"), "PASS")
+        self.assertEqual(extract_verdict("Verdict: FAIL because of security"), "FAIL")
         self.assertEqual(
-            _extract_verdict("Verdict: PASS WITH CONCERNS due to latency"), "PASS WITH CONCERNS"
+            extract_verdict("Verdict: PASS WITH CONCERNS due to latency"), "PASS WITH CONCERNS"
         )
         # Fallback: infer from content
-        self.assertEqual(_extract_verdict("No clear result"), "PASS")  # Default
-        self.assertEqual(_extract_verdict("Critical security flaw found"), "FAIL")
-        self.assertEqual(_extract_verdict("Risk Impact: High severity"), "PASS WITH CONCERNS")
+        self.assertEqual(extract_verdict("No clear result"), "PASS")  # Default
+        self.assertEqual(extract_verdict("Critical security flaw found"), "FAIL")
+        self.assertEqual(extract_verdict("Risk Impact: High severity"), "PASS WITH CONCERNS")
 
     def test_extract_gaps(self):
         review_text = """

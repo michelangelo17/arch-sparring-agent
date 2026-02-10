@@ -2,10 +2,11 @@
 
 import logging
 import re
+from collections.abc import Callable
 
 from strands import Agent
 
-from ..config import create_session_manager, setup_agentcore_memory
+from ..memory import create_session_manager, setup_agentcore_memory
 from ..state import ReviewState
 
 logger = logging.getLogger(__name__)
@@ -123,9 +124,24 @@ RULES:
     )
 
 
-def run_remediation(agent: Agent, state: ReviewState, capture_fn=None) -> str:
-    """Run interactive remediation session."""
-    notes = []
+def run_remediation(
+    agent: Agent,
+    state: ReviewState,
+    output_fn: Callable[[str], None] | None = None,
+) -> str:
+    """Run interactive remediation session.
+
+    Args:
+        agent: The remediation agent.
+        state: Review state with gaps/risks.
+        output_fn: Optional callback for user-facing output (e.g. click.echo).
+    """
+    notes: list[str] = []
+
+    def _emit(text: str) -> None:
+        """Emit output via callback if provided."""
+        if output_fn:
+            output_fn(text)
 
     divider = "=" * 60
     parts = [
@@ -133,9 +149,9 @@ def run_remediation(agent: Agent, state: ReviewState, capture_fn=None) -> str:
         "REMEDIATION MODE",
         divider,
         f"\nReview ({state.timestamp[:10]}) found:",
-        f"  • {len(state.gaps)} gaps",
-        f"  • {len(state.risks)} risks",
-        f"  • Verdict: {state.verdict}",
+        f"  - {len(state.gaps)} gaps",
+        f"  - {len(state.risks)} risks",
+        f"  - Verdict: {state.verdict}",
     ]
 
     if state.gaps:
@@ -149,16 +165,14 @@ def run_remediation(agent: Agent, state: ReviewState, capture_fn=None) -> str:
     parts.append("\nEnter a number to discuss, ask a question, or 'exit' to end.\n")
     header = "\n".join(parts)
 
-    print(header)
-    if capture_fn:
-        capture_fn(header)
+    _emit(header)
     notes.append(header)
 
     while True:
         try:
             user_input = input("\n> ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\nSession ended.")
+            _emit("\nSession ended.")
             break
 
         if not user_input:
@@ -175,17 +189,15 @@ def run_remediation(agent: Agent, state: ReviewState, capture_fn=None) -> str:
                 user_input = prompt
 
         response = str(agent(user_input))
-        print(f"\n{response}")
-        if capture_fn:
-            capture_fn(response)
+        _emit(f"\n{response}")
         notes.append(f"Agent: {response}")
 
     try:
         prompt = "Summarize: issues discussed, decisions made, remaining. Under 150 words."
         summary = str(agent(prompt))
         notes.append(f"\n## Session Summary\n{summary}")
-        print(f"\n{'=' * 60}\nSummary:\n{summary}\n{'=' * 60}")
-    except Exception:
-        pass
+        _emit(f"\n{'=' * 60}\nSummary:\n{summary}\n{'=' * 60}")
+    except Exception as e:
+        logger.warning("Could not generate session summary: %s", e)
 
     return "\n\n".join(notes)

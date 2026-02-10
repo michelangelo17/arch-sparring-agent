@@ -1,47 +1,7 @@
-import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-# Mock external dependencies before importing application code
-for mod in [
-    "strands",
-    "strands.types",
-    "strands.types.exceptions",
-    "botocore",
-    "botocore.exceptions",
-    "boto3",
-    "bedrock_agentcore",
-    "bedrock_agentcore.memory",
-    "bedrock_agentcore.memory.integrations",
-    "bedrock_agentcore.memory.integrations.strands",
-    "bedrock_agentcore.memory.integrations.strands.config",
-    "bedrock_agentcore.memory.integrations.strands.session_manager",
-]:
-    if mod not in sys.modules:
-        sys.modules[mod] = MagicMock()
-
-
-# Create real exception classes so isinstance checks work in tests
-class FakeContextWindowOverflow(Exception):
-    pass
-
-
-class FakeMaxTokensReached(Exception):
-    pass
-
-
-class FakeClientError(Exception):
-    def __init__(self, error_code="ValidationException"):
-        self.response = {"Error": {"Code": error_code}}
-        super().__init__(f"ClientError: {error_code}")
-
-
-# Wire up the fake exceptions into the mocked modules
-sys.modules["strands.types.exceptions"].ContextWindowOverflowException = FakeContextWindowOverflow
-sys.modules["strands.types.exceptions"].MaxTokensReachedException = FakeMaxTokensReached
-sys.modules["botocore.exceptions"].ClientError = FakeClientError
-
-from arch_sparring_agent.context_condenser import (  # noqa: E402
+from arch_sparring_agent.context_condenser import (
     CHUNK_SIZE,
     MAX_CHUNKS,
     PASSTHROUGH_THRESHOLD,
@@ -51,6 +11,7 @@ from arch_sparring_agent.context_condenser import (  # noqa: E402
     extract_phase_findings,
     extract_requirements,
 )
+from tests.conftest import FakeClientError, FakeContextWindowOverflow, FakeMaxTokensReached
 
 
 class TestPassthrough(unittest.TestCase):

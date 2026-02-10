@@ -2,8 +2,10 @@
 
 from strands import Agent, tool
 
+from ..config import MODEL_ID
 
-def create_sparring_agent(model_id: str = "amazon.nova-2-lite-v1:0") -> Agent:
+
+def create_sparring_agent(model_id: str = MODEL_ID) -> Agent:
     """Create agent for challenging architectural decisions."""
 
     challenges_made = []

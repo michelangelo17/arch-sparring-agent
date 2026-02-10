@@ -1,6 +1,7 @@
 """Orchestrates the 5-phase architecture review process."""
 
 import logging
+from collections.abc import Callable
 
 from .agents.architecture_agent import create_architecture_agent
 from .agents.ci_agents import (
@@ -15,17 +16,14 @@ from .agents.question_agent import create_question_agent, run_questions
 from .agents.requirements_agent import create_requirements_agent
 from .agents.review_agent import create_review_agent, generate_review
 from .agents.sparring_agent import create_sparring_agent, run_sparring
-from .config import (
-    MODEL_ID,
-    check_model_access,
-    get_inference_profile_arn,
-    setup_architecture_review_policies,
-)
+from .config import MODEL_ID, check_model_access, get_inference_profile_arn
 from .context_condenser import (
     extract_architecture_findings,
     extract_phase_findings,
     extract_requirements,
 )
+from .exceptions import ConfigurationError
+from .policy import setup_architecture_review_policies
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +41,7 @@ class ReviewOrchestrator:
         ci_mode: bool = False,
         source_dir: str | None = None,
         skip_policy_check: bool = False,
+        output_fn: Callable[[str], None] | None = None,
     ):
         self.documents_dir = documents_dir
         self.templates_dir = templates_dir
@@ -50,12 +49,13 @@ class ReviewOrchestrator:
         self.source_dir = source_dir
         self.region = region
         self.ci_mode = ci_mode
+        self.output_fn = output_fn
 
         inference_profile_arn = get_inference_profile_arn(model_id)
         self.model_id = inference_profile_arn or model_id
 
         if not check_model_access(model_id, region=region):
-            raise RuntimeError(f"Model {model_id} not accessible.")
+            raise ConfigurationError(f"Model {model_id} not accessible.")
 
         logger.info("Setting up Policy Engine and Policies")
         self.policy_engine_id = setup_architecture_review_policies(region=region)
@@ -68,7 +68,7 @@ class ReviewOrchestrator:
                 "Running without security policy enforcement."
             )
         else:
-            raise RuntimeError(
+            raise ConfigurationError(
                 "Policy Engine setup failed. Cedar policies could not be created.\n"
                 "Agents cannot run without security policy enforcement.\n"
                 "To bypass this check (development only), use --skip-policy-check."
@@ -92,12 +92,13 @@ class ReviewOrchestrator:
             self.sparring_agent = create_sparring_agent(self.model_id)
             self.review_agent = create_review_agent(self.model_id)
 
-        self.captured_output = []
+        self.captured_output: list[str] = []
 
-    def _capture(self, content: str):
-        """Capture and print output for session export."""
+    def _capture(self, content: str) -> None:
+        """Capture output for session export and optionally emit it."""
         self.captured_output.append(content)
-        print(content)
+        if self.output_fn:
+            self.output_fn(content)
 
     def run_review(self) -> dict:
         """Execute the 5-phase review process."""

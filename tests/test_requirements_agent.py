@@ -1,26 +1,8 @@
-import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-# Mock strands and others to prevent ImportError
-for mod in [
-    "strands",
-    "strands.types",
-    "strands.types.exceptions",
-    "botocore",
-    "botocore.exceptions",
-    "arch_sparring_agent.tools.document_parser",
-    "frontmatter",
-    "bedrock_agentcore",
-    "bedrock_agentcore.memory",
-    "bedrock_agentcore.memory.integrations.strands",
-    "bedrock_agentcore.memory.integrations.strands.config",
-    "bedrock_agentcore.memory.integrations.strands.session_manager",
-]:
-    if mod not in sys.modules:
-        sys.modules[mod] = MagicMock()
-
-from arch_sparring_agent.agents.requirements_agent import create_requirements_agent  # noqa: E402
+from arch_sparring_agent.agents.requirements_agent import create_requirements_agent
+from arch_sparring_agent.config import MODEL_ID
 
 
 class TestRequirementsAgent(unittest.TestCase):
@@ -106,7 +88,7 @@ class TestRequirementsAgent(unittest.TestCase):
         # Verify summarizer agent was created
         self.mock_agent_cls.assert_called_with(
             name="DocSummarizer",
-            model="amazon.nova-2-lite-v1:0",
+            model=MODEL_ID,
             system_prompt=unittest.mock.ANY,
             tools=[],
         )

@@ -2,13 +2,13 @@
 
 from strands import Agent, tool
 
-from ..config import DOC_CHUNK_SUMMARY_THRESHOLD, DOC_SUMMARY_THRESHOLD
+from ..config import DOC_CHUNK_SUMMARY_THRESHOLD, DOC_SUMMARY_THRESHOLD, MODEL_ID
 from ..context_condenser import _chunked_extract
 
 
 def create_requirements_agent(
     documents_dir: str,
-    model_id: str = "amazon.nova-2-lite-v1:0",
+    model_id: str = MODEL_ID,
 ) -> Agent:
     """Create agent for analyzing requirements documents."""
 

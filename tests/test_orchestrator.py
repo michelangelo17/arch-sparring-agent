@@ -1,26 +1,8 @@
-import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-# Mock external dependencies before importing application code
-sys.modules["strands"] = MagicMock()
-sys.modules["strands.types"] = MagicMock()
-sys.modules["strands.types.exceptions"] = MagicMock()
-sys.modules["botocore"] = MagicMock()
-sys.modules["botocore.exceptions"] = MagicMock()
-sys.modules["PIL"] = MagicMock()
-sys.modules["boto3"] = MagicMock()
-sys.modules["frontmatter"] = MagicMock()
-sys.modules["bedrock_agentcore"] = MagicMock()
-sys.modules["bedrock_agentcore.memory"] = MagicMock()
-sys.modules["bedrock_agentcore.memory.integrations"] = MagicMock()
-sys.modules["bedrock_agentcore.memory.integrations.strands"] = MagicMock()
-sys.modules["bedrock_agentcore.memory.integrations.strands.config"] = MagicMock()
-sys.modules["bedrock_agentcore.memory.integrations.strands.session_manager"] = MagicMock()
-
-from arch_sparring_agent.orchestrator import (  # noqa: E402
-    ReviewOrchestrator,
-)
+from arch_sparring_agent.exceptions import ConfigurationError
+from arch_sparring_agent.orchestrator import ReviewOrchestrator
 
 
 class TestReviewOrchestrator(unittest.TestCase):
@@ -154,17 +136,17 @@ class TestReviewOrchestrator(unittest.TestCase):
         self.assertEqual(result["risks_findings"], "[extracted:Sparring] Sparring Context")
 
     def test_init_fails_if_no_access(self):
-        """Test that init raises RuntimeError if model access check fails."""
+        """Test that init raises ConfigurationError if model access check fails."""
         self.mock_check_access.return_value = False
 
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(ConfigurationError):
             ReviewOrchestrator(documents_dir="docs", templates_dir="tmpl", diagrams_dir="diag")
 
     def test_init_fails_if_policy_setup_fails(self):
-        """Test that init raises RuntimeError if policy engine setup fails."""
+        """Test that init raises ConfigurationError if policy engine setup fails."""
         self.mock_setup_policies.return_value = None
 
-        with self.assertRaises(RuntimeError) as ctx:
+        with self.assertRaises(ConfigurationError) as ctx:
             ReviewOrchestrator(documents_dir="docs", templates_dir="tmpl", diagrams_dir="diag")
 
         self.assertIn("Policy Engine setup failed", str(ctx.exception))
@@ -182,6 +164,27 @@ class TestReviewOrchestrator(unittest.TestCase):
         )
 
         self.assertIsNone(orch.policy_engine_id)
+
+    def test_output_fn_callback(self):
+        """Test that output_fn callback is called for captured output."""
+        captured = []
+        orch = ReviewOrchestrator(
+            documents_dir="docs",
+            templates_dir="tmpl",
+            diagrams_dir="diag",
+            output_fn=captured.append,
+        )
+
+        self.mock_run_questions.return_value = "Q Context"
+        self.mock_run_sparring.return_value = "S Context"
+        self.mock_gen_review.return_value = "Final"
+
+        orch.run_review()
+
+        # output_fn should have been called for each _capture()
+        self.assertTrue(len(captured) > 0)
+        # First capture should be the divider
+        self.assertEqual(captured[0], "=" * 60)
 
 
 if __name__ == "__main__":

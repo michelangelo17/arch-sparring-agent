@@ -2,8 +2,10 @@
 
 from strands import Agent
 
+from ..config import MODEL_ID
 
-def create_ci_question_agent(model_id: str = "amazon.nova-2-lite-v1:0") -> Agent:
+
+def create_ci_question_agent(model_id: str = MODEL_ID) -> Agent:
     """Create agent that identifies gaps without user interaction."""
     return Agent(
         name="QuestionAgent",
@@ -36,7 +38,7 @@ Copy items from "Features Not Found" section only:"""
     return str(result)
 
 
-def create_ci_sparring_agent(model_id: str = "amazon.nova-2-lite-v1:0") -> Agent:
+def create_ci_sparring_agent(model_id: str = MODEL_ID) -> Agent:
     """Create agent that challenges architecture without user interaction."""
     return Agent(
         name="SparringAgent",
@@ -70,7 +72,7 @@ Do NOT add risks for features not in the gaps list."""
     return str(result)
 
 
-def create_ci_review_agent(model_id: str = "amazon.nova-2-lite-v1:0") -> Agent:
+def create_ci_review_agent(model_id: str = MODEL_ID) -> Agent:
     """Create concise review agent for CI mode."""
     return Agent(
         name="ReviewAgent",

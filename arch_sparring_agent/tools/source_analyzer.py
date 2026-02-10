@@ -3,6 +3,15 @@
 from pathlib import Path
 
 from ..config import SOURCE_FILE_MAX_CHARS
+from ..exceptions import ToolError
+
+
+def _validate_path(base_dir: Path, filename: str) -> Path:
+    """Resolve path and verify it stays within the base directory."""
+    file_path = (base_dir / filename).resolve()
+    if not file_path.is_relative_to(base_dir.resolve()):
+        raise ToolError(f"Path traversal detected: {filename}")
+    return file_path
 
 
 class SourceAnalyzer:
@@ -29,25 +38,26 @@ class SourceAnalyzer:
         return sorted(files)
 
     def read_source_file(self, filename: str) -> str:
-        """Read a source file's contents."""
-        path = self.source_dir / filename
-        if not path.exists():
-            return f"Error: File not found: {filename}"
-        if not path.is_file():
-            return f"Error: Not a file: {filename}"
-        if path.suffix not in self.SUPPORTED_EXTENSIONS:
-            return f"Error: Unsupported file type: {path.suffix}"
+        """Read a source file's contents.
 
-        try:
-            content = path.read_text(encoding="utf-8")
-            if len(content) > SOURCE_FILE_MAX_CHARS:
-                return (
-                    content[:SOURCE_FILE_MAX_CHARS]
-                    + f"\n\n... [truncated, file is {len(content)} chars]"
-                )
-            return content
-        except Exception as e:
-            return f"Error reading {filename}: {e}"
+        Raises:
+            ToolError: If file not found, not a file, or unsupported type.
+        """
+        path = _validate_path(self.source_dir, filename)
+        if not path.exists():
+            raise ToolError(f"File not found: {filename}")
+        if not path.is_file():
+            raise ToolError(f"Not a file: {filename}")
+        if path.suffix not in self.SUPPORTED_EXTENSIONS:
+            raise ToolError(f"Unsupported file type: {path.suffix}")
+
+        content = path.read_text(encoding="utf-8")
+        if len(content) > SOURCE_FILE_MAX_CHARS:
+            return (
+                content[:SOURCE_FILE_MAX_CHARS]
+                + f"\n\n... [truncated, file is {len(content)} chars]"
+            )
+        return content
 
     def search_source(self, pattern: str) -> str:
         """Search for a pattern across all source files."""
