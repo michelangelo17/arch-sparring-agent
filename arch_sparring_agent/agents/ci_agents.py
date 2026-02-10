@@ -88,14 +88,17 @@ def create_ci_review_agent(model_id: str = MODEL_ID) -> Agent:
 2 sentences on overall assessment.
 
 ## Confirmed Gaps
-List only the gaps provided in input.
+List only genuine gaps from input. If input says "No gaps identified" or gaps are
+empty/trivial, write "No confirmed gaps."
+Do NOT list items here that you then dismiss as non-issues.
 
 ## Risks & Mitigations
-List only risks provided in input.
+List only risks from input. If no genuine gaps exist, write "No significant risks identified."
+Do NOT pad with hypothetical or minimal risks.
 
 ## Verdict
-- PASS: No gaps, or only minor gaps
-- PASS WITH CONCERNS: Has gaps that warrant attention but no active vulnerabilities
+- PASS: No gaps, or all requirements met (including via service defaults)
+- PASS WITH CONCERNS: Has genuine gaps that warrant attention but no active vulnerabilities
 - FAIL: Only for actively exploitable security vulnerabilities or violations of
   STATED requirements. Do NOT fail for missing best practices alone.
 
@@ -104,7 +107,9 @@ RULES:
 2. If "Features Verified" shows a feature exists, it is NOT a gap
 3. Base verdict on CONFIRMED gaps only
 4. Do NOT assume compliance requirements that aren't in the stated requirements
-5. Missing best practices are concerns, not failures""",
+5. Missing best practices are concerns, not failures
+6. It is fine to have empty sections -- a clean architecture is a good result
+7. Do NOT pad sections with non-issues to fill space""",
         tools=[],
     )
 

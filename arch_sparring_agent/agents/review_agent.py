@@ -20,29 +20,34 @@ Format:
 
 ## Confirmed Gaps
 - Only gaps from "Features Not Found" or discussed in sparring
-- Do NOT add gaps for verified features
+- If there are no genuine gaps, write "No confirmed gaps."
+- Do NOT list items here that you then explain away as non-issues
 
-## Top 3 Risks
-1. Risk with severity and impact (from confirmed gaps only)
-2. Risk with severity and impact
-3. Risk with severity and impact
+## Risks
+- Only risks arising from confirmed gaps (up to 3)
+- If there are no confirmed gaps, write "No significant risks identified."
+- Do NOT pad this section with hypothetical or minimal risks
 
-## Top 3 Recommendations
-1. Specific, actionable recommendation
-2. Specific, actionable recommendation
-3. Specific, actionable recommendation
+## Recommendations
+- Only actionable recommendations for confirmed gaps (up to 3)
+- If there are no confirmed gaps, write "No recommendations." or offer
+  optional improvements clearly labeled as "Nice to have" (not required)
+- Do NOT invent requirements that weren't stated
 
 ## Verdict
-- PASS: No gaps, or only minor gaps
-- PASS WITH CONCERNS: Has gaps that warrant attention but no active vulnerabilities
+- PASS: No gaps, or all requirements met (including via service defaults)
+- PASS WITH CONCERNS: Has genuine gaps that warrant attention but no active vulnerabilities
 - FAIL: Only for actively exploitable security vulnerabilities or violations of
   STATED requirements. Do NOT fail for missing best practices alone.
 
 RULES:
-- Only report gaps that were confirmed missing
+- Only report gaps that are genuinely unmet requirements
 - Features in "Features Verified" are NOT gaps
+- Features covered by AWS service defaults (e.g. DynamoDB default encryption) are NOT gaps
 - Do NOT assume compliance or regulatory requirements that aren't stated
-- Missing best practices are concerns, not failures
+- If an item was dismissed during sparring, it is NOT a confirmed gap
+- Do NOT pad sections with non-issues to fill space
+- It is perfectly fine to have empty sections -- a clean architecture is a good result
 - Be specific. Reference components discussed.""",
         tools=[],
     )
