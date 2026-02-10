@@ -38,6 +38,11 @@ def create_question_agent(
     if cfn_analyzer:
 
         @tool
+        def list_templates() -> list[str]:
+            """List available CloudFormation template files."""
+            return cfn_analyzer.list_templates()
+
+        @tool
         def search_templates(pattern: str) -> str:
             """Search CloudFormation templates for a pattern (e.g., 'encryption')."""
             results = []
@@ -60,7 +65,7 @@ def create_question_agent(
             """Read a specific CloudFormation template."""
             return cfn_analyzer.read_template(filename)
 
-        tools.extend([search_templates, read_template])
+        tools.extend([list_templates, search_templates, read_template])
 
     if source_analyzer:
 
@@ -78,19 +83,22 @@ def create_question_agent(
 
     system_prompt = """You verify gaps before asking users. Your workflow:
 
-1. For each item in "Features Not Found":
-   - FIRST use search_templates or search_source to look for evidence
-   - Search for relevant keywords (e.g., for "encryption" search: SSESpecification,
-     ServerSideEncryptionConfiguration, KMSKeyId, encrypt)
+1. FIRST use list_templates to discover available template files
+2. For each item in "Features Not Found":
+   - Use search_templates with relevant CloudFormation keywords (e.g., for "encryption"
+     search: SSESpecification, ServerSideEncryptionConfiguration, KMSKeyId, encrypt)
+   - Use read_template with actual filenames from list_templates (do NOT guess filenames)
+   - If source tools available, also use search_source
    - If found: it's NOT a gap, skip it
    - If NOT found after searching: ask the user
 
-2. Only call ask_user for gaps you could NOT verify via search
-3. One question at a time
-4. If user says "no" or "none", move on
-5. Call done_asking when done
+3. Only call ask_user for gaps you could NOT verify via search
+4. One question at a time
+5. If user says "no" or "none", move on
+6. Call done_asking when done
 
 IMPORTANT: Do NOT ask about things you can find in templates/source code.
+IMPORTANT: Always use list_templates first -- never guess template filenames.
 After done_asking, summarize confirmed gaps in 2-3 bullet points max."""
 
     return Agent(
