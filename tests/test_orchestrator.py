@@ -26,7 +26,7 @@ class TestReviewOrchestrator(unittest.TestCase):
         self.mock_reasoning_model = MagicMock(name="reasoning_model")
         self.mock_standard_model = MagicMock(name="standard_model")
 
-        def fake_create_model(model_id, reasoning=False, reasoning_level="medium"):
+        def fake_create_model(model_id, reasoning=False, reasoning_level="low"):
             return self.mock_reasoning_model if reasoning else self.mock_standard_model
 
         self.mock_create_model = patch(
@@ -196,6 +196,31 @@ class TestReviewOrchestrator(unittest.TestCase):
         self.assertTrue(len(captured) > 0)
         # First capture should be the divider
         self.assertEqual(captured[0], "=" * 60)
+
+    def test_reasoning_level_off_uses_standard_model_for_all(self):
+        """When reasoning_level='off', all agents should use the standard model."""
+        ReviewOrchestrator(
+            documents_dir="docs",
+            templates_dir="tmpl",
+            diagrams_dir="diag",
+            reasoning_level="off",
+        )
+
+        # create_model should have been called with reasoning=False only (no reasoning=True call)
+        calls = self.mock_create_model.call_args_list
+        # Should only have one call: standard_model (reasoning=False)
+        self.assertEqual(len(calls), 1)
+        _, kwargs = calls[0]
+        self.assertFalse(kwargs.get("reasoning", False))
+
+        # All agents that normally use reasoning_model should use standard_model instead
+        # Architecture agent should receive the standard model
+        arch_call = self.mock_create_arch.call_args
+        self.assertEqual(arch_call[1].get("model") or arch_call[0][2], self.mock_standard_model)
+
+        # Review agent should receive the standard model
+        rev_call = self.mock_create_rev.call_args
+        self.assertEqual(rev_call[0][0], self.mock_standard_model)
 
 
 if __name__ == "__main__":

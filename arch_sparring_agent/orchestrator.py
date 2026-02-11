@@ -83,10 +83,13 @@ class ReviewOrchestrator:
             )
 
         # Models: reasoning enabled for analysis-heavy agents, off for extraction/summarization
-        reasoning_model = create_model(
-            self.model_id, reasoning=True, reasoning_level=reasoning_level
-        )
         standard_model = create_model(self.model_id, reasoning=False)
+        if reasoning_level == "off":
+            reasoning_model = standard_model  # all agents use standard
+        else:
+            reasoning_model = create_model(
+                self.model_id, reasoning=True, reasoning_level=reasoning_level
+            )
 
         self.requirements_agent = create_requirements_agent(documents_dir, standard_model)
         self.architecture_agent = create_architecture_agent(
