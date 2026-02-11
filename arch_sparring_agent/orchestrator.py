@@ -16,7 +16,7 @@ from .agents.question_agent import create_question_agent, run_questions
 from .agents.requirements_agent import create_requirements_agent
 from .agents.review_agent import create_review_agent, generate_review
 from .agents.sparring_agent import create_sparring_agent, run_sparring
-from .config import MODEL_ID, check_model_access, get_inference_profile_arn
+from .config import MODEL_ID, check_model_access, create_model, get_inference_profile_arn
 from .context_condenser import (
     extract_architecture_findings,
     extract_phase_findings,
@@ -74,24 +74,29 @@ class ReviewOrchestrator:
                 "To bypass this check (development only), use --skip-policy-check."
             )
 
-        self.requirements_agent = create_requirements_agent(documents_dir, self.model_id)
+        # Models: reasoning enabled for analysis-heavy agents, off for extraction/summarization
+        reasoning_model = create_model(self.model_id, reasoning=True)
+        standard_model = create_model(self.model_id, reasoning=False)
+
+        self.requirements_agent = create_requirements_agent(documents_dir, standard_model)
         self.architecture_agent = create_architecture_agent(
-            templates_dir, diagrams_dir, self.model_id, source_dir=source_dir
+            templates_dir, diagrams_dir, reasoning_model, source_dir=source_dir
         )
 
         if ci_mode:
-            self.question_agent = create_ci_question_agent(self.model_id)
-            self.sparring_agent = create_ci_sparring_agent(self.model_id)
-            self.review_agent = create_ci_review_agent(self.model_id)
+            self.question_agent = create_ci_question_agent(standard_model)
+            self.sparring_agent = create_ci_sparring_agent(reasoning_model)
+            self.review_agent = create_ci_review_agent(reasoning_model)
         else:
             self.question_agent = create_question_agent(
-                self.model_id,
+                standard_model,
                 templates_dir=templates_dir,
                 source_dir=source_dir,
             )
-            self.sparring_agent = create_sparring_agent(self.model_id)
-            self.review_agent = create_review_agent(self.model_id)
+            self.sparring_agent = create_sparring_agent(reasoning_model)
+            self.review_agent = create_review_agent(reasoning_model)
 
+        self.standard_model = standard_model
         self.captured_output: list[str] = []
 
     def _capture(self, content: str) -> None:
@@ -122,7 +127,7 @@ class ReviewOrchestrator:
         self._capture(req_summary)
 
         # Extract structured requirements for downstream phases
-        req_findings = extract_requirements(req_summary, self.model_id)
+        req_findings = extract_requirements(req_summary, self.standard_model)
 
         # Phase 2: Architecture
         self._capture("\n## Phase 2: Architecture Analysis\n")
@@ -158,7 +163,7 @@ Summarize architecture, patterns, and verify which requirements have implementat
         self._capture(arch_summary)
 
         # Extract structured architecture findings for downstream phases
-        arch_findings = extract_architecture_findings(arch_summary, self.model_id)
+        arch_findings = extract_architecture_findings(arch_summary, self.standard_model)
 
         # Phase 3: Questions/Gaps
         phase3_title = "Identified Gaps" if self.ci_mode else "Clarifying Questions"
@@ -170,7 +175,7 @@ Summarize architecture, patterns, and verify which requirements have implementat
             self._capture(f"\n{qa_context}")
 
         # Extract structured Q&A findings
-        qa_findings = extract_phase_findings(qa_context, "Q&A", self.model_id)
+        qa_findings = extract_phase_findings(qa_context, "Q&A", self.standard_model)
 
         # Phase 4: Sparring/Challenges
         phase4_title = "Risk Analysis" if self.ci_mode else "Architecture Sparring"
@@ -184,7 +189,9 @@ Summarize architecture, patterns, and verify which requirements have implementat
             self._capture(f"\n{sparring_context}")
 
         # Extract structured sparring findings
-        sparring_findings = extract_phase_findings(sparring_context, "Sparring", self.model_id)
+        sparring_findings = extract_phase_findings(
+            sparring_context, "Sparring", self.standard_model
+        )
 
         # Phase 5: Final Review
         self._capture("\n## Phase 5: Final Review\n")

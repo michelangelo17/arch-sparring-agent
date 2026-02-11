@@ -4,13 +4,15 @@ from botocore.exceptions import ClientError
 from strands import Agent, tool
 from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
+from strands.models import BedrockModel
+
 from ..config import DOC_CHUNK_SUMMARY_THRESHOLD, DOC_SUMMARY_THRESHOLD, MODEL_ID
 from ..context_condenser import _chunked_extract
 
 
 def create_requirements_agent(
     documents_dir: str,
-    model_id: str = MODEL_ID,
+    model_id: str | BedrockModel = MODEL_ID,
 ) -> Agent:
     """Create agent for analyzing requirements documents."""
 

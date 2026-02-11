@@ -2,6 +2,8 @@
 
 from strands import Agent, tool
 
+from strands.models import BedrockModel
+
 from ..config import MODEL_ID
 from ..tools.cfn_analyzer import CloudFormationAnalyzer
 from ..tools.diagram_analyzer import DiagramAnalyzer
@@ -11,13 +13,18 @@ from ..tools.source_analyzer import SourceAnalyzer
 def create_architecture_agent(
     templates_dir: str,
     diagrams_dir: str,
-    model_id: str = MODEL_ID,
+    model_id: str | BedrockModel = MODEL_ID,
     source_dir: str | None = None,
 ) -> Agent:
     """Create agent for analyzing CloudFormation templates, diagrams, and source code."""
 
+    # DiagramAnalyzer uses raw Bedrock converse API and needs a string model_id
+    diagram_model_id = (
+        model_id.config["model_id"] if isinstance(model_id, BedrockModel) else model_id
+    )
+
     cfn_analyzer = CloudFormationAnalyzer(templates_dir)
-    diagram_analyzer = DiagramAnalyzer(diagrams_dir, model_id=model_id)
+    diagram_analyzer = DiagramAnalyzer(diagrams_dir, model_id=diagram_model_id)
     source_analyzer = SourceAnalyzer(source_dir) if source_dir else None
 
     @tool

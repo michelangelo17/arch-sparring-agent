@@ -6,11 +6,30 @@ from typing import Any
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+from strands.models import BedrockModel
 
 logger = logging.getLogger(__name__)
 
 MODEL_ID = "amazon.nova-2-lite-v1:0"
 DEFAULT_REGION = "eu-central-1"
+
+
+def create_model(model_id: str = MODEL_ID, reasoning: bool = False) -> BedrockModel:
+    """Create a BedrockModel, optionally with extended thinking enabled.
+
+    Args:
+        model_id: Bedrock model ID or inference profile ARN.
+        reasoning: Enable extended thinking (reasoningConfig) for complex analysis.
+    """
+    kwargs: dict[str, Any] = {"model_id": model_id}
+    if reasoning:
+        kwargs["additional_request_fields"] = {
+            "reasoningConfig": {
+                "type": "enabled",
+                "maxReasoningEffort": "high",
+            }
+        }
+    return BedrockModel(**kwargs)
 
 
 def _int_env(var: str, default: int) -> int:

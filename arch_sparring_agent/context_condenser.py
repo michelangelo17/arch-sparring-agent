@@ -7,6 +7,7 @@ bullet point — no mid-sentence cuts, no lost findings.
 
 from botocore.exceptions import ClientError
 from strands import Agent
+from strands.models import BedrockModel
 from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
 from .config import CONDENSER_CHUNK_SIZE, CONDENSER_MAX_CHUNKS, CONDENSER_PASSTHROUGH_THRESHOLD
@@ -17,7 +18,7 @@ CHUNK_SIZE = CONDENSER_CHUNK_SIZE
 MAX_CHUNKS = CONDENSER_MAX_CHUNKS
 
 
-def _chunked_extract(content: str, system_prompt: str, model_id: str) -> str:
+def _chunked_extract(content: str, system_prompt: str, model_id: str | BedrockModel) -> str:
     """Fallback: extract findings from content in chunks, then merge."""
     chunks = [content[i : i + CHUNK_SIZE] for i in range(0, len(content), CHUNK_SIZE)]
 
@@ -57,7 +58,7 @@ def _chunked_extract(content: str, system_prompt: str, model_id: str) -> str:
         return combined
 
 
-def _extract(content: str, system_prompt: str, model_id: str) -> str:
+def _extract(content: str, system_prompt: str, model_id: str | BedrockModel) -> str:
     """Run structured extraction, with chunked fallback for large inputs."""
     if len(content) <= PASSTHROUGH_THRESHOLD:
         return content
@@ -82,7 +83,7 @@ def _extract(content: str, system_prompt: str, model_id: str) -> str:
         raise
 
 
-def extract_requirements(raw_output: str, model_id: str) -> str:
+def extract_requirements(raw_output: str, model_id: str | BedrockModel) -> str:
     """Extract structured requirements from Phase 1 output.
 
     Returns a compact bullet list of every requirement, constraint, and NFR.
@@ -103,7 +104,7 @@ Max 800 words.""",
     )
 
 
-def extract_architecture_findings(raw_output: str, model_id: str) -> str:
+def extract_architecture_findings(raw_output: str, model_id: str | BedrockModel) -> str:
     """Extract structured findings from Phase 2 output.
 
     Returns Components, Features Verified, and Features Not Found sections
@@ -135,7 +136,7 @@ Max 600 words.""",
     )
 
 
-def extract_phase_findings(raw_output: str, phase_name: str, model_id: str) -> str:
+def extract_phase_findings(raw_output: str, phase_name: str, model_id: str | BedrockModel) -> str:
     """Extract structured findings from Phase 3 (Q&A) or Phase 4 (Sparring) output.
 
     Returns categorized bullet points: decisions, gaps, risks, verified items.

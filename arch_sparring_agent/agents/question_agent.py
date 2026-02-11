@@ -2,13 +2,15 @@
 
 from strands import Agent, tool
 
+from strands.models import BedrockModel
+
 from ..config import MODEL_ID
 from ..tools.cfn_analyzer import CloudFormationAnalyzer
 from ..tools.source_analyzer import SourceAnalyzer
 
 
 def create_question_agent(
-    model_id: str = MODEL_ID,
+    model_id: str | BedrockModel = MODEL_ID,
     templates_dir: str | None = None,
     source_dir: str | None = None,
 ) -> Agent:
