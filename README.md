@@ -83,40 +83,42 @@ arch-review --remediate
 
 ### Options
 
-| Option                    | Description                                         |
-| ------------------------- | --------------------------------------------------- |
-| `--documents-dir`         | Directory with markdown requirements/constraints    |
-| `--templates-dir`         | CloudFormation templates or `cdk.out/` directory    |
-| `--diagrams-dir`          | Architecture diagrams (PNG, JPEG)                   |
-| `--source-dir`            | Lambda/application source code (optional)           |
-| `--output-dir`            | Output directory (default: `.arch-review`)          |
-| `--no-history`            | Don't archive previous reviews (default in CI mode) |
-| `--keep-history`          | Archive previous reviews even in CI mode            |
-| `--no-state`              | Don't save state file after review                  |
-| `--remediate`             | Enter remediation mode                              |
-| `--no-remediation-output` | Don't save remediation notes                        |
-| `--ci`                    | CI/CD mode: non-interactive analysis                |
-| `--json`                  | Output as JSON (implies --ci)                       |
-| `--strict`                | Fail on any High impact risk (ignores verdict)      |
-| `--skip-policy-check`     | Skip policy engine setup (development only)         |
-| `-v`, `--verbose`         | Show detailed output (policy setup, debug info)     |
-| `--model`                 | Bedrock model ID (default: Nova 2 Lite)             |
-| `--region`                | AWS region (default: eu-central-1)                  |
+| Option                    | Description                                           |
+| ------------------------- | ----------------------------------------------------- |
+| `--documents-dir`         | Directory with markdown requirements/constraints      |
+| `--templates-dir`         | CloudFormation templates or `cdk.out/` directory      |
+| `--diagrams-dir`          | Architecture diagrams (PNG, JPEG)                     |
+| `--source-dir`            | Lambda/application source code (optional)             |
+| `--output-dir`            | Output directory (default: `.arch-review`)            |
+| `--no-history`            | Don't archive previous reviews (default in CI mode)   |
+| `--keep-history`          | Archive previous reviews even in CI mode              |
+| `--no-state`              | Don't save state file after review                    |
+| `--remediate`             | Enter remediation mode                                |
+| `--no-remediation-output` | Don't save remediation notes                          |
+| `--ci`                    | CI/CD mode: non-interactive analysis                  |
+| `--json`                  | Output as JSON (implies --ci)                         |
+| `--strict`                | Fail on any High impact risk (ignores verdict)        |
+| `--reasoning-level`       | Reasoning effort: low, medium, high (default: medium) |
+| `--skip-policy-check`     | Skip policy engine setup (development only)           |
+| `-v`, `--verbose`         | Show detailed output (policy setup, debug info)       |
+| `--model`                 | Bedrock model ID (default: Nova 2 Lite)               |
+| `--region`                | AWS region (default: eu-central-1)                    |
 
 ### Environment Variables
 
 All options can be set via environment variables:
 
-| Variable                    | Description                 |
-| --------------------------- | --------------------------- |
-| `ARCH_REVIEW_DOCUMENTS_DIR` | Documents directory         |
-| `ARCH_REVIEW_TEMPLATES_DIR` | Templates directory         |
-| `ARCH_REVIEW_DIAGRAMS_DIR`  | Diagrams directory          |
-| `ARCH_REVIEW_SOURCE_DIR`    | Source code directory       |
-| `ARCH_REVIEW_OUTPUT_DIR`    | Output directory            |
-| `ARCH_REVIEW_MODEL`         | Bedrock model ID            |
-| `AWS_REGION`                | AWS region                  |
-| `CI`                        | Enable CI mode (true/1/yes) |
+| Variable                      | Description                         |
+| ----------------------------- | ----------------------------------- |
+| `ARCH_REVIEW_DOCUMENTS_DIR`   | Documents directory                 |
+| `ARCH_REVIEW_TEMPLATES_DIR`   | Templates directory                 |
+| `ARCH_REVIEW_DIAGRAMS_DIR`    | Diagrams directory                  |
+| `ARCH_REVIEW_SOURCE_DIR`      | Source code directory               |
+| `ARCH_REVIEW_OUTPUT_DIR`      | Output directory                    |
+| `ARCH_REVIEW_MODEL`           | Bedrock model ID                    |
+| `ARCH_REVIEW_REASONING_LEVEL` | Reasoning effort: low, medium, high |
+| `AWS_REGION`                  | AWS region                          |
+| `CI`                          | Enable CI mode (true/1/yes)         |
 
 ### Exit Codes
 

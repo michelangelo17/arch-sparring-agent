@@ -1,6 +1,7 @@
 """Orchestrates the 5-phase architecture review process."""
 
 import logging
+import re
 from collections.abc import Callable
 
 from .agents.architecture_agent import create_architecture_agent
@@ -16,7 +17,13 @@ from .agents.question_agent import create_question_agent, run_questions
 from .agents.requirements_agent import create_requirements_agent
 from .agents.review_agent import create_review_agent, generate_review
 from .agents.sparring_agent import create_sparring_agent, run_sparring
-from .config import MODEL_ID, check_model_access, create_model, get_inference_profile_arn
+from .config import (
+    DEFAULT_REASONING_LEVEL,
+    MODEL_ID,
+    check_model_access,
+    create_model,
+    get_inference_profile_arn,
+)
 from .context_condenser import (
     extract_architecture_findings,
     extract_phase_findings,
@@ -42,6 +49,7 @@ class ReviewOrchestrator:
         source_dir: str | None = None,
         skip_policy_check: bool = False,
         output_fn: Callable[[str], None] | None = None,
+        reasoning_level: str = DEFAULT_REASONING_LEVEL,
     ):
         self.documents_dir = documents_dir
         self.templates_dir = templates_dir
@@ -75,7 +83,9 @@ class ReviewOrchestrator:
             )
 
         # Models: reasoning enabled for analysis-heavy agents, off for extraction/summarization
-        reasoning_model = create_model(self.model_id, reasoning=True)
+        reasoning_model = create_model(
+            self.model_id, reasoning=True, reasoning_level=reasoning_level
+        )
         standard_model = create_model(self.model_id, reasoning=False)
 
         self.requirements_agent = create_requirements_agent(documents_dir, standard_model)
@@ -85,7 +95,7 @@ class ReviewOrchestrator:
 
         if ci_mode:
             self.question_agent = create_ci_question_agent(standard_model)
-            self.sparring_agent = create_ci_sparring_agent(reasoning_model)
+            self.sparring_agent = create_ci_sparring_agent(standard_model)
             self.review_agent = create_ci_review_agent(reasoning_model)
         else:
             self.question_agent = create_question_agent(
@@ -93,14 +103,24 @@ class ReviewOrchestrator:
                 templates_dir=templates_dir,
                 source_dir=source_dir,
             )
-            self.sparring_agent = create_sparring_agent(reasoning_model)
+            self.sparring_agent = create_sparring_agent(standard_model)
             self.review_agent = create_review_agent(reasoning_model)
 
         self.standard_model = standard_model
         self.captured_output: list[str] = []
 
+    @staticmethod
+    def _strip_redacted(text: str) -> str:
+        """Remove [REDACTED] reasoning traces from model output."""
+        # Remove lines that are just [REDACTED] (with optional surrounding whitespace/dots)
+        cleaned = re.sub(r"^[.\s]*\[REDACTED\][.\s]*$", "", text, flags=re.MULTILINE)
+        # Collapse runs of 3+ blank lines into 2
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+        return cleaned.strip()
+
     def _capture(self, content: str) -> None:
         """Capture output for session export and optionally emit it."""
+        content = self._strip_redacted(content)
         self.captured_output.append(content)
         if self.output_fn:
             self.output_fn(content)

@@ -12,6 +12,7 @@ import pytest
 # List of all external modules that need mocking
 _MOCKED_MODULES = [
     "strands",
+    "strands.models",
     "strands.types",
     "strands.types.exceptions",
     "botocore",
@@ -55,6 +56,14 @@ class FakeBotoCoreError(Exception):
     """Fake botocore BotoCoreError for tests."""
 
 
+class FakeBedrockModel:
+    """Fake strands BedrockModel for tests."""
+
+    def __init__(self, **kwargs: object):
+        self.config = kwargs
+        self.config.setdefault("model_id", "test-model")
+
+
 def _setup_mocks() -> None:
     """Install mocked modules into sys.modules."""
     for mod in _MOCKED_MODULES:
@@ -68,6 +77,9 @@ def _setup_mocks() -> None:
     sys.modules["strands.types.exceptions"].MaxTokensReachedException = FakeMaxTokensReached
     sys.modules["botocore.exceptions"].ClientError = FakeClientError
     sys.modules["botocore.exceptions"].BotoCoreError = FakeBotoCoreError
+
+    # Wire BedrockModel into strands.models so isinstance checks and type hints work
+    sys.modules["strands.models"].BedrockModel = FakeBedrockModel
 
     # Wire PIL exceptions
     pil_mock = sys.modules["PIL"]

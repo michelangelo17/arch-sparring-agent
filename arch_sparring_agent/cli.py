@@ -12,7 +12,13 @@ from pathlib import Path
 import click
 
 from .agents.remediation_agent import create_remediation_agent, run_remediation
-from .config import DEFAULT_REGION, MODEL_ID, get_inference_profile_arn
+from .config import (
+    DEFAULT_REASONING_LEVEL,
+    DEFAULT_REGION,
+    MODEL_ID,
+    REASONING_LEVELS,
+    get_inference_profile_arn,
+)
 from .exceptions import ArchReviewError
 from .orchestrator import ReviewOrchestrator
 from .state import ReviewState, extract_state_from_review, extract_verdict
@@ -211,6 +217,12 @@ def _get_verdict_and_exit_code(review_text: str, strict: bool = False) -> tuple[
     help="Strict mode: any High impact risk fails",
 )
 @click.option(
+    "--reasoning-level",
+    type=click.Choice(REASONING_LEVELS, case_sensitive=False),
+    default=lambda: get_env_or_default("ARCH_REVIEW_REASONING_LEVEL", DEFAULT_REASONING_LEVEL),
+    help=f"Reasoning effort for analysis agents (default: {DEFAULT_REASONING_LEVEL})",
+)
+@click.option(
     "--skip-policy-check",
     is_flag=True,
     default=False,
@@ -239,6 +251,7 @@ def main(
     ci,
     json_output,
     strict,
+    reasoning_level,
     skip_policy_check,
     verbose,
 ):
@@ -309,6 +322,7 @@ def main(
         ci_mode=ci_mode,
         json_output=json_output,
         strict=strict,
+        reasoning_level=reasoning_level,
         skip_policy_check=skip_policy_check,
     )
 
@@ -364,6 +378,7 @@ def _run_review_mode(
     ci_mode: bool,
     json_output: bool,
     strict: bool,
+    reasoning_level: str = DEFAULT_REASONING_LEVEL,
     skip_policy_check: bool = False,
 ):
     """Run review mode."""
@@ -384,6 +399,7 @@ def _run_review_mode(
             ci_mode=ci_mode,
             skip_policy_check=skip_policy_check,
             output_fn=click.echo,
+            reasoning_level=reasoning_level,
         )
 
         result = orchestrator.run_review()

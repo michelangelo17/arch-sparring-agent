@@ -1,7 +1,6 @@
 """Sparring agent for Phase 4 - challenging architectural decisions."""
 
 from strands import Agent, tool
-
 from strands.models import BedrockModel
 
 from ..config import MODEL_ID
@@ -27,6 +26,7 @@ def create_sparring_agent(model_id: str | BedrockModel = MODEL_ID) -> Agent:
     return Agent(
         name="SparringAgent",
         model=model_id,
+        callback_handler=None,
         system_prompt="""Challenge CONFIRMED gaps only. Be CONCISE.
 
 CRITICAL: Call challenge_user exactly ONCE per turn. Wait for the user's

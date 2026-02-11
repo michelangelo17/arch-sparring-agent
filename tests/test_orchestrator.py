@@ -22,6 +22,17 @@ class TestReviewOrchestrator(unittest.TestCase):
         ).start()
         self.mock_setup_policies.return_value = "policy-engine-id"
 
+        # Mock create_model to return distinguishable fake models
+        self.mock_reasoning_model = MagicMock(name="reasoning_model")
+        self.mock_standard_model = MagicMock(name="standard_model")
+
+        def fake_create_model(model_id, reasoning=False, reasoning_level="medium"):
+            return self.mock_reasoning_model if reasoning else self.mock_standard_model
+
+        self.mock_create_model = patch(
+            "arch_sparring_agent.orchestrator.create_model", side_effect=fake_create_model
+        ).start()
+
         # Mock context condenser functions (passthrough for short content)
         self.mock_extract_req = patch(
             "arch_sparring_agent.orchestrator.extract_requirements"
@@ -103,9 +114,9 @@ class TestReviewOrchestrator(unittest.TestCase):
         # Verify Architecture Phase
         self.mock_arch_agent.assert_called()
 
-        # Verify context condenser was called for each phase
-        self.mock_extract_req.assert_called_once_with("Requirements Summary", orch.model_id)
-        self.mock_extract_arch.assert_called_once_with("Architecture Summary", orch.model_id)
+        # Verify context condenser was called with the standard model
+        self.mock_extract_req.assert_called_once_with("Requirements Summary", orch.standard_model)
+        self.mock_extract_arch.assert_called_once_with("Architecture Summary", orch.standard_model)
 
         # Verify Questions Phase receives extracted findings
         self.mock_run_questions.assert_called_with(

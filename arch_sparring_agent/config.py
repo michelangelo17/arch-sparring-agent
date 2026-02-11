@@ -14,19 +14,29 @@ MODEL_ID = "amazon.nova-2-lite-v1:0"
 DEFAULT_REGION = "eu-central-1"
 
 
-def create_model(model_id: str = MODEL_ID, reasoning: bool = False) -> BedrockModel:
+REASONING_LEVELS = ("low", "medium", "high")
+DEFAULT_REASONING_LEVEL = "medium"
+
+
+def create_model(
+    model_id: str = MODEL_ID,
+    reasoning: bool = False,
+    reasoning_level: str = DEFAULT_REASONING_LEVEL,
+) -> BedrockModel:
     """Create a BedrockModel, optionally with extended thinking enabled.
 
     Args:
         model_id: Bedrock model ID or inference profile ARN.
         reasoning: Enable extended thinking (reasoningConfig) for complex analysis.
+        reasoning_level: Reasoning effort level: "low", "medium", or "high".
     """
     kwargs: dict[str, Any] = {"model_id": model_id}
     if reasoning:
+        level = reasoning_level if reasoning_level in REASONING_LEVELS else DEFAULT_REASONING_LEVEL
         kwargs["additional_request_fields"] = {
             "reasoningConfig": {
                 "type": "enabled",
-                "maxReasoningEffort": "high",
+                "maxReasoningEffort": level,
             }
         }
     return BedrockModel(**kwargs)

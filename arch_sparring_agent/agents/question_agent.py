@@ -1,7 +1,6 @@
 """Question agent for Phase 3 - clarifying questions."""
 
 from strands import Agent, tool
-
 from strands.models import BedrockModel
 
 from ..config import MODEL_ID
@@ -129,6 +128,7 @@ Items verified in templates/source (not gaps) can be omitted."""
     return Agent(
         name="QuestionAgent",
         model=model_id,
+        callback_handler=None,
         system_prompt=system_prompt,
         tools=tools,
     )
