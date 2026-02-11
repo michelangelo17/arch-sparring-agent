@@ -136,6 +136,25 @@ arch-review --model opus-4.6 --reasoning-level off \
 - `medium` -- balanced reasoning
 - `high` -- maximum reasoning (slowest, best quality)
 
+### Model Quotas & Cost
+
+AWS Bedrock enforces **daily token quotas** per model at the account level. These quotas are shared across all users and workloads on the same AWS account.
+
+| Model         | Cross-Region Daily Quota | Relative Cost |
+| ------------- | ------------------------ | ------------- |
+| `nova-2-lite` | ~432M tokens             | Low           |
+| `opus-4.6`    | ~2.6M tokens             | High          |
+
+> **Warning:** Opus 4.6 has a very low default daily token quota (~2.6M tokens for cross-region inference). A single architecture review involves multiple agent calls (requirements, architecture, questions, sparring, final review), each consuming tokens. You may only get **1–2 reviews per day** before hitting the limit.
+>
+> Additionally, Opus 4.6 uses [adaptive thinking](https://docs.aws.amazon.com/bedrock/latest/userguide/claude-messages-adaptive-thinking.html) with automatic interleaved thinking between tool calls. Thinking tokens are billed as output tokens ([docs](https://docs.aws.amazon.com/bedrock/latest/userguide/claude-messages-extended-thinking.html#claude-messages-extended-thinking-cost)) and most Claude models apply a [5x burndown rate](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas-token-burndown.html) on output tokens (1 output token = 5 tokens from your quota). This significantly amplifies quota consumption.
+>
+> For Nova 2 Lite, reasoning tokens are also charged even though reasoning content is redacted ([docs](https://docs.aws.amazon.com/nova/latest/nova2-userguide/reasoning-capabilities.html)).
+>
+> For iterative development and frequent reviews, **`nova-2-lite` (the default) is strongly recommended**. Reserve `opus-4.6` for cases where higher reasoning quality is critical.
+>
+> These quotas are marked as non-adjustable in AWS Service Quotas. Contact AWS Support to request an increase.
+
 ### Environment Variables
 
 All options can be set via environment variables:
