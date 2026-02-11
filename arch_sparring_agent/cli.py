@@ -13,11 +13,11 @@ import click
 
 from .agents.remediation_agent import create_remediation_agent, run_remediation
 from .config import (
+    DEFAULT_MODEL,
     DEFAULT_REASONING_LEVEL,
     DEFAULT_REGION,
-    MODEL_ID,
     REASONING_LEVELS,
-    get_inference_profile_arn,
+    SUPPORTED_MODELS,
 )
 from .exceptions import ArchReviewError
 from .orchestrator import ReviewOrchestrator
@@ -190,8 +190,9 @@ def _get_verdict_and_exit_code(review_text: str, strict: bool = False) -> tuple[
 )
 @click.option(
     "--model",
-    default=lambda: get_env_or_default("ARCH_REVIEW_MODEL", MODEL_ID),
-    help=f"Bedrock model ID (default: {MODEL_ID})",
+    type=click.Choice(list(SUPPORTED_MODELS.keys()), case_sensitive=False),
+    default=lambda: get_env_or_default("ARCH_REVIEW_MODEL", DEFAULT_MODEL),
+    help=f"Model to use (default: {DEFAULT_MODEL})",
 )
 @click.option(
     "--region",
@@ -346,8 +347,7 @@ def _run_remediation_mode(
         state = ReviewState.from_file(state_path)
         click.echo(f"✓ Loaded state from: {state_path}")
 
-        inference_profile = get_inference_profile_arn(model, region)
-        model_id = inference_profile or model
+        model_id = SUPPORTED_MODELS[model]["model_id"]
 
         agent = create_remediation_agent(state=state, model_id=model_id, region=region)
         notes = run_remediation(agent, state, output_fn=click.echo)
@@ -394,7 +394,7 @@ def _run_review_mode(
             templates_dir=templates_dir,
             diagrams_dir=diagrams_dir,
             source_dir=source_dir or None,
-            model_id=model,
+            model_name=model,
             region=region,
             ci_mode=ci_mode,
             skip_policy_check=skip_policy_check,

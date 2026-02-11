@@ -3,10 +3,8 @@
 from strands import Agent, tool
 from strands.models import BedrockModel
 
-from ..config import MODEL_ID
 
-
-def create_sparring_agent(model_id: str | BedrockModel = MODEL_ID) -> Agent:
+def create_sparring_agent(model_id: str | BedrockModel) -> Agent:
     """Create agent for challenging architectural decisions."""
 
     challenges_made = []

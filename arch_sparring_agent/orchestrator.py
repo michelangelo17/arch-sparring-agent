@@ -18,11 +18,9 @@ from .agents.requirements_agent import create_requirements_agent
 from .agents.review_agent import create_review_agent, generate_review
 from .agents.sparring_agent import create_sparring_agent, run_sparring
 from .config import (
+    DEFAULT_MODEL,
     DEFAULT_REASONING_LEVEL,
-    MODEL_ID,
-    check_model_access,
     create_model,
-    get_inference_profile_arn,
 )
 from .context_condenser import (
     extract_architecture_findings,
@@ -43,7 +41,7 @@ class ReviewOrchestrator:
         documents_dir: str,
         templates_dir: str,
         diagrams_dir: str,
-        model_id: str = MODEL_ID,
+        model_name: str = DEFAULT_MODEL,
         region: str = "eu-central-1",
         ci_mode: bool = False,
         source_dir: str | None = None,
@@ -58,12 +56,7 @@ class ReviewOrchestrator:
         self.region = region
         self.ci_mode = ci_mode
         self.output_fn = output_fn
-
-        inference_profile_arn = get_inference_profile_arn(model_id)
-        self.model_id = inference_profile_arn or model_id
-
-        if not check_model_access(model_id, region=region):
-            raise ConfigurationError(f"Model {model_id} not accessible.")
+        self.model_name = model_name
 
         logger.info("Setting up Policy Engine and Policies")
         self.policy_engine_id = setup_architecture_review_policies(region=region)
@@ -83,12 +76,12 @@ class ReviewOrchestrator:
             )
 
         # Models: reasoning enabled for analysis-heavy agents, off for extraction/summarization
-        standard_model = create_model(self.model_id, reasoning=False)
+        standard_model = create_model(model_name, reasoning=False)
         if reasoning_level == "off":
             reasoning_model = standard_model  # all agents use standard
         else:
             reasoning_model = create_model(
-                self.model_id, reasoning=True, reasoning_level=reasoning_level
+                model_name, reasoning=True, reasoning_level=reasoning_level
             )
 
         self.requirements_agent = create_requirements_agent(documents_dir, standard_model)

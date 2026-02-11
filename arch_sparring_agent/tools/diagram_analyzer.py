@@ -1,17 +1,13 @@
 """Architecture diagram analyzer using Bedrock multimodal."""
 
+import os
 from pathlib import Path
 
+import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from PIL import Image, UnidentifiedImageError
 
-from ..config import (
-    DIAGRAM_MAX_BYTES,
-    DIAGRAM_MAX_TOKENS,
-    MODEL_ID,
-    get_bedrock_client,
-    get_inference_profile_arn,
-)
+from ..config import DEFAULT_REGION, DIAGRAM_MAX_BYTES, DIAGRAM_MAX_TOKENS
 from ..exceptions import ToolError
 
 
@@ -26,10 +22,11 @@ def _validate_path(base_dir: Path, filename: str) -> Path:
 class DiagramAnalyzer:
     """Analyzes architecture diagrams via Bedrock Converse API."""
 
-    def __init__(self, diagrams_dir: str, model_id: str = MODEL_ID):
+    def __init__(self, diagrams_dir: str, model_id: str):
         self.diagrams_dir = Path(diagrams_dir)
         self.model_id = model_id
-        self.bedrock_client = get_bedrock_client()
+        region = os.getenv("AWS_REGION", DEFAULT_REGION)
+        self.bedrock_client = boto3.client("bedrock-runtime", region_name=region)
 
     def _read_image_bytes(self, image_path: Path) -> bytes:
         """Read raw image bytes from file."""
@@ -69,17 +66,9 @@ class DiagramAnalyzer:
         else:
             raise ToolError(f"Unsupported format: {filename}. Use PNG or JPEG.")
 
-        inference_profile_arn = get_inference_profile_arn(self.model_id)
-
         try:
-            # Use inference profile if available, otherwise fall back to direct model ID
-            model_param = (
-                {"inferenceProfileArn": inference_profile_arn}
-                if inference_profile_arn
-                else {"modelId": self.model_id}
-            )
             response = self.bedrock_client.converse(
-                **model_param,
+                modelId=self.model_id,
                 messages=[
                     {
                         "role": "user",

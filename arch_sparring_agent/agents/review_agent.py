@@ -1,13 +1,10 @@
 """Review agent for Phase 5 - final review generation."""
 
 from strands import Agent
-
 from strands.models import BedrockModel
 
-from ..config import MODEL_ID
 
-
-def create_review_agent(model_id: str | BedrockModel = MODEL_ID) -> Agent:
+def create_review_agent(model_id: str | BedrockModel) -> Agent:
     """Create agent for generating final review."""
 
     return Agent(

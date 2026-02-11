@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from arch_sparring_agent.agents.requirements_agent import create_requirements_agent
-from arch_sparring_agent.config import MODEL_ID
 
 
 class TestRequirementsAgent(unittest.TestCase):
@@ -22,7 +21,7 @@ class TestRequirementsAgent(unittest.TestCase):
         patch.stopall()
 
     def test_create_requirements_agent(self):
-        create_requirements_agent("docs_dir")
+        create_requirements_agent("docs_dir", "test-model")
 
         # Check Agent was created
         self.mock_agent_cls.assert_called()
@@ -50,7 +49,7 @@ class TestRequirementsAgent(unittest.TestCase):
         self.mock_parser.list_documents.assert_called()
 
     def test_read_document_short(self):
-        create_requirements_agent("docs_dir")
+        create_requirements_agent("docs_dir", "test-model")
         # Get the tool from the call args
         tools = self.mock_agent_cls.call_args[1]["tools"]
         read_doc_tool = next(t for t in tools if t.__name__ == "read_document")
@@ -68,7 +67,7 @@ class TestRequirementsAgent(unittest.TestCase):
         # Reset Agent calls from create_requirements_agent
         self.mock_agent_cls.reset_mock()
 
-        create_requirements_agent("docs_dir")
+        create_requirements_agent("docs_dir", "test-model")
         tools = self.mock_agent_cls.call_args[1]["tools"]
         read_doc_tool = next(t for t in tools if t.__name__ == "read_document")
 
@@ -85,10 +84,10 @@ class TestRequirementsAgent(unittest.TestCase):
 
         result = read_doc_tool("long.md")
 
-        # Verify summarizer agent was created
+        # Verify summarizer agent was created with the same model_id
         self.mock_agent_cls.assert_called_with(
             name="DocSummarizer",
-            model=MODEL_ID,
+            model="test-model",
             callback_handler=None,
             system_prompt=unittest.mock.ANY,
             tools=[],

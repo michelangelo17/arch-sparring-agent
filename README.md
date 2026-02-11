@@ -83,41 +83,36 @@ arch-review --remediate
 
 ### Options
 
-| Option                    | Description                                             |
-| ------------------------- | ------------------------------------------------------- |
-| `--documents-dir`         | Directory with markdown requirements/constraints        |
-| `--templates-dir`         | CloudFormation templates or `cdk.out/` directory        |
-| `--diagrams-dir`          | Architecture diagrams (PNG, JPEG)                       |
-| `--source-dir`            | Lambda/application source code (optional)               |
-| `--output-dir`            | Output directory (default: `.arch-review`)              |
-| `--no-history`            | Don't archive previous reviews (default in CI mode)     |
-| `--keep-history`          | Archive previous reviews even in CI mode                |
-| `--no-state`              | Don't save state file after review                      |
-| `--remediate`             | Enter remediation mode                                  |
-| `--no-remediation-output` | Don't save remediation notes                            |
-| `--ci`                    | CI/CD mode: non-interactive analysis                    |
-| `--json`                  | Output as JSON (implies --ci)                           |
-| `--strict`                | Fail on any High impact risk (ignores verdict)          |
-| `--reasoning-level`       | Reasoning effort: off, low, medium, high (default: low) |
-| `--skip-policy-check`     | Skip policy engine setup (development only)             |
-| `-v`, `--verbose`         | Show detailed output (policy setup, debug info)         |
-| `--model`                 | Bedrock model ID (default: Nova 2 Lite)                 |
-| `--region`                | AWS region (default: eu-central-1)                      |
+| Option                    | Description                                               |
+| ------------------------- | --------------------------------------------------------- |
+| `--documents-dir`         | Directory with markdown requirements/constraints          |
+| `--templates-dir`         | CloudFormation templates or `cdk.out/` directory          |
+| `--diagrams-dir`          | Architecture diagrams (PNG, JPEG)                         |
+| `--source-dir`            | Lambda/application source code (optional)                 |
+| `--output-dir`            | Output directory (default: `.arch-review`)                |
+| `--no-history`            | Don't archive previous reviews (default in CI mode)       |
+| `--keep-history`          | Archive previous reviews even in CI mode                  |
+| `--no-state`              | Don't save state file after review                        |
+| `--remediate`             | Enter remediation mode                                    |
+| `--no-remediation-output` | Don't save remediation notes                              |
+| `--ci`                    | CI/CD mode: non-interactive analysis                      |
+| `--json`                  | Output as JSON (implies --ci)                             |
+| `--strict`                | Fail on any High impact risk (ignores verdict)            |
+| `--reasoning-level`       | Reasoning effort: off, low, medium, high (default: low)   |
+| `--skip-policy-check`     | Skip policy engine setup (development only)               |
+| `-v`, `--verbose`         | Show detailed output (policy setup, debug info)           |
+| `--model`                 | Model: `nova-2-lite` or `opus-4.6` (default: nova-2-lite) |
+| `--region`                | AWS region (default: eu-central-1)                        |
 
 ### Supported Models
 
-The default model is Amazon Nova 2 Lite. You can use any Bedrock model via `--model`
-with the exact model ID or inference profile ID.
+The `--model` flag accepts a short name from the curated model registry.
+Only models with 1M context windows are supported to ensure reliable full-project reviews.
 
-**Tested models:**
-
-| Model              | `--model` value                                  | Reasoning | Context |
-| ------------------ | ------------------------------------------------ | --------- | ------- |
-| Nova 2 Lite        | `amazon.nova-2-lite-v1:0`                        | Yes       | 1M      |
-| Claude Sonnet 4.5  | `eu.anthropic.claude-sonnet-4-5-20250929-v1:0`   | Yes       | 1M      |
-| Claude Opus 4.5    | `global.anthropic.claude-opus-4-5-20251101-v1:0` | Yes       | 200K    |
-| Claude Opus 4.6    | `eu.anthropic.claude-opus-4-6-v1:0`              | Yes       | 200K    |
-| Mistral Pixtral Lg | `eu.mistral.pixtral-large-2502-v1:0`             | No        | 128K    |
+| Short Name      | Model                     | Context | `--model` value |
+| --------------- | ------------------------- | ------- | --------------- |
+| Nova 2 Lite     | Amazon Nova 2 Lite        | 1M      | `nova-2-lite`   |
+| Claude Opus 4.6 | Anthropic Claude Opus 4.6 | 1M      | `opus-4.6`      |
 
 **Examples:**
 
@@ -125,22 +120,21 @@ with the exact model ID or inference profile ID.
 # Default (Nova 2 Lite with low reasoning)
 arch-review --documents-dir ./docs --templates-dir ./cdk.out --diagrams-dir ./diagrams
 
-# Claude Sonnet 4.5 with medium reasoning
-arch-review --model eu.anthropic.claude-sonnet-4-5-20250929-v1:0 --reasoning-level medium \
+# Claude Opus 4.6 with medium reasoning
+arch-review --model opus-4.6 --reasoning-level medium \
     --documents-dir ./docs --templates-dir ./cdk.out --diagrams-dir ./diagrams
 
-# Same model without reasoning (for A/B comparison)
-arch-review --model eu.anthropic.claude-sonnet-4-5-20250929-v1:0 --reasoning-level off \
+# Compare with reasoning off
+arch-review --model opus-4.6 --reasoning-level off \
     --documents-dir ./docs --templates-dir ./cdk.out --diagrams-dir ./diagrams
 ```
 
-**Notes:**
+**Reasoning levels:**
 
-- Region-prefixed IDs (`eu.`, `us.`, `global.`) are inference profiles -- use them as-is
-- Nova models use effort-based reasoning (low/medium/high)
-- Claude models use token-budget reasoning (mapped from low/medium/high)
-- Models without reasoning support run in standard mode with a warning
-- Use `--reasoning-level off` to disable reasoning for any model
+- `off` -- disable extended thinking entirely
+- `low` -- minimal reasoning (default, fastest)
+- `medium` -- balanced reasoning
+- `high` -- maximum reasoning (slowest, best quality)
 
 ### Environment Variables
 
@@ -153,7 +147,7 @@ All options can be set via environment variables:
 | `ARCH_REVIEW_DIAGRAMS_DIR`    | Diagrams directory                       |
 | `ARCH_REVIEW_SOURCE_DIR`      | Source code directory                    |
 | `ARCH_REVIEW_OUTPUT_DIR`      | Output directory                         |
-| `ARCH_REVIEW_MODEL`           | Bedrock model ID                         |
+| `ARCH_REVIEW_MODEL`           | Model short name (nova-2-lite, opus-4.6) |
 | `ARCH_REVIEW_REASONING_LEVEL` | Reasoning effort: off, low, medium, high |
 | `AWS_REGION`                  | AWS region                               |
 | `CI`                          | Enable CI mode (true/1/yes)              |
@@ -361,7 +355,7 @@ The tool automatically creates and configures a full policy enforcement stack fo
 ## Technical Details
 
 - **Default Model**: Nova 2 Lite (1M context, multimodal)
-- **Multi-model**: Supports Nova, Claude, and Mistral via `--model`
+- **Multi-model**: Curated registry with Nova 2 Lite and Claude Opus 4.6 via `--model`
 - **Framework**: AWS Strands SDK
 - **Region**: eu-central-1 (configurable)
 - **Policy Engine**: AgentCore Policy Engine for tool access control

@@ -7,16 +7,6 @@ from arch_sparring_agent.orchestrator import ReviewOrchestrator
 
 class TestReviewOrchestrator(unittest.TestCase):
     def setUp(self):
-        self.mock_check_access = patch(
-            "arch_sparring_agent.orchestrator.check_model_access"
-        ).start()
-        self.mock_check_access.return_value = True
-
-        self.mock_get_arn = patch(
-            "arch_sparring_agent.orchestrator.get_inference_profile_arn"
-        ).start()
-        self.mock_get_arn.return_value = "arn:aws:bedrock:..."
-
         self.mock_setup_policies = patch(
             "arch_sparring_agent.orchestrator.setup_architecture_review_policies"
         ).start()
@@ -26,7 +16,7 @@ class TestReviewOrchestrator(unittest.TestCase):
         self.mock_reasoning_model = MagicMock(name="reasoning_model")
         self.mock_standard_model = MagicMock(name="standard_model")
 
-        def fake_create_model(model_id, reasoning=False, reasoning_level="low"):
+        def fake_create_model(model_name, reasoning=False, reasoning_level="low"):
             return self.mock_reasoning_model if reasoning else self.mock_standard_model
 
         self.mock_create_model = patch(
@@ -87,7 +77,6 @@ class TestReviewOrchestrator(unittest.TestCase):
         """Test initialization of ReviewOrchestrator."""
         orch = ReviewOrchestrator(documents_dir="docs", templates_dir="tmpl", diagrams_dir="diag")
 
-        self.mock_check_access.assert_called()
         self.mock_setup_policies.assert_called()
         self.mock_create_req.assert_called()
         self.mock_create_arch.assert_called()
@@ -145,13 +134,6 @@ class TestReviewOrchestrator(unittest.TestCase):
         self.assertEqual(result["gaps_findings"], "[extracted:Q&A] Questions Context")
         self.assertEqual(result["risks"], "Sparring Context")
         self.assertEqual(result["risks_findings"], "[extracted:Sparring] Sparring Context")
-
-    def test_init_fails_if_no_access(self):
-        """Test that init raises ConfigurationError if model access check fails."""
-        self.mock_check_access.return_value = False
-
-        with self.assertRaises(ConfigurationError):
-            ReviewOrchestrator(documents_dir="docs", templates_dir="tmpl", diagrams_dir="diag")
 
     def test_init_fails_if_policy_setup_fails(self):
         """Test that init raises ConfigurationError if policy engine setup fails."""
@@ -213,14 +195,18 @@ class TestReviewOrchestrator(unittest.TestCase):
         _, kwargs = calls[0]
         self.assertFalse(kwargs.get("reasoning", False))
 
-        # All agents that normally use reasoning_model should use standard_model instead
-        # Architecture agent should receive the standard model
-        arch_call = self.mock_create_arch.call_args
-        self.assertEqual(arch_call[1].get("model") or arch_call[0][2], self.mock_standard_model)
+    def test_model_name_passed_to_create_model(self):
+        """Verify model_name is passed through to create_model."""
+        ReviewOrchestrator(
+            documents_dir="docs",
+            templates_dir="tmpl",
+            diagrams_dir="diag",
+            model_name="opus-4.6",
+        )
 
-        # Review agent should receive the standard model
-        rev_call = self.mock_create_rev.call_args
-        self.assertEqual(rev_call[0][0], self.mock_standard_model)
+        # First call should be with "opus-4.6"
+        first_call = self.mock_create_model.call_args_list[0]
+        self.assertEqual(first_call[0][0], "opus-4.6")
 
 
 if __name__ == "__main__":

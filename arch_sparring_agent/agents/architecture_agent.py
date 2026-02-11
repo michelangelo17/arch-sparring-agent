@@ -1,10 +1,8 @@
 """Architecture analysis agent for Phase 2."""
 
 from strands import Agent, tool
-
 from strands.models import BedrockModel
 
-from ..config import MODEL_ID
 from ..tools.cfn_analyzer import CloudFormationAnalyzer
 from ..tools.diagram_analyzer import DiagramAnalyzer
 from ..tools.source_analyzer import SourceAnalyzer
@@ -13,7 +11,7 @@ from ..tools.source_analyzer import SourceAnalyzer
 def create_architecture_agent(
     templates_dir: str,
     diagrams_dir: str,
-    model_id: str | BedrockModel = MODEL_ID,
+    model_id: str | BedrockModel,
     source_dir: str | None = None,
 ) -> Agent:
     """Create agent for analyzing CloudFormation templates, diagrams, and source code."""

@@ -1,99 +1,72 @@
-"""Configuration constants and basic AWS client setup."""
+"""Configuration constants and model registry."""
 
 import logging
 import os
-import re
 from typing import Any
 
-import boto3
-from botocore.exceptions import BotoCoreError, ClientError
 from strands.models import BedrockModel
 
 logger = logging.getLogger(__name__)
 
-MODEL_ID = "amazon.nova-2-lite-v1:0"
 DEFAULT_REGION = "eu-central-1"
 
+# --- Supported models (curated, verified EU inference profiles) ---
+
+SUPPORTED_MODELS: dict[str, dict[str, str]] = {
+    "nova-2-lite": {
+        "model_id": "eu.amazon.nova-2-lite-v1:0",
+        "description": "Amazon Nova 2 Lite (1M context)",
+        "reasoning_field": "maxReasoningEffort",
+    },
+    "opus-4.6": {
+        "model_id": "eu.anthropic.claude-opus-4-6-v1",
+        "description": "Claude Opus 4.6 (1M context)",
+        "reasoning_field": "maxReasoningEffort",
+    },
+}
+DEFAULT_MODEL = "nova-2-lite"
+
+# --- Reasoning levels ---
 
 REASONING_LEVELS = ("off", "low", "medium", "high")
 DEFAULT_REASONING_LEVEL = "low"
 
-# Claude budgetTokens mapping for reasoning levels
-_CLAUDE_BUDGET_TOKENS = {"low": 1024, "medium": 4096, "high": 16384}
-
-
-def _detect_model_family(model_id: str) -> str:
-    """Detect model family from a model ID, inference profile, or ARN.
-
-    Handles formats:
-        "amazon.nova-2-lite-v1:0"                              -> "nova"
-        "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"         -> "claude"
-        "eu.mistral.pixtral-large-2502-v1:0"                   -> "mistral"
-        "arn:aws:bedrock:...:inference-profile/global.amazon.nova-2-lite-v1:0"
-                                                               -> "nova"
-    """
-    name = model_id.lower()
-
-    # Strip full ARN prefix: everything up to and including "inference-profile/"
-    arn_match = re.search(r"inference-profile/(.+)", name)
-    if arn_match:
-        name = arn_match.group(1)
-
-    # Strip region prefix (eu., us., ap-*, global.)
-    name = re.sub(r"^(eu|us|ap-\w+|global)\.", "", name)
-
-    if name.startswith("amazon.nova"):
-        return "nova"
-    if name.startswith("anthropic.claude"):
-        return "claude"
-    if name.startswith("mistral."):
-        return "mistral"
-    return "unknown"
-
 
 def create_model(
-    model_id: str = MODEL_ID,
+    model_name: str = DEFAULT_MODEL,
     reasoning: bool = False,
     reasoning_level: str = DEFAULT_REASONING_LEVEL,
 ) -> BedrockModel:
-    """Create a BedrockModel, optionally with extended thinking enabled.
+    """Create a BedrockModel from a supported model name.
 
     Args:
-        model_id: Bedrock model ID or inference profile ARN.
+        model_name: Short name from SUPPORTED_MODELS (e.g. "nova-2-lite", "opus-4.6").
         reasoning: Enable extended thinking (reasoningConfig) for complex analysis.
         reasoning_level: Reasoning effort level: "off", "low", "medium", or "high".
+
+    Raises:
+        ValueError: If model_name is not in SUPPORTED_MODELS.
     """
-    kwargs: dict[str, Any] = {"model_id": model_id}
+    if model_name not in SUPPORTED_MODELS:
+        raise ValueError(
+            f"Unknown model '{model_name}'. Supported models: {', '.join(SUPPORTED_MODELS)}"
+        )
+
+    model_config = SUPPORTED_MODELS[model_name]
+    kwargs: dict[str, Any] = {"model_id": model_config["model_id"]}
 
     if reasoning and reasoning_level != "off":
-        family = _detect_model_family(model_id)
         level = (
             reasoning_level
             if reasoning_level in ("low", "medium", "high")
             else DEFAULT_REASONING_LEVEL
         )
-
-        if family == "nova":
-            kwargs["additional_request_fields"] = {
-                "reasoningConfig": {
-                    "type": "enabled",
-                    "maxReasoningEffort": level,
-                }
+        kwargs["additional_request_fields"] = {
+            "reasoningConfig": {
+                "type": "enabled",
+                model_config["reasoning_field"]: level,
             }
-        elif family == "claude":
-            kwargs["additional_request_fields"] = {
-                "reasoningConfig": {
-                    "type": "enabled",
-                    "budgetTokens": _CLAUDE_BUDGET_TOKENS[level],
-                }
-            }
-        else:
-            logger.warning(
-                "Model family '%s' does not support extended thinking. "
-                "Running %s without reasoning.",
-                family,
-                model_id,
-            )
+        }
 
     return BedrockModel(**kwargs)
 
@@ -140,77 +113,3 @@ IAM_PROPAGATION_TIMEOUT = _int_env("ARCH_REVIEW_IAM_WAIT_TIMEOUT", 60)
 CFN_MAX_CHARS = _int_env("ARCH_REVIEW_CFN_MAX_CHARS", 500_000)
 DOC_MAX_CHARS = _int_env("ARCH_REVIEW_DOC_MAX_CHARS", 500_000)
 DIAGRAM_MAX_BYTES = _int_env("ARCH_REVIEW_DIAGRAM_MAX_BYTES", 10_000_000)
-
-
-def get_bedrock_client(region: str | None = None) -> Any:
-    """Create a Bedrock Runtime client."""
-    region = region or os.getenv("AWS_REGION", DEFAULT_REGION)
-    return boto3.client("bedrock-runtime", region_name=region)
-
-
-def _strip_profile_prefix(model_id: str) -> str:
-    """Strip region/inference profile prefix from a model ID.
-
-    "eu.anthropic.claude-sonnet-4-5-v1:0" -> "anthropic.claude-sonnet-4-5-v1:0"
-    "global.amazon.nova-2-lite-v1:0"      -> "amazon.nova-2-lite-v1:0"
-    "amazon.nova-2-lite-v1:0"             -> "amazon.nova-2-lite-v1:0"
-    """
-    return re.sub(r"^(eu|us|ap-\w+|global)\.", "", model_id)
-
-
-def _is_inference_profile(model_id: str) -> bool:
-    """Check if a model ID is already a region-prefixed inference profile."""
-    return bool(re.match(r"^(eu|us|ap-\w+|global)\.", model_id))
-
-
-def check_model_access(model_id: str = MODEL_ID, region: str = DEFAULT_REGION) -> bool:
-    """Verify access to the specified Bedrock model.
-
-    Handles both base model IDs and region-prefixed inference profiles
-    by stripping prefixes before comparing.
-    """
-    base_id = _strip_profile_prefix(model_id)
-    try:
-        bedrock = boto3.client("bedrock", region_name=region)
-        response = bedrock.list_foundation_models()
-        available_models = [m["modelId"] for m in response["modelSummaries"]]
-
-        # Exact match first, then prefix match (handles version suffix differences)
-        has_access = base_id in available_models or any(
-            base_id.split(":")[0] in m for m in available_models
-        )
-        if has_access:
-            logger.info("Model %s is accessible", model_id)
-        else:
-            logger.error(
-                "Model %s is not accessible. Available models: %d",
-                model_id,
-                len(available_models),
-            )
-        return has_access
-    except (ClientError, BotoCoreError) as e:
-        logger.error("Error checking model access: %s", e)
-        return False
-
-
-def get_inference_profile_arn(model_id: str = MODEL_ID, region: str = DEFAULT_REGION) -> str | None:
-    """Get inference profile ARN for a model.
-
-    If the model ID is already a region-prefixed inference profile
-    (e.g. "eu.anthropic.claude-*"), returns it as-is.
-    For base model IDs, constructs a global inference profile ARN.
-    """
-    # Region-prefixed IDs are already inference profiles
-    if _is_inference_profile(model_id):
-        logger.info("Using inference profile: %s", model_id)
-        return model_id
-
-    try:
-        sts = boto3.client("sts", region_name=region)
-        account_id = sts.get_caller_identity()["Account"]
-        profile_arn = f"arn:aws:bedrock:{region}:{account_id}:inference-profile/global.{model_id}"
-        logger.info("Using inference profile: %s", profile_arn)
-        return profile_arn
-    except (ClientError, BotoCoreError) as e:
-        logger.warning("Could not get inference profile ARN: %s", e)
-        return None
