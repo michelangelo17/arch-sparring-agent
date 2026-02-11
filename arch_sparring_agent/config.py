@@ -16,12 +16,12 @@ SUPPORTED_MODELS: dict[str, dict[str, str]] = {
     "nova-2-lite": {
         "model_id": "eu.amazon.nova-2-lite-v1:0",
         "description": "Amazon Nova 2 Lite (1M context)",
-        "reasoning_field": "maxReasoningEffort",
+        "reasoning_type": "nova",
     },
     "opus-4.6": {
         "model_id": "eu.anthropic.claude-opus-4-6-v1",
         "description": "Claude Opus 4.6 (1M context)",
-        "reasoning_field": "maxReasoningEffort",
+        "reasoning_type": "adaptive",
     },
 }
 DEFAULT_MODEL = "nova-2-lite"
@@ -30,6 +30,28 @@ DEFAULT_MODEL = "nova-2-lite"
 
 REASONING_LEVELS = ("off", "low", "medium", "high")
 DEFAULT_REASONING_LEVEL = "low"
+
+
+def _build_reasoning_fields(reasoning_type: str, level: str) -> dict[str, Any]:
+    """Build additional_request_fields for reasoning based on model type.
+
+    Nova uses reasoningConfig with maxReasoningEffort.
+    Claude Opus 4.6 uses adaptive thinking with effort parameter.
+    """
+    if reasoning_type == "nova":
+        return {
+            "reasoningConfig": {
+                "type": "enabled",
+                "maxReasoningEffort": level,
+            }
+        }
+    if reasoning_type == "adaptive":
+        return {
+            "thinking": {"type": "adaptive"},
+            "output_config": {"effort": level},
+        }
+    msg = f"Unknown reasoning_type: {reasoning_type}"
+    raise ValueError(msg)
 
 
 def create_model(
@@ -41,7 +63,7 @@ def create_model(
 
     Args:
         model_name: Short name from SUPPORTED_MODELS (e.g. "nova-2-lite", "opus-4.6").
-        reasoning: Enable extended thinking (reasoningConfig) for complex analysis.
+        reasoning: Enable extended thinking / reasoning for complex analysis.
         reasoning_level: Reasoning effort level: "off", "low", "medium", or "high".
 
     Raises:
@@ -61,12 +83,9 @@ def create_model(
             if reasoning_level in ("low", "medium", "high")
             else DEFAULT_REASONING_LEVEL
         )
-        kwargs["additional_request_fields"] = {
-            "reasoningConfig": {
-                "type": "enabled",
-                model_config["reasoning_field"]: level,
-            }
-        }
+        kwargs["additional_request_fields"] = _build_reasoning_fields(
+            model_config["reasoning_type"], level
+        )
 
     return BedrockModel(**kwargs)
 

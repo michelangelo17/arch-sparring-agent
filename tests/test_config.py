@@ -35,7 +35,7 @@ class TestSupportedModels(unittest.TestCase):
         for name, model in config.SUPPORTED_MODELS.items():
             self.assertIn("model_id", model, f"{name} missing model_id")
             self.assertIn("description", model, f"{name} missing description")
-            self.assertIn("reasoning_field", model, f"{name} missing reasoning_field")
+            self.assertIn("reasoning_type", model, f"{name} missing reasoning_type")
 
     def test_nova_model_id(self):
         self.assertEqual(
@@ -75,7 +75,18 @@ class TestCreateModel(unittest.TestCase):
 
     def test_opus_reasoning_medium(self):
         model = config.create_model("opus-4.6", reasoning=True, reasoning_level="medium")
-        expected = {"reasoningConfig": {"type": "enabled", "maxReasoningEffort": "medium"}}
+        expected = {
+            "thinking": {"type": "adaptive"},
+            "output_config": {"effort": "medium"},
+        }
+        self.assertEqual(model.config.get("additional_request_fields"), expected)
+
+    def test_opus_reasoning_high(self):
+        model = config.create_model("opus-4.6", reasoning=True, reasoning_level="high")
+        expected = {
+            "thinking": {"type": "adaptive"},
+            "output_config": {"effort": "high"},
+        }
         self.assertEqual(model.config.get("additional_request_fields"), expected)
 
     def test_reasoning_off_skips_config(self):
