@@ -16,23 +16,17 @@ from .config import DEFAULT_REGION
 logger = logging.getLogger(__name__)
 
 
-def _extract_memory_id(memory: dict) -> str | None:
-    """Extract memory ID from response dict with various key formats."""
-    for key in ["id", "memoryId", "memory_id", "Id"]:
-        if key in memory:
-            return memory[key]
-    return None
-
-
 def _find_memory_by_name(memories: list, memory_name: str) -> tuple[str | None, str | None]:
-    """Find memory ID and status by name from list of memories."""
+    """Find memory ID and status by name from list of memories.
+
+    MemorySummary from ListMemories has: arn, id, status, createdAt, updatedAt.
+    There is no 'name' field — match against the ARN which embeds the name.
+    The MemoryClient wrapper normalises id/memoryId on each item.
+    """
     for m in memories:
-        m_name = m.get("name") or m.get("memoryName") or m.get("Name") or ""
-        m_status = m.get("status") or m.get("Status") or ""
-        if m_name == memory_name:
-            return _extract_memory_id(m), m_status
-        if memory_name in str(m.values()):
-            return _extract_memory_id(m), m_status
+        arn = m.get("arn", "")
+        if memory_name.lower() in arn.lower():
+            return m.get("id"), m.get("status", "")
     return None, None
 
 
@@ -75,7 +69,7 @@ def setup_agentcore_memory(
             memory = client.create_memory(
                 name=memory_name, description="Memory for arch review agents"
             )
-            memory_id = _extract_memory_id(memory)
+            memory_id = memory.get("id")
             logger.info("Created memory: %s", memory_name)
 
             # Wait for memory to become active (up to 3 minutes)

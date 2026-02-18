@@ -37,25 +37,18 @@ def _find_gateway_by_name(
     gateway_name_lower = gateway_name.lower()
 
     for gw in gateways:
-        if isinstance(gw, str):
+        gw_name = gw.get("name", "")
+        gw_id = gw.get("gatewayId", "")
+
+        if gw_name.lower() != gateway_name_lower:
             continue
 
-        gw_name = gw.get("name") or gw.get("gatewayName") or gw.get("Name") or ""
-        gw_id = gw.get("gatewayId") or gw.get("id") or ""
+        # ListGateways (GatewaySummary) doesn't include ARN or URL — construct the ARN
+        sts = boto3.client("sts", region_name=region)
+        account_id = sts.get_caller_identity()["Account"]
+        gateway_arn = f"arn:aws:bedrock-agentcore:{region}:{account_id}:gateway/{gw_id}"
 
-        # Match by name or ID prefix (API lowercases names in IDs)
-        if gw_name.lower() == gateway_name_lower or gw_id.lower().startswith(
-            gateway_name_lower.replace(" ", "")
-        ):
-            gateway_arn = gw.get("gatewayArn") or gw.get("arn")
-            gateway_url = gw.get("gatewayUrl") or gw.get("url")
-
-            if not gateway_arn and gw_id:
-                sts = boto3.client("sts", region_name=region)
-                account_id = sts.get_caller_identity()["Account"]
-                gateway_arn = f"arn:aws:bedrock-agentcore:{region}:{account_id}:gateway/{gw_id}"
-
-            return gateway_arn, gw_id, gateway_url
+        return gateway_arn, gw_id, None
 
     return None, None, None
 
@@ -191,6 +184,15 @@ def setup_gateway(
                 authorizer_config=authorizer_config,
                 enable_semantic_search=False,
             )
+
+            observability = gateway.get("observability", {})
+            if observability.get("status") == "error":
+                logger.warning(
+                    "Gateway created but observability (X-Ray tracing) could not be enabled. "
+                    "To fix, run: aws xray update-trace-segment-destination "
+                    "--destination CloudWatchLogs --region %s",
+                    region,
+                )
 
         except (ClientError, BotoCoreError) as create_error:
             if "already exists" in str(create_error).lower():

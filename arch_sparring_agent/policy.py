@@ -24,12 +24,16 @@ def setup_policy_engine(
         client = boto3.client("bedrock-agentcore-control", region_name=region)
         engines = client.list_policy_engines()
         engine = next(
-            (e for e in engines.get("policyEngines", []) if e.get("name") == policy_engine_name),
+            (
+                e
+                for e in engines.get("policyEngines", [])
+                if _policy_name_matches(e, policy_engine_name)
+            ),
             None,
         )
 
         if engine:
-            engine_id = engine.get("policyEngineId")
+            engine_id = engine["policyEngineId"]
             logger.info("Using existing Policy Engine: %s (ID: %s)", policy_engine_name, engine_id)
         else:
             response = client.create_policy_engine(
@@ -64,17 +68,15 @@ def _wait_for_policy_active(
     for _ in range(120):  # 120 * 0.5s = 60s max
         try:
             response = client.get_policy(policyEngineId=policy_engine_id, policyId=policy_id)
-            # Check possible keys for status since GetPolicy response structure varies
-            policy_data = response.get("policy") or response
-            status = (policy_data.get("status") or policy_data.get("policyStatus") or "").upper()
+            status = response.get("status", "").upper()
 
             if status == "ACTIVE":
                 logger.info("Policy '%s' is ACTIVE", policy_name)
                 return True
             if "FAIL" in status:
-                reason = policy_data.get("failureReason", "unknown")
+                reasons = response.get("statusReasons", [])
                 logger.error(
-                    "Policy '%s' failed. Status: %s, Reason: %s", policy_name, status, reason
+                    "Policy '%s' failed. Status: %s, Reasons: %s", policy_name, status, reasons
                 )
                 return False
 
@@ -137,6 +139,53 @@ def create_policy(
         return None
 
 
+def _policy_name_matches(resource: dict, target_name: str) -> bool:
+    """Check if a resource's name matches the target.
+
+    Case-insensitive comparison with prefix matching to handle
+    AWS appending UUID suffixes to names.
+    """
+    value = resource.get("name", "")
+    if not value:
+        return False
+    value_lower = value.lower()
+    target_lower = target_name.lower()
+    return value_lower == target_lower or value_lower.startswith(target_lower)
+
+
+def _find_policy_id_by_name(
+    client, policy_engine_id: str, policy_name: str
+) -> str | None:
+    """Find a policy ID by name with pagination.
+
+    Uses case-insensitive prefix matching to handle AWS name normalisation.
+    """
+    next_token = None
+
+    while True:
+        kwargs = {"policyEngineId": policy_engine_id}
+        if next_token:
+            kwargs["nextToken"] = next_token
+
+        response = client.list_policies(**kwargs)
+
+        for p in response.get("policies", []):
+            if _policy_name_matches(p, policy_name):
+                logger.debug(
+                    "Matched policy '%s' -> ID: %s (raw name: %s)",
+                    policy_name,
+                    p["policyId"],
+                    p.get("name"),
+                )
+                return p["policyId"]
+
+        next_token = response.get("nextToken")
+        if not next_token:
+            break
+
+    return None
+
+
 def _update_existing_policy(
     client,
     policy_engine_id: str,
@@ -152,33 +201,7 @@ def _update_existing_policy(
     """
     logger.info("Policy '%s' already exists. Updating...", policy_name)
     try:
-        # Find policy ID with pagination
-        policy_id = None
-        next_token = None
-
-        while True:
-            kwargs = {"policyEngineId": policy_engine_id}
-            if next_token:
-                kwargs["nextToken"] = next_token
-
-            response = client.list_policies(**kwargs)
-            # Try common keys for list response
-            policies = (
-                response.get("items")
-                or response.get("policies")
-                or response.get("policySummaries")
-                or []
-            )
-
-            existing_policy = next((p for p in policies if p.get("name") == policy_name), None)
-
-            if existing_policy:
-                policy_id = existing_policy.get("policyId") or existing_policy.get("id")
-                break
-
-            next_token = response.get("nextToken")
-            if not next_token:
-                break
+        policy_id = _find_policy_id_by_name(client, policy_engine_id, policy_name)
 
         if policy_id:
             logger.info("Updating policy '%s' (ID: %s)...", policy_name, policy_id)
@@ -190,7 +213,6 @@ def _update_existing_policy(
                 validationMode=validation_mode,
             )
             logger.info("Updated policy '%s' (ID: %s)", policy_name, policy_id)
-            # Verify policy becomes ACTIVE before returning
             if not _wait_for_policy_active(client, policy_engine_id, policy_id, policy_name):
                 logger.error("Policy '%s' failed to become ACTIVE after update", policy_name)
                 return None
