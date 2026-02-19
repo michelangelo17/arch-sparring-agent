@@ -1,32 +1,21 @@
 # Auto-publish to PyPI when version changes in pyproject.toml
-# Triggers on push to main, checks if version changed, creates tag, and publishes
+# Triggers after the Test workflow succeeds on main
 
 name: Publish to PyPI
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Test"]
+    types: [completed]
     branches: [main]
-    paths:
-      - 'pyproject.toml'
 
 permissions:
   contents: read
   actions: read
 
 jobs:
-  wait-for-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait for Test workflow to succeed
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.sha }}
-          check-name: 'build (3.11)'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 15
-
   check-version:
-    needs: wait-for-tests
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       version_changed: ${{ steps.check.outputs.changed }}
