@@ -222,10 +222,16 @@ def _create_kb_role(
                 {
                     "Effect": "Allow",
                     "Action": "s3vectors:*",
-                    "Resource": (
-                        f"arn:aws:s3vectors:{region}:{account_id}:"
-                        f"vector-bucket/{vector_bucket_name}/*"
-                    ),
+                    "Resource": [
+                        (
+                            f"arn:aws:s3vectors:{region}:{account_id}:"
+                            f"vector-bucket/{vector_bucket_name}"
+                        ),
+                        (
+                            f"arn:aws:s3vectors:{region}:{account_id}:"
+                            f"vector-bucket/{vector_bucket_name}/*"
+                        ),
+                    ],
                 },
             ],
         }
@@ -282,6 +288,11 @@ def _create_bedrock_kb(
                 "type": "VECTOR",
                 "vectorKnowledgeBaseConfiguration": {
                     "embeddingModelArn": embedding_arn,
+                    "embeddingModelConfiguration": {
+                        "bedrockEmbeddingModelConfiguration": {
+                            "dimensions": EMBEDDING_DIMENSION,
+                        }
+                    },
                 },
             },
             storageConfiguration={
