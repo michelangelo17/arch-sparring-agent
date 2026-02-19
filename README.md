@@ -11,6 +11,9 @@ Multi-agent system for architecture reviews. Analyzes requirements documents, Cl
 - **CDK support**: Works with CloudFormation templates and CDK synthesized output (`cdk.out/`)
 - **Multimodal analysis**: Analyzes architecture diagrams (PNG, JPEG) via Bedrock
 - **Full session export**: Saves complete review session to markdown or JSON
+- **Review profiles**: Customizable behavioral profiles (strict, lightweight, or your own)
+- **WAF Knowledge Base**: Optional RAG-powered retrieval of AWS Well-Architected Framework best practices
+- **Shared infrastructure**: Deploy once per AWS account, shared across team members
 
 ## Prerequisites
 
@@ -24,64 +27,160 @@ Multi-agent system for architecture reviews. Analyzes requirements documents, Cl
 pip install arch-sparring-agent
 ```
 
-## Usage
-
-### Interactive Mode (Default)
+## Quick Start
 
 ```bash
-arch-review \
+# 1. Deploy shared infrastructure (once per account)
+arch-review deploy
+
+# 2. Run an architecture review
+arch-review run \
     --documents-dir ./docs \
     --templates-dir ./templates \
     --diagrams-dir ./diagrams
+
+# 3. Discuss and resolve findings
+arch-review remediate
 ```
 
-Outputs to `.arch-review/` folder. Previous reviews are automatically archived to `.arch-review/history/`.
+## Commands
 
-### With Source Code Analysis
+### `arch-review deploy`
+
+Deploy shared infrastructure to an AWS account. Creates the Gateway, Policy Engine, and Cedar policies. Stores resource IDs in SSM Parameter Store so `arch-review run` discovers them automatically.
 
 ```bash
-arch-review \
+arch-review deploy
+arch-review deploy --with-kb        # Also provision a WAF Knowledge Base
+arch-review deploy --region us-east-1
+```
+
+Idempotent — safe to run repeatedly.
+
+### `arch-review destroy`
+
+Tear down all shared infrastructure including Gateway, Policy Engine, Knowledge Base (if present), and SSM parameter.
+
+```bash
+arch-review destroy --confirm
+```
+
+### `arch-review run`
+
+Run an architecture review. Supports interactive and CI modes.
+
+```bash
+# Interactive (default)
+arch-review run \
+    --documents-dir ./docs \
+    --templates-dir ./templates \
+    --diagrams-dir ./diagrams
+
+# With source code analysis
+arch-review run \
     --documents-dir ./docs \
     --templates-dir ./cdk.out \
     --diagrams-dir ./diagrams \
     --source-dir ./src/lambdas
-```
 
-### CI/CD Mode
-
-```bash
-# Non-interactive (no history archiving by default)
-arch-review --ci \
+# CI/CD mode (non-interactive)
+arch-review run --ci \
     --documents-dir ./docs \
-    --templates-dir ./cdk.out \
-    --diagrams-dir ./diagrams
+    --templates-dir ./cdk.out
 
 # JSON output for programmatic processing
-arch-review --json \
+arch-review run --json \
     --documents-dir ./docs \
-    --templates-dir ./templates \
-    --diagrams-dir ./diagrams
+    --templates-dir ./templates
 
-# CI with history archiving
-arch-review --ci --keep-history \
+# Use a different profile
+arch-review run --profile strict \
     --documents-dir ./docs \
-    --templates-dir ./cdk.out \
-    --diagrams-dir ./diagrams
+    --templates-dir ./templates
 ```
 
-### Remediation Mode
+### `arch-review remediate`
 
-After running a review, discuss and resolve findings:
+Discuss and resolve findings from a previous review:
 
 ```bash
-arch-review --remediate
+arch-review remediate
+arch-review remediate --profile lightweight
 ```
 
 - Loads gaps/risks from `.arch-review/state.json`
 - Continues conversations across sessions via memory
 - Saves notes to `.arch-review/remediation-notes.md`
 
-### Options
+### `arch-review profiles`
+
+Manage behavioral profiles that control how agents conduct reviews.
+
+```bash
+arch-review profiles list              # List all available profiles
+arch-review profiles show strict       # Display a profile's contents
+arch-review profiles create myprofile  # Create a new profile from the default
+```
+
+### `arch-review kb`
+
+Manage the WAF Knowledge Base (requires `deploy --with-kb` first).
+
+```bash
+arch-review kb sync                    # Scrape WAF docs, upload to S3, trigger ingestion
+arch-review kb sync --content-dir ./my-waf-content
+```
+
+## Review Profiles
+
+Profiles control agent behavior — how strict the review is, what justifications are accepted, and how findings are reported. Three built-in profiles are included:
+
+| Profile       | Description                                                       |
+| ------------- | ----------------------------------------------------------------- |
+| `default`     | Balanced review — thorough but pragmatic                          |
+| `strict`      | Low tolerance for gaps, demands evidence, errs on the side of flagging |
+| `lightweight` | Pragmatic for prototypes and demos, accepts "it's a prototype"    |
+
+```bash
+arch-review run --profile strict --documents-dir ./docs --templates-dir ./templates
+```
+
+### Custom Profiles
+
+Profiles are YAML files searched in order:
+
+1. **Project-level**: `.arch-review/profiles/` (checked first)
+2. **User-level**: `~/.config/arch-review/profiles/`
+3. **Built-in**: Packaged with the tool
+
+Create a custom profile:
+
+```bash
+arch-review profiles create myprofile           # Copies from default
+arch-review profiles create myprofile --from strict  # Copies from strict
+```
+
+Each profile is a complete, standalone specification — no layering or overrides. Edit the generated YAML to adjust behavioral directives for each agent.
+
+## WAF Knowledge Base
+
+The optional Knowledge Base provides agents with AWS Well-Architected Framework best practices via RAG, improving the quality and accuracy of architecture reviews.
+
+```bash
+# Deploy with KB
+arch-review deploy --with-kb
+
+# Scrape all 6 WAF pillars + official lenses, upload to S3, and trigger ingestion
+arch-review kb sync
+```
+
+Once synced, the architecture and review agents automatically query the KB for relevant best practices during analysis. Re-run `kb sync` periodically to pick up AWS documentation updates.
+
+The KB uses **S3 Vectors** as the vector store (cost-effective, no OpenSearch Serverless overhead) and **Amazon Titan Embed Text v2** for embeddings.
+
+## Options
+
+### `run` Options
 
 | Option                    | Description                                               |
 | ------------------------- | --------------------------------------------------------- |
@@ -90,11 +189,10 @@ arch-review --remediate
 | `--diagrams-dir`          | Architecture diagrams (PNG, JPEG)                         |
 | `--source-dir`            | Lambda/application source code (optional)                 |
 | `--output-dir`            | Output directory (default: `.arch-review`)                |
+| `--profile`               | Review profile: `default`, `strict`, `lightweight`, or custom |
 | `--no-history`            | Don't archive previous reviews (default in CI mode)       |
 | `--keep-history`          | Archive previous reviews even in CI mode                  |
 | `--no-state`              | Don't save state file after review                        |
-| `--remediate`             | Enter remediation mode                                    |
-| `--no-remediation-output` | Don't save remediation notes                              |
 | `--ci`                    | CI/CD mode: non-interactive analysis                      |
 | `--json`                  | Output as JSON (implies --ci)                             |
 | `--strict`                | Fail on any High impact risk (ignores verdict)            |
@@ -104,7 +202,25 @@ arch-review --remediate
 | `--model`                 | Model: `nova-2-lite` or `opus-4.6` (default: nova-2-lite) |
 | `--region`                | AWS region (default: eu-central-1)                        |
 
-### Supported Models
+### `deploy` Options
+
+| Option                | Description                                        |
+| --------------------- | -------------------------------------------------- |
+| `--region`            | AWS region (default: eu-central-1)                 |
+| `--gateway-name`      | Name for the Gateway resource                      |
+| `--policy-engine-name`| Name for the Policy Engine resource                |
+| `--with-kb`           | Also provision a WAF Knowledge Base                |
+| `-v`, `--verbose`     | Verbose output                                     |
+
+### `destroy` Options
+
+| Option                | Description                                        |
+| --------------------- | -------------------------------------------------- |
+| `--region`            | AWS region (default: eu-central-1)                 |
+| `--confirm`           | Required to actually destroy resources             |
+| `-v`, `--verbose`     | Verbose output                                     |
+
+## Supported Models
 
 The `--model` flag accepts a short name from the curated model registry.
 Only models with 1M context windows are supported to ensure reliable full-project reviews.
@@ -118,14 +234,10 @@ Only models with 1M context windows are supported to ensure reliable full-projec
 
 ```bash
 # Default (Nova 2 Lite with low reasoning)
-arch-review --documents-dir ./docs --templates-dir ./cdk.out --diagrams-dir ./diagrams
+arch-review run --documents-dir ./docs --templates-dir ./cdk.out --diagrams-dir ./diagrams
 
 # Claude Opus 4.6 with medium reasoning
-arch-review --model opus-4.6 --reasoning-level medium \
-    --documents-dir ./docs --templates-dir ./cdk.out --diagrams-dir ./diagrams
-
-# Compare with reasoning off
-arch-review --model opus-4.6 --reasoning-level off \
+arch-review run --model opus-4.6 --reasoning-level medium \
     --documents-dir ./docs --templates-dir ./cdk.out --diagrams-dir ./diagrams
 ```
 
@@ -155,7 +267,7 @@ AWS Bedrock enforces **daily token quotas** per model at the account level. Thes
 >
 > These quotas are marked as non-adjustable in AWS Service Quotas. Contact AWS Support to request an increase.
 
-### Environment Variables
+## Environment Variables
 
 All options can be set via environment variables:
 
@@ -171,7 +283,7 @@ All options can be set via environment variables:
 | `AWS_REGION`                  | AWS region                               |
 | `CI`                          | Enable CI mode (true/1/yes)              |
 
-### Exit Codes
+## Exit Codes
 
 | Code | Meaning                                          |
 | ---- | ------------------------------------------------ |
@@ -258,14 +370,57 @@ Each platform has its own credential mechanism:
       "Resource": "*"
     },
     {
+      "Sid": "SSMConfig",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:PutParameter"
+      ],
+      "Resource": "arn:aws:ssm:*:*:parameter/arch-review/*"
+    },
+    {
       "Sid": "CallerIdentity",
       "Effect": "Allow",
       "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    },
+    {
+      "Sid": "KnowledgeBaseOptional",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:CreateKnowledgeBase",
+        "bedrock:DeleteKnowledgeBase",
+        "bedrock:ListKnowledgeBases",
+        "bedrock:CreateDataSource",
+        "bedrock:DeleteDataSource",
+        "bedrock:ListDataSources",
+        "bedrock:StartIngestionJob",
+        "bedrock:GetIngestionJob",
+        "bedrock-agent-runtime:Retrieve",
+        "s3:CreateBucket",
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:DeleteObject",
+        "s3:DeleteBucket",
+        "s3vectors:CreateVectorBucket",
+        "s3vectors:DeleteVectorBucket",
+        "s3vectors:ListVectorBuckets",
+        "s3vectors:CreateIndex",
+        "s3vectors:DeleteIndex",
+        "s3vectors:ListIndexes",
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy"
+      ],
       "Resource": "*"
     }
   ]
 }
 ```
+
+The `KnowledgeBaseOptional` statement is only needed if you use `deploy --with-kb`.
 
 ## CI/CD Integration
 
@@ -298,10 +453,11 @@ Copy `examples/ci/aws-codebuild.yml` to `buildspec.yml`:
 ## Review Phases
 
 1. **Requirements Analysis**: Extracts requirements, constraints, and NFRs from documents
-2. **Architecture Analysis**: Analyzes CloudFormation templates and diagrams
-3. **Clarifying Questions** (interactive) / **Gap Identification** (CI): Gathers context or identifies unknowns
-4. **Sparring** (interactive) / **Risk Analysis** (CI): Challenges decisions or lists risks
-5. **Final Review**: Produces structured review with gaps, risks, recommendations
+2. **Architecture Analysis**: Analyzes CloudFormation templates and diagrams (queries WAF KB if available)
+3. **Service Default Verification**: Filters false positives from features that AWS provides by default
+4. **Clarifying Questions** (interactive) / **Gap Identification** (CI): Gathers context or identifies unknowns
+5. **Sparring** (interactive) / **Risk Analysis** (CI): Challenges decisions or lists risks
+6. **Final Review**: Produces structured review with gaps, risks, recommendations
 
 ## Input Formats
 
@@ -331,12 +487,23 @@ arch_sparring_agent/
 │   ├── ci_agents.py           # Phase 3-4: CI/CD non-interactive
 │   ├── review_agent.py        # Phase 5: Final review
 │   └── remediation_agent.py   # Remediation mode discussions
+├── kb/
+│   ├── infra.py               # KB infrastructure (S3 Vectors, Bedrock KB)
+│   ├── scraper.py             # WAF documentation scraper
+│   └── sync.py                # S3 upload and ingestion trigger
+├── profiles/
+│   ├── default.yaml           # Balanced review profile
+│   ├── strict.yaml            # Strict review profile
+│   └── lightweight.yaml       # Lightweight review profile
 ├── tools/
 │   ├── document_parser.py     # Markdown file reader
 │   ├── cfn_analyzer.py        # CloudFormation template reader
 │   ├── diagram_analyzer.py    # Diagram analysis via Bedrock
-│   └── source_analyzer.py     # Lambda/application source code reader
-├── orchestrator.py            # Phase orchestration
+│   ├── source_analyzer.py     # Lambda/application source code reader
+│   └── kb_client.py           # Knowledge Base query client
+├── orchestrator.py            # Phase orchestration + service default verification
+├── profiles.py                # Profile loading and resolution
+├── infra.py                   # SharedConfig and SSM parameter management
 ├── config.py                  # Constants and AWS client setup
 ├── policy.py                  # Cedar policy management
 ├── gateway.py                 # Gateway setup and lifecycle
@@ -344,7 +511,7 @@ arch_sparring_agent/
 ├── exceptions.py              # Custom exception hierarchy
 ├── context_condenser.py       # Handles large inputs
 ├── state.py                   # Review state persistence
-└── cli.py                     # CLI entry point
+└── cli.py                     # CLI entry point (deploy/run/remediate/destroy)
 examples/ci/
 ├── github-actions.yml         # GitHub Actions example
 ├── gitlab-ci.yml              # GitLab CI example
@@ -357,6 +524,7 @@ examples/ci/
 uv sync                    # Install dependencies
 uv run ruff format .       # Format code
 uv run ruff check .        # Lint code
+uv run pytest tests/ -v    # Run tests
 ```
 
 ## Policy Engine
@@ -367,7 +535,8 @@ The tool automatically creates and configures a full policy enforcement stack fo
 2. **Creates a Policy Engine** ("ArchReviewPolicyEngine") or uses an existing one
 3. **Creates Cedar policies** restricting each agent to specific tools:
    - **RequirementsAnalyst**: Only document reading tools
-   - **ArchitectureEvaluator**: Only CFN/diagram reading tools
+   - **ArchitectureEvaluator**: Only CFN/diagram reading tools + WAF KB query
+   - **ReviewAgent**: WAF KB query
    - **DefaultDeny**: Blocks unknown agents
 4. **Associates the Gateway with the Policy Engine** for enforcement
 
@@ -378,9 +547,12 @@ The tool automatically creates and configures a full policy enforcement stack fo
 - **Framework**: AWS Strands SDK
 - **Region**: eu-central-1 (configurable)
 - **Policy Engine**: AgentCore Policy Engine for tool access control
+- **Vector Store**: S3 Vectors (for KB)
+- **Embeddings**: Amazon Titan Embed Text v2 (1024 dimensions)
 
 ## References
 
 - [Strands SDK](https://strandsagents.com/latest/documentation/docs/)
 - [Amazon Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/)
 - [Amazon Nova 2 Models](https://docs.aws.amazon.com/nova/latest/nova2-userguide/)
+- [AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html)

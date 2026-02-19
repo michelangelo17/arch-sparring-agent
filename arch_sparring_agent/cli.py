@@ -178,7 +178,7 @@ def deploy(region, gateway_name, policy_engine_name, with_kb, verbose):
     can discover them automatically.
 
     Pass --with-kb to also create a Bedrock Knowledge Base backed by S3 and
-    OpenSearch Serverless for WAF best-practice content.
+    S3 Vectors for WAF best-practice content.
 
     Idempotent — safe to run repeatedly.
     """

@@ -5,11 +5,14 @@ from __future__ import annotations
 import logging
 import re
 import time
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urljoin
 
+import html2text
 import yaml
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,12 @@ OFFICIAL_LENSES = [
 
 REQUEST_DELAY = 1.5  # seconds between HTTP requests
 
+_converter = html2text.HTML2Text()
+_converter.body_width = 0
+_converter.ignore_links = False
+_converter.ignore_images = True
+_converter.ignore_emphasis = False
+
 
 @dataclass
 class ScrapedPage:
@@ -53,24 +62,11 @@ class ScrapedPage:
 
 def _fetch(url: str) -> str | None:
     """Fetch a page with rate limiting. Returns HTML or None on error."""
-    try:
-        import requests
-    except ImportError:
-        import urllib.request
-
-        try:
-            time.sleep(REQUEST_DELAY)
-            with urllib.request.urlopen(url, timeout=30) as resp:
-                return resp.read().decode()
-        except Exception:
-            logger.warning("Failed to fetch: %s", url)
-            return None
-
     time.sleep(REQUEST_DELAY)
     try:
-        resp = requests.get(url, timeout=30, headers={"User-Agent": "arch-review-scraper/1.0"})
-        resp.raise_for_status()
-        return resp.text
+        req = urllib.request.Request(url, headers={"User-Agent": "arch-review-scraper/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.read().decode()
     except Exception:
         logger.warning("Failed to fetch: %s", url)
         return None
@@ -78,29 +74,11 @@ def _fetch(url: str) -> str | None:
 
 def _html_to_markdown(html: str) -> str:
     """Convert HTML to clean markdown."""
-    try:
-        import html2text
-
-        h = html2text.HTML2Text()
-        h.body_width = 0
-        h.ignore_links = False
-        h.ignore_images = True
-        h.ignore_emphasis = False
-        return h.handle(html).strip()
-    except ImportError:
-        from bs4 import BeautifulSoup
-
-        soup = BeautifulSoup(html, "html.parser")
-        return soup.get_text(separator="\n").strip()
+    return _converter.handle(html).strip()
 
 
 def _extract_content(html: str) -> str:
     """Extract the main content div from an AWS docs page."""
-    try:
-        from bs4 import BeautifulSoup
-    except ImportError:
-        return _html_to_markdown(html)
-
     soup = BeautifulSoup(html, "html.parser")
     main = soup.find(id="main-col-body") or soup.find("main") or soup.find("article")
     if not main:
@@ -110,11 +88,6 @@ def _extract_content(html: str) -> str:
 
 def _extract_links(html: str, base_url: str, pattern: str | None = None) -> list[str]:
     """Extract links from HTML page, optionally filtered by regex pattern."""
-    try:
-        from bs4 import BeautifulSoup
-    except ImportError:
-        return []
-
     soup = BeautifulSoup(html, "html.parser")
     links = []
     for a_tag in soup.find_all("a", href=True):
@@ -125,6 +98,12 @@ def _extract_links(html: str, base_url: str, pattern: str | None = None) -> list
         if full_url not in links:
             links.append(full_url)
     return links
+
+
+def _extract_title(html: str, fallback: str) -> str:
+    """Extract the <title> text from HTML, or return the fallback."""
+    title_tag = BeautifulSoup(html, "html.parser").find("title")
+    return title_tag.get_text(strip=True) if title_tag else fallback
 
 
 def _sanitize_filename(name: str) -> str:
@@ -185,14 +164,7 @@ def _scrape_pillar(pillar_slug: str, pillar_name: str) -> list[ScrapedPage]:
             continue
 
         question_id = _derive_question_id(link, pillar_slug)
-
-        try:
-            from bs4 import BeautifulSoup
-
-            title_tag = BeautifulSoup(bp_html, "html.parser").find("title")
-            title = title_tag.get_text(strip=True) if title_tag else question_id
-        except ImportError:
-            title = question_id
+        title = _extract_title(bp_html, question_id)
 
         pages.append(
             ScrapedPage(
@@ -254,14 +226,7 @@ def _scrape_lens(lens_slug: str) -> list[ScrapedPage]:
             continue
 
         question_id = _derive_question_id(link, lens_slug)
-
-        try:
-            from bs4 import BeautifulSoup
-
-            title_tag = BeautifulSoup(sub_html, "html.parser").find("title")
-            title = title_tag.get_text(strip=True) if title_tag else question_id
-        except ImportError:
-            title = question_id
+        title = _extract_title(sub_html, question_id)
 
         pages.append(
             ScrapedPage(

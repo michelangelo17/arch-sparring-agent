@@ -26,13 +26,15 @@ wheels = [
 
 [[package]]
 name = "arch-sparring-agent"
-version = "0.6.3"
+version = "0.6.4"
 source = { editable = "." }
 dependencies = [
+    { name = "beautifulsoup4" },
     { name = "bedrock-agentcore" },
     { name = "bedrock-agentcore-starter-toolkit" },
     { name = "boto3" },
     { name = "click" },
+    { name = "html2text" },
     { name = "markdown" },
     { name = "pillow" },
     { name = "python-frontmatter" },
@@ -41,10 +43,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-kb = [
-    { name = "beautifulsoup4" },
-    { name = "html2text" },
-]
 otel = [
     { name = "strands-agents", extra = ["otel"] },
 ]
@@ -57,12 +55,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "beautifulsoup4", marker = "extra == 'kb'", specifier = ">=4.12" },
+    { name = "beautifulsoup4", specifier = ">=4.12" },
     { name = "bedrock-agentcore", specifier = ">=1.1.1" },
     { name = "bedrock-agentcore-starter-toolkit", specifier = ">=0.1.0" },
     { name = "boto3", specifier = ">=1.42.2" },
     { name = "click", specifier = ">=8.0.0" },
-    { name = "html2text", marker = "extra == 'kb'", specifier = ">=2024.2" },
+    { name = "html2text", specifier = ">=2024.2" },
     { name = "markdown", specifier = ">=3.10" },
     { name = "pillow", specifier = ">=12.0.0" },
     { name = "python-frontmatter", specifier = ">=1.1.0" },
@@ -70,7 +68,7 @@ requires-dist = [
     { name = "strands-agents", specifier = ">=1.19.0" },
     { name = "strands-agents", extras = ["otel"], marker = "extra == 'otel'", specifier = ">=1.19.0" },
 ]
-provides-extras = ["otel", "kb"]
+provides-extras = ["otel"]
 
 [package.metadata.requires-dev]
 dev = [
