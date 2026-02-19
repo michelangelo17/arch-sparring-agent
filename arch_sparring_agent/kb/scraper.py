@@ -164,14 +164,16 @@ def _scrape_pillar(pillar_slug: str, pillar_name: str) -> list[ScrapedPage]:
     if not bp_links:
         content = _extract_content(html)
         if content:
-            pages.append(ScrapedPage(
-                source="well-architected-framework",
-                pillar=pillar_slug,
-                question_id=f"{pillar_slug[:3].upper()}-OVERVIEW",
-                title=pillar_name,
-                content=content,
-                url=pillar_url,
-            ))
+            pages.append(
+                ScrapedPage(
+                    source="well-architected-framework",
+                    pillar=pillar_slug,
+                    question_id=f"{pillar_slug[:3].upper()}-OVERVIEW",
+                    title=pillar_name,
+                    content=content,
+                    url=pillar_url,
+                )
+            )
         return pages
 
     for link in bp_links:
@@ -192,14 +194,16 @@ def _scrape_pillar(pillar_slug: str, pillar_name: str) -> list[ScrapedPage]:
         except ImportError:
             title = question_id
 
-        pages.append(ScrapedPage(
-            source="well-architected-framework",
-            pillar=pillar_slug,
-            question_id=question_id,
-            title=title,
-            content=content,
-            url=link,
-        ))
+        pages.append(
+            ScrapedPage(
+                source="well-architected-framework",
+                pillar=pillar_slug,
+                question_id=question_id,
+                title=title,
+                content=content,
+                url=link,
+            )
+        )
 
     logger.info("Scraped %d pages from pillar: %s", len(pages), pillar_name)
     return pages
@@ -230,14 +234,16 @@ def _scrape_lens(lens_slug: str) -> list[ScrapedPage]:
 
     main_content = _extract_content(html)
     if main_content:
-        pages.append(ScrapedPage(
-            source=lens_slug,
-            pillar="lens",
-            question_id=f"{lens_slug}-overview",
-            title=lens_slug.replace("-", " ").title(),
-            content=main_content,
-            url=lens_url,
-        ))
+        pages.append(
+            ScrapedPage(
+                source=lens_slug,
+                pillar="lens",
+                question_id=f"{lens_slug}-overview",
+                title=lens_slug.replace("-", " ").title(),
+                content=main_content,
+                url=lens_url,
+            )
+        )
 
     for link in sub_links[:50]:
         sub_html = _fetch(link)
@@ -257,14 +263,16 @@ def _scrape_lens(lens_slug: str) -> list[ScrapedPage]:
         except ImportError:
             title = question_id
 
-        pages.append(ScrapedPage(
-            source=lens_slug,
-            pillar="lens",
-            question_id=question_id,
-            title=title,
-            content=content,
-            url=link,
-        ))
+        pages.append(
+            ScrapedPage(
+                source=lens_slug,
+                pillar="lens",
+                question_id=question_id,
+                title=title,
+                content=content,
+                url=link,
+            )
+        )
 
     logger.info("Scraped %d pages from lens: %s", len(pages), lens_slug)
     return pages
