@@ -223,14 +223,8 @@ def _create_kb_role(
                     "Effect": "Allow",
                     "Action": "s3vectors:*",
                     "Resource": [
-                        (
-                            f"arn:aws:s3vectors:{region}:{account_id}:"
-                            f"vector-bucket/{vector_bucket_name}"
-                        ),
-                        (
-                            f"arn:aws:s3vectors:{region}:{account_id}:"
-                            f"vector-bucket/{vector_bucket_name}/*"
-                        ),
+                        (f"arn:aws:s3vectors:{region}:{account_id}:bucket/{vector_bucket_name}"),
+                        (f"arn:aws:s3vectors:{region}:{account_id}:bucket/{vector_bucket_name}/*"),
                     ],
                 },
             ],
@@ -243,7 +237,7 @@ def _create_kb_role(
         PolicyDocument=inline_policy,
     )
 
-    time.sleep(10)
+    time.sleep(15)
     return role_arn
 
 
@@ -279,40 +273,55 @@ def _create_bedrock_kb(
     bedrock = boto3.client("bedrock-agent", region_name=region)
     embedding_arn = f"arn:aws:bedrock:{region}::foundation-model/{EMBEDDING_MODEL}"
 
-    try:
-        resp = bedrock.create_knowledge_base(
-            name=KB_NAME,
-            description=("AWS Well-Architected Framework best practices for architecture review"),
-            roleArn=role_arn,
-            knowledgeBaseConfiguration={
-                "type": "VECTOR",
-                "vectorKnowledgeBaseConfiguration": {
-                    "embeddingModelArn": embedding_arn,
-                    "embeddingModelConfiguration": {
-                        "bedrockEmbeddingModelConfiguration": {
-                            "dimensions": EMBEDDING_DIMENSION,
-                        }
-                    },
+    kb_kwargs = {
+        "name": KB_NAME,
+        "description": "AWS Well-Architected Framework best practices for architecture review",
+        "roleArn": role_arn,
+        "knowledgeBaseConfiguration": {
+            "type": "VECTOR",
+            "vectorKnowledgeBaseConfiguration": {
+                "embeddingModelArn": embedding_arn,
+                "embeddingModelConfiguration": {
+                    "bedrockEmbeddingModelConfiguration": {
+                        "dimensions": EMBEDDING_DIMENSION,
+                    }
                 },
             },
-            storageConfiguration={
-                "type": "S3_VECTORS",
-                "s3VectorsConfiguration": {
-                    "vectorBucketArn": vector_bucket_arn,
-                    "indexArn": vector_index_arn,
-                },
+        },
+        "storageConfiguration": {
+            "type": "S3_VECTORS",
+            "s3VectorsConfiguration": {
+                "vectorBucketArn": vector_bucket_arn,
+                "indexArn": vector_index_arn,
             },
-        )
-        kb_id = resp["knowledgeBase"]["knowledgeBaseId"]
-        logger.info("Created Bedrock Knowledge Base: %s (ID: %s)", KB_NAME, kb_id)
-        return kb_id
-    except ClientError as e:
-        if "ConflictException" in str(e) or "already exists" in str(e).lower():
-            kb_id = _find_kb_by_name(bedrock)
-            if kb_id:
-                logger.info("Using existing Bedrock Knowledge Base: %s", KB_NAME)
-                return kb_id
-        raise
+        },
+    }
+
+    max_attempts = 4
+    for attempt in range(1, max_attempts + 1):
+        try:
+            resp = bedrock.create_knowledge_base(**kb_kwargs)
+            kb_id = resp["knowledgeBase"]["knowledgeBaseId"]
+            logger.info("Created Bedrock Knowledge Base: %s (ID: %s)", KB_NAME, kb_id)
+            return kb_id
+        except ClientError as e:
+            err_msg = str(e)
+            if "ConflictException" in err_msg or "already exists" in err_msg.lower():
+                kb_id = _find_kb_by_name(bedrock)
+                if kb_id:
+                    logger.info("Using existing Bedrock Knowledge Base: %s", KB_NAME)
+                    return kb_id
+            if "not authorized" in err_msg and attempt < max_attempts:
+                wait = 15 * attempt
+                logger.info(
+                    "IAM policy not yet propagated (attempt %d/%d), retrying in %ds...",
+                    attempt,
+                    max_attempts,
+                    wait,
+                )
+                time.sleep(wait)
+                continue
+            raise
 
 
 def _find_kb_by_name(bedrock) -> str | None:
