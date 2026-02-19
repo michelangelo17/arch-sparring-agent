@@ -98,9 +98,7 @@ def _find_vector_bucket_arn(s3v, name: str) -> str | None:
     return None
 
 
-def _create_vector_index(
-    vector_bucket_name: str, index_name: str, region: str
-) -> str:
+def _create_vector_index(vector_bucket_name: str, index_name: str, region: str) -> str:
     """Create a vector index inside the vector bucket. Returns the index ARN."""
     s3v = boto3.client("s3vectors", region_name=region)
     try:
@@ -172,17 +170,21 @@ def _create_kb_role(
     iam = boto3.client("iam", region_name=region)
     role_name = "arch-review-kb-role"
 
-    trust_policy = json.dumps({
-        "Version": "2012-10-17",
-        "Statement": [{
-            "Effect": "Allow",
-            "Principal": {"Service": "bedrock.amazonaws.com"},
-            "Action": "sts:AssumeRole",
-            "Condition": {
-                "StringEquals": {"aws:SourceAccount": account_id},
-            },
-        }],
-    })
+    trust_policy = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"Service": "bedrock.amazonaws.com"},
+                    "Action": "sts:AssumeRole",
+                    "Condition": {
+                        "StringEquals": {"aws:SourceAccount": account_id},
+                    },
+                }
+            ],
+        }
+    )
 
     try:
         resp = iam.create_role(
@@ -199,35 +201,35 @@ def _create_kb_role(
         else:
             raise
 
-    embedding_arn = (
-        f"arn:aws:bedrock:{region}::foundation-model/{EMBEDDING_MODEL}"
+    embedding_arn = f"arn:aws:bedrock:{region}::foundation-model/{EMBEDDING_MODEL}"
+    inline_policy = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": ["s3:GetObject", "s3:ListBucket"],
+                    "Resource": [
+                        f"arn:aws:s3:::{data_bucket_name}",
+                        f"arn:aws:s3:::{data_bucket_name}/*",
+                    ],
+                },
+                {
+                    "Effect": "Allow",
+                    "Action": "bedrock:InvokeModel",
+                    "Resource": embedding_arn,
+                },
+                {
+                    "Effect": "Allow",
+                    "Action": "s3vectors:*",
+                    "Resource": (
+                        f"arn:aws:s3vectors:{region}:{account_id}:"
+                        f"vector-bucket/{vector_bucket_name}/*"
+                    ),
+                },
+            ],
+        }
     )
-    inline_policy = json.dumps({
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
-                "Resource": [
-                    f"arn:aws:s3:::{data_bucket_name}",
-                    f"arn:aws:s3:::{data_bucket_name}/*",
-                ],
-            },
-            {
-                "Effect": "Allow",
-                "Action": "bedrock:InvokeModel",
-                "Resource": embedding_arn,
-            },
-            {
-                "Effect": "Allow",
-                "Action": "s3vectors:*",
-                "Resource": (
-                    f"arn:aws:s3vectors:{region}:{account_id}:"
-                    f"vector-bucket/{vector_bucket_name}/*"
-                ),
-            },
-        ],
-    })
 
     iam.put_role_policy(
         RoleName=role_name,
@@ -269,17 +271,12 @@ def _create_bedrock_kb(
     Returns the KB ID.
     """
     bedrock = boto3.client("bedrock-agent", region_name=region)
-    embedding_arn = (
-        f"arn:aws:bedrock:{region}::foundation-model/{EMBEDDING_MODEL}"
-    )
+    embedding_arn = f"arn:aws:bedrock:{region}::foundation-model/{EMBEDDING_MODEL}"
 
     try:
         resp = bedrock.create_knowledge_base(
             name=KB_NAME,
-            description=(
-                "AWS Well-Architected Framework best practices "
-                "for architecture review"
-            ),
+            description=("AWS Well-Architected Framework best practices for architecture review"),
             roleArn=role_arn,
             knowledgeBaseConfiguration={
                 "type": "VECTOR",
@@ -389,20 +386,17 @@ def setup_knowledge_base(region: str = DEFAULT_REGION) -> tuple[str, str]:
     _create_data_bucket(data_bucket, region)
 
     vector_bucket_arn = _create_vector_bucket(vector_bucket, region)
-    vector_index_arn = _create_vector_index(
-        vector_bucket, VECTOR_INDEX_NAME, region
-    )
+    vector_index_arn = _create_vector_index(vector_bucket, VECTOR_INDEX_NAME, region)
 
     role_arn = _create_kb_role(account_id, data_bucket, vector_bucket, region)
 
-    kb_id = _create_bedrock_kb(
-        role_arn, vector_bucket_arn, vector_index_arn, region
-    )
+    kb_id = _create_bedrock_kb(role_arn, vector_bucket_arn, vector_index_arn, region)
     _create_data_source(kb_id, data_bucket, region)
 
     logger.info(
         "Knowledge Base setup complete — KB ID: %s, Bucket: %s",
-        kb_id, data_bucket,
+        kb_id,
+        data_bucket,
     )
     return kb_id, data_bucket
 

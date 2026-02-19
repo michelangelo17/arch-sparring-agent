@@ -86,18 +86,18 @@ class TestVerificationIntegrationInRunReview(unittest.TestCase):
             "arch_sparring_agent.orchestrator.create_model", side_effect=fake_create_model
         ).start()
 
-        patch(
-            "arch_sparring_agent.orchestrator.extract_requirements"
-        ).start().side_effect = lambda c, m: c
+        patch("arch_sparring_agent.orchestrator.extract_requirements").start().side_effect = (
+            lambda c, m: c
+        )
 
         self.mock_extract_arch = patch(
             "arch_sparring_agent.orchestrator.extract_architecture_findings"
         ).start()
         self.mock_extract_arch.side_effect = lambda c, m: f"### Features Not Found\n- item from {c}"
 
-        patch(
-            "arch_sparring_agent.orchestrator.extract_phase_findings"
-        ).start().side_effect = lambda c, p, m: c
+        patch("arch_sparring_agent.orchestrator.extract_phase_findings").start().side_effect = (
+            lambda c, p, m: c
+        )
 
         mock_req = MagicMock()
         mock_req.return_value = "req summary"

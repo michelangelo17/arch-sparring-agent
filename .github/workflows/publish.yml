@@ -14,7 +14,19 @@ permissions:
   actions: read
 
 jobs:
+  wait-for-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Test workflow to succeed
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: 'build (3.11)'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 15
+
   check-version:
+    needs: wait-for-tests
     runs-on: ubuntu-latest
     outputs:
       version_changed: ${{ steps.check.outputs.changed }}

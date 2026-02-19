@@ -23,7 +23,10 @@ class TestKnowledgeBaseClient(unittest.TestCase):
                 },
                 {
                     "content": {"text": "Use TLS for all data in transit."},
-                    "location": {"type": "S3", "s3Location": {"uri": "s3://bucket/security/sec02.md"}},
+                    "location": {
+                        "type": "S3",
+                        "s3Location": {"uri": "s3://bucket/security/sec02.md"},
+                    },
                     "score": 0.72,
                 },
             ]

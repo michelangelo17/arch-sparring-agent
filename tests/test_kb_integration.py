@@ -37,27 +37,31 @@ class TestSharedConfigKBFields(unittest.TestCase):
 
     def test_from_json_tolerates_missing_kb_fields(self):
         """Configs saved before KB support should still deserialize."""
-        old_json = json.dumps({
-            "gateway_id": "gw-1",
-            "gateway_arn": "arn:gw",
-            "policy_engine_id": "pe-1",
-            "region": "eu-central-1",
-        })
+        old_json = json.dumps(
+            {
+                "gateway_id": "gw-1",
+                "gateway_arn": "arn:gw",
+                "policy_engine_id": "pe-1",
+                "region": "eu-central-1",
+            }
+        )
         config = SharedConfig.from_json(old_json)
         self.assertIsNone(config.knowledge_base_id)
         self.assertIsNone(config.kb_bucket_name)
 
     def test_from_json_ignores_unknown_fields(self):
         """Future fields in SSM shouldn't break old clients."""
-        future_json = json.dumps({
-            "gateway_id": "gw-1",
-            "gateway_arn": "arn:gw",
-            "policy_engine_id": "pe-1",
-            "region": "eu-central-1",
-            "knowledge_base_id": "kb-x",
-            "kb_bucket_name": "bucket",
-            "some_future_field": "value",
-        })
+        future_json = json.dumps(
+            {
+                "gateway_id": "gw-1",
+                "gateway_arn": "arn:gw",
+                "policy_engine_id": "pe-1",
+                "region": "eu-central-1",
+                "knowledge_base_id": "kb-x",
+                "kb_bucket_name": "bucket",
+                "some_future_field": "value",
+            }
+        )
         config = SharedConfig.from_json(future_json)
         self.assertEqual(config.knowledge_base_id, "kb-x")
 

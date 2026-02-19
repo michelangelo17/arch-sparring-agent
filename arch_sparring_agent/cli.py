@@ -130,6 +130,7 @@ def _load_shared_config(region: str) -> SharedConfig:
 # CLI group
 # ---------------------------------------------------------------------------
 
+
 @click.group()
 @click.version_option(version=get_version(), prog_name="arch-review")
 def cli():
@@ -147,6 +148,7 @@ def cli():
 # ---------------------------------------------------------------------------
 # deploy
 # ---------------------------------------------------------------------------
+
 
 @cli.command()
 @click.option(
@@ -185,9 +187,7 @@ def deploy(region, gateway_name, policy_engine_name, with_kb, verbose):
 
     click.echo(f"Deploying arch-review infrastructure in {region}...")
 
-    gateway_arn, gateway_id, engine_id = _deploy_infra(
-        region, gateway_name, policy_engine_name
-    )
+    gateway_arn, gateway_id, engine_id = _deploy_infra(region, gateway_name, policy_engine_name)
 
     kb_id = None
     kb_bucket = None
@@ -218,9 +218,7 @@ def deploy(region, gateway_name, policy_engine_name, with_kb, verbose):
     click.echo(f"  Config stored in: SSM {_ssm_param_name()}")
 
 
-def _deploy_infra(
-    region: str, gateway_name: str, policy_engine_name: str
-) -> tuple[str, str, str]:
+def _deploy_infra(region: str, gateway_name: str, policy_engine_name: str) -> tuple[str, str, str]:
     """Run the existing setup logic and return (gateway_arn, gateway_id, engine_id).
 
     Raises click.ClickException on failure so the CLI exits cleanly.
@@ -248,12 +246,14 @@ def _deploy_infra(
 
 def _ssm_param_name() -> str:
     from .infra import SSM_PARAMETER_NAME
+
     return SSM_PARAMETER_NAME
 
 
 # ---------------------------------------------------------------------------
 # destroy
 # ---------------------------------------------------------------------------
+
 
 @cli.command()
 @click.option(
@@ -309,6 +309,7 @@ def destroy(region, confirm, verbose):
 # ---------------------------------------------------------------------------
 # run
 # ---------------------------------------------------------------------------
+
 
 @cli.command()
 @click.option(
@@ -541,6 +542,7 @@ def _run_review(
 # remediate
 # ---------------------------------------------------------------------------
 
+
 @cli.command()
 @click.option(
     "--output-dir",
@@ -617,6 +619,7 @@ def remediate(output_dir, no_output, model, region, profile_name, verbose):
 # profiles
 # ---------------------------------------------------------------------------
 
+
 @cli.group()
 def profiles():
     """Manage review profiles."""
@@ -659,6 +662,7 @@ def profiles_show(name):
 # ---------------------------------------------------------------------------
 # kb
 # ---------------------------------------------------------------------------
+
 
 @cli.group()
 def kb():
@@ -717,6 +721,7 @@ def kb_sync(region, content_dir, verbose):
 # ---------------------------------------------------------------------------
 # profiles (continued)
 # ---------------------------------------------------------------------------
+
 
 @profiles.command("create")
 @click.argument("name")

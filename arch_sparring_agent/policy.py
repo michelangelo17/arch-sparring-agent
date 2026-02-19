@@ -12,9 +12,7 @@ from .gateway import associate_gateway_with_policy_engine, setup_gateway
 logger = logging.getLogger(__name__)
 
 
-def destroy_policy_engine(
-    policy_engine_id: str, region: str = DEFAULT_REGION
-) -> bool:
+def destroy_policy_engine(policy_engine_id: str, region: str = DEFAULT_REGION) -> bool:
     """Delete all policies in an engine, then delete the engine itself.
 
     Returns:
@@ -190,9 +188,7 @@ def _policy_name_matches(resource: dict, target_name: str) -> bool:
     return value_lower == target_lower or value_lower.startswith(target_lower)
 
 
-def _find_policy_id_by_name(
-    client, policy_engine_id: str, policy_name: str
-) -> str | None:
+def _find_policy_id_by_name(client, policy_engine_id: str, policy_name: str) -> str | None:
     """Find a policy ID by name with pagination.
 
     Uses case-insensitive prefix matching to handle AWS name normalisation.
