@@ -1,0 +1,42 @@
+name: Lightweight
+description: >-
+  Pragmatic review for prototypes, demos, and early-stage projects. Accepts
+  "it's a prototype" as valid justification, focuses only on active risks,
+  and keeps the report short.
+
+directives:
+  sparring: |
+    - Accept reasonable justifications quickly -- one good sentence is enough
+    - Accept "it's a prototype", "demo only", or "no sensitive data" as valid reasons
+    - Push back only on actively dangerous gaps (e.g. public access to real data)
+    - Do NOT push back on missing best practices for non-production workloads
+    - Mark a gap as RESOLVED as soon as the user provides any plausible context
+    - Keep the sparring session short -- focus on the top 2-3 issues at most
+
+  review: |
+    - Only report gaps that create active, exploitable risks in the current context
+    - Missing best practices are NOT gaps for prototypes or early-stage projects
+    - Do NOT assume compliance or regulatory requirements
+    - If the user indicated this is a prototype/demo, set the bar accordingly
+    - Keep sections short -- 1-2 sentences per gap is plenty
+    - Empty sections are expected and good
+    - PASS is the default unless there's an actively dangerous configuration
+    - FAIL only for configurations that are dangerous RIGHT NOW (e.g. public
+      access to sensitive data, no authentication on public endpoints)
+    - Label optional improvements as "Nice to have" and keep them brief
+
+  architecture: |
+    - Accept service defaults without question
+    - Only list something in "Features Not Found" if it creates an active risk,
+      not because a best practice is absent
+    - For prototypes and demos, focus on functional correctness over security hardening
+    - Keep the analysis focused on what's deployed, not what could be improved
+
+  ci: |
+    - Only flag gaps that create actively exploitable risks
+    - Missing best practices are Low impact at most
+    - Rate a gap as High only if it creates immediate, real-world danger
+      (e.g. public access to sensitive data, no auth on public endpoints)
+    - PASS is the expected verdict for prototypes and demos without active risks
+    - FAIL only for immediately dangerous configurations
+    - Keep the report concise -- 2-3 sentences per section maximum
