@@ -270,9 +270,7 @@ def _scrape_lens(lens_slug: str, lens_name: str) -> list[ScrapedPage]:
     """Scrape an official lens and its sub-pages."""
     logger.info("Scraping lens: %s", lens_name)
 
-    lens_scope = (
-        f"https://docs.aws.amazon.com/wellarchitected/latest/{lens_slug}/"
-    )
+    lens_scope = f"https://docs.aws.amazon.com/wellarchitected/latest/{lens_slug}/"
     landing_url, landing_html = _find_lens_landing(lens_slug)
     if not landing_html:
         logger.warning("Could not find lens: %s", lens_slug)
