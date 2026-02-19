@@ -14,6 +14,8 @@ def create_architecture_agent(
     diagrams_dir: str,
     model_id: str | BedrockModel,
     source_dir: str | None = None,
+    knowledge_base_id: str | None = None,
+    region: str | None = None,
 ) -> Agent:
     """Create agent for analyzing CloudFormation templates, diagrams, and source code."""
 
@@ -72,6 +74,18 @@ def create_architecture_agent(
 
         tools.extend([list_source_files, read_source_file, search_source_code])
 
+    if knowledge_base_id and region:
+        from ..tools.kb_client import KnowledgeBaseClient
+
+        _kb_client = KnowledgeBaseClient(knowledge_base_id, region)
+
+        @tool
+        def query_waf(query: str) -> str:
+            """Query the AWS Well-Architected Framework knowledge base for best practices."""
+            return _kb_client.query(query)
+
+        tools.append(query_waf)
+
     base_prompt = """Analyze infrastructure and verify feature implementations.
 
 UNDERSTANDING THE SOURCES:
@@ -108,6 +122,15 @@ List from CloudFormation + SDK calls observed in source code
 
 ### Features Not Found
 - Feature: [only if searched AND not covered by service defaults]"""
+
+    if knowledge_base_id:
+        base_prompt += """
+
+WAF KNOWLEDGE BASE:
+You have access to the AWS Well-Architected Framework via the query_waf tool.
+Use it to look up best practices when evaluating security controls, reliability
+patterns, performance strategies, and cost optimization. Cite specific WAF
+recommendations in your analysis."""
 
     directive = get_directive("architecture")
     if directive:

@@ -313,7 +313,7 @@ def setup_architecture_review_policies(
     else:
         policies_failed.append("RequirementsAgentToolRestrictions")
 
-    # ArchitectureEvaluator: CFN and diagram tools only
+    # ArchitectureEvaluator: CFN, diagram, source, and optional KB tools
     architecture_cedar = f"""permit(
     principal is AgentCore::OAuthUser,
     action,
@@ -326,6 +326,10 @@ def setup_architecture_review_policies(
         "list_cloudformation_templates",
         "read_architecture_diagram",
         "list_architecture_diagrams",
+        "list_source_files",
+        "read_source_file",
+        "search_source_code",
+        "query_waf",
         "ask_user_question"
     ].contains(context.toolName)
 }};"""
@@ -364,6 +368,29 @@ def setup_architecture_review_policies(
         policies_created.append("ModeratorAgentToolRestrictions")
     else:
         policies_failed.append("ModeratorAgentToolRestrictions")
+
+    # ReviewAgent: optional KB query tool
+    review_cedar = f"""permit(
+    principal is AgentCore::OAuthUser,
+    action,
+    resource == AgentCore::Gateway::"{gateway_arn}"
+) when {{
+    context has agentName && context.agentName == "ReviewAgent" &&
+    context has toolName &&
+    ["query_waf"].contains(context.toolName)
+}};"""
+
+    policy_id = create_policy(
+        engine_id,
+        "ReviewAgentToolRestrictions",
+        review_cedar,
+        "Allows Review Agent to use the WAF Knowledge Base query tool",
+        region=region,
+    )
+    if policy_id:
+        policies_created.append("ReviewAgentToolRestrictions")
+    else:
+        policies_failed.append("ReviewAgentToolRestrictions")
 
     # Default deny: only registered agents are allowed (CRITICAL - must succeed)
     default_deny_cedar = f"""forbid(

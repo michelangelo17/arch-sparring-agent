@@ -164,13 +164,19 @@ def cli():
     default="ArchReviewPolicyEngine",
     help="Name for the Policy Engine resource",
 )
+@click.option(
+    "--with-kb", is_flag=True, default=False, help="Provision a Knowledge Base for WAF content"
+)
 @click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
-def deploy(region, gateway_name, policy_engine_name, verbose):
+def deploy(region, gateway_name, policy_engine_name, with_kb, verbose):
     """Deploy shared infrastructure to an AWS account.
 
     Creates the Gateway, Policy Engine, and Cedar policies. Writes the
     resulting resource IDs to SSM Parameter Store so that ``arch-review run``
     can discover them automatically.
+
+    Pass --with-kb to also create a Bedrock Knowledge Base backed by S3 and
+    OpenSearch Serverless for WAF best-practice content.
 
     Idempotent — safe to run repeatedly.
     """
@@ -183,17 +189,32 @@ def deploy(region, gateway_name, policy_engine_name, verbose):
         region, gateway_name, policy_engine_name
     )
 
+    kb_id = None
+    kb_bucket = None
+
+    if with_kb:
+        click.echo("\nProvisioning Knowledge Base...")
+        from .kb.infra import setup_knowledge_base
+
+        kb_id, kb_bucket = setup_knowledge_base(region=region)
+        click.echo(f"  Knowledge Base ID: {kb_id}")
+        click.echo(f"  KB Bucket:         {kb_bucket}")
+
     config = SharedConfig(
         gateway_id=gateway_id,
         gateway_arn=gateway_arn,
         policy_engine_id=engine_id,
         region=region,
+        knowledge_base_id=kb_id,
+        kb_bucket_name=kb_bucket,
     )
     save_to_ssm(config)
 
     click.echo("\nDeployment complete.")
     click.echo(f"  Gateway ID:       {gateway_id}")
     click.echo(f"  Policy Engine ID: {engine_id}")
+    if kb_id:
+        click.echo(f"  Knowledge Base:   {kb_id}")
     click.echo(f"  Config stored in: SSM {_ssm_param_name()}")
 
 
@@ -271,6 +292,12 @@ def destroy(region, confirm, verbose):
     from .policy import destroy_policy_engine
 
     click.echo(f"Destroying arch-review infrastructure in {region}...")
+
+    if config.knowledge_base_id or config.kb_bucket_name:
+        click.echo("Tearing down Knowledge Base...")
+        from .kb.infra import destroy_knowledge_base
+
+        destroy_knowledge_base(config.knowledge_base_id, config.kb_bucket_name, region=region)
 
     destroy_policy_engine(config.policy_engine_id, region=region)
     destroy_gateway(config.gateway_id, region=region)
@@ -628,6 +655,68 @@ def profiles_show(name):
         sys.exit(EXIT_ERROR)
     click.echo(path.read_text())
 
+
+# ---------------------------------------------------------------------------
+# kb
+# ---------------------------------------------------------------------------
+
+@cli.group()
+def kb():
+    """Manage the WAF Knowledge Base."""
+
+
+@kb.command("sync")
+@click.option(
+    "--region",
+    default=lambda: get_env_or_default("AWS_REGION", DEFAULT_REGION),
+    help=f"AWS region (default: {DEFAULT_REGION})",
+)
+@click.option(
+    "--content-dir",
+    type=click.Path(file_okay=False),
+    default=".arch-review/waf-content",
+    help="Directory for scraped WAF content (default: .arch-review/waf-content)",
+)
+@click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
+def kb_sync(region, content_dir, verbose):
+    """Scrape WAF docs, upload to S3, and trigger KB ingestion."""
+    _configure_logging(verbose)
+    os.environ["AWS_REGION"] = region
+
+    config = _load_shared_config(region)
+    if not config.knowledge_base_id or not config.kb_bucket_name:
+        click.echo(
+            "Error: No Knowledge Base found in config. "
+            "Deploy with --with-kb first: arch-review deploy --with-kb",
+            err=True,
+        )
+        sys.exit(EXIT_ERROR)
+
+    click.echo("Scraping WAF documentation...")
+    from .kb.scraper import scrape_waf
+
+    total = scrape_waf(content_dir)
+    click.echo(f"Scraped {total} pages to {content_dir}")
+
+    click.echo("Uploading to S3 and starting ingestion...")
+    from .kb.sync import sync_kb
+
+    success = sync_kb(
+        content_dir=content_dir,
+        kb_id=config.knowledge_base_id,
+        bucket_name=config.kb_bucket_name,
+        region=region,
+    )
+    if success:
+        click.echo("Knowledge Base sync complete.")
+    else:
+        click.echo("Knowledge Base sync failed.", err=True)
+        sys.exit(EXIT_ERROR)
+
+
+# ---------------------------------------------------------------------------
+# profiles (continued)
+# ---------------------------------------------------------------------------
 
 @profiles.command("create")
 @click.argument("name")

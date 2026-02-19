@@ -23,13 +23,18 @@ class SharedConfig:
     gateway_arn: str
     policy_engine_id: str
     region: str
+    knowledge_base_id: str | None = None
+    kb_bucket_name: str | None = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self))
 
     @classmethod
     def from_json(cls, raw: str) -> "SharedConfig":
-        return cls(**json.loads(raw))
+        data = json.loads(raw)
+        # Tolerate configs saved before KB fields existed
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
 
 def save_to_ssm(config: SharedConfig) -> None:

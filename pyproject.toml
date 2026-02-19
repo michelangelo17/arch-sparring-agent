@@ -41,6 +41,10 @@ dependencies = [
 
 [project.optional-dependencies]
 otel = ["strands-agents[otel]>=1.19.0"]
+kb = [
+  "beautifulsoup4>=4.12",
+  "html2text>=2024.2",
+]
 
 [build-system]
 requires = ["hatchling"]
