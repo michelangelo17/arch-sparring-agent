@@ -20,24 +20,37 @@ def destroy_policy_engine(policy_engine_id: str, region: str = DEFAULT_REGION) -
     """
     try:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
+        logger.info("Listing policies for engine: %s", policy_engine_id)
 
-        # Delete all policies first (engine can't be deleted while policies exist)
+        deleted_count = 0
         next_token = None
         while True:
-            kwargs = {"policyEngineId": policy_engine_id}
+            kwargs = {"policyEngineId": policy_engine_id, "maxResults": 100}
             if next_token:
                 kwargs["nextToken"] = next_token
             response = client.list_policies(**kwargs)
-            for p in response.get("policies", []):
+            policies = response.get("policies", [])
+            logger.info("list_policies returned %d policies", len(policies))
+
+            for p in policies:
                 pid = p["policyId"]
                 try:
                     client.delete_policy(policyEngineId=policy_engine_id, policyId=pid)
+                    deleted_count += 1
                     logger.info("Deleted policy: %s", p.get("name", pid))
                 except (ClientError, BotoCoreError) as e:
                     logger.warning("Could not delete policy %s: %s", pid, e)
+
             next_token = response.get("nextToken")
             if not next_token:
                 break
+
+        if deleted_count:
+            logger.info(
+                "Deleted %d policies, waiting for propagation...",
+                deleted_count,
+            )
+            time.sleep(5)
 
         client.delete_policy_engine(policyEngineId=policy_engine_id)
         logger.info("Policy Engine destroyed: %s", policy_engine_id)

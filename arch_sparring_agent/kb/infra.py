@@ -108,6 +108,12 @@ def _create_vector_index(vector_bucket_name: str, index_name: str, region: str) 
             dataType="float32",
             dimension=EMBEDDING_DIMENSION,
             distanceMetric="cosine",
+            metadataConfiguration={
+                "nonFilterableMetadataKeys": [
+                    "AMAZON_BEDROCK_TEXT",
+                    "AMAZON_BEDROCK_METADATA",
+                ],
+            },
         )
         arn = resp["indexArn"]
         logger.info("Created vector index: %s", index_name)
@@ -348,14 +354,7 @@ def _create_data_source(kb_id: str, bucket_name: str, region: str) -> str:
                 },
             },
             vectorIngestionConfiguration={
-                "chunkingConfiguration": {
-                    "chunkingStrategy": "SEMANTIC",
-                    "semanticChunkingConfiguration": {
-                        "maxTokens": 300,
-                        "bufferSize": 1,
-                        "breakpointPercentileThreshold": 95,
-                    },
-                },
+                "chunkingConfiguration": {"chunkingStrategy": "NONE"},
             },
         )
         ds_id = resp["dataSource"]["dataSourceId"]
