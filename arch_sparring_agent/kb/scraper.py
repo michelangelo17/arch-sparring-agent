@@ -8,7 +8,7 @@ import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import html2text
 import yaml
@@ -17,7 +17,6 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 WAF_BASE = "https://docs.aws.amazon.com/wellarchitected/latest/framework/"
-LENS_INDEX = "https://docs.aws.amazon.com/wellarchitected/latest/"
 
 PILLARS = {
     "operational-excellence": "Operational Excellence",
@@ -28,19 +27,19 @@ PILLARS = {
     "sustainability": "Sustainability",
 }
 
-OFFICIAL_LENSES = [
-    "serverlessapps-lens",
-    "saas-lens",
-    "data-analytics-lens",
-    "machine-learning-lens",
-    "iot-lens",
-    "container-build-lens",
-    "games-industry-lens",
-    "financial-services-industry-lens",
-    "healthcare-industry-lens",
-]
+OFFICIAL_LENSES = {
+    "serverless-applications-lens": "Serverless Applications",
+    "saas-lens": "SaaS",
+    "analytics-lens": "Data Analytics",
+    "machine-learning-lens": "Machine Learning",
+    "iot-lens": "IoT",
+    "container-build-lens": "Container Build",
+    "games-industry-lens": "Games Industry",
+    "financial-services-industry-lens": "Financial Services",
+    "healthcare-industry-lens": "Healthcare",
+}
 
-REQUEST_DELAY = 1.5  # seconds between HTTP requests
+REQUEST_DELAY = 1.0
 
 _converter = html2text.HTML2Text()
 _converter.body_width = 0
@@ -53,11 +52,16 @@ _converter.ignore_emphasis = False
 class ScrapedPage:
     source: str
     pillar: str
-    question_id: str
+    page_id: str
     title: str
     content: str
     url: str
     extra_metadata: dict = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Fetching and parsing
+# ---------------------------------------------------------------------------
 
 
 def _fetch(url: str) -> str | None:
@@ -66,6 +70,9 @@ def _fetch(url: str) -> str | None:
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "arch-review-scraper/1.0"})
         with urllib.request.urlopen(req, timeout=30) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            if "html" not in content_type:
+                return None
             return resp.read().decode()
     except Exception:
         logger.warning("Failed to fetch: %s", url)
@@ -73,7 +80,6 @@ def _fetch(url: str) -> str | None:
 
 
 def _html_to_markdown(html: str) -> str:
-    """Convert HTML to clean markdown."""
     return _converter.handle(html).strip()
 
 
@@ -86,37 +92,89 @@ def _extract_content(html: str) -> str:
     return _html_to_markdown(str(main))
 
 
-def _extract_links(html: str, base_url: str, pattern: str | None = None) -> list[str]:
-    """Extract links from HTML page, optionally filtered by regex pattern."""
+def _extract_title(html: str, fallback: str) -> str:
+    title_tag = BeautifulSoup(html, "html.parser").find("title")
+    if title_tag:
+        text = title_tag.get_text(strip=True)
+        text = re.sub(r"\s*-\s*AWS Well-Architected Framework$", "", text)
+        return text or fallback
+    return fallback
+
+
+def _extract_html_links(html: str, base_url: str, scope: str) -> list[str]:
+    """Extract unique HTML links within the given scope URL prefix.
+
+    Filters out PDFs, anchors-only, and external links.
+    """
     soup = BeautifulSoup(html, "html.parser")
-    links = []
+    seen: set[str] = set()
+    links: list[str] = []
+
     for a_tag in soup.find_all("a", href=True):
         href = a_tag["href"]
-        full_url = urljoin(base_url, href)
-        if pattern and not re.search(pattern, full_url):
+        if href.startswith("#"):
             continue
-        if full_url not in links:
-            links.append(full_url)
+        full_url = urljoin(base_url, href)
+        full_url = full_url.split("#")[0]
+
+        if not full_url.startswith(scope):
+            continue
+        if not full_url.endswith(".html"):
+            continue
+        if "pdf" in full_url.lower():
+            continue
+        if full_url == base_url or full_url in seen:
+            continue
+
+        seen.add(full_url)
+        links.append(full_url)
+
     return links
 
 
-def _extract_title(html: str, fallback: str) -> str:
-    """Extract the <title> text from HTML, or return the fallback."""
-    title_tag = BeautifulSoup(html, "html.parser").find("title")
-    return title_tag.get_text(strip=True) if title_tag else fallback
+def _page_id_from_url(url: str) -> str:
+    path = urlparse(url).path.rstrip("/").rsplit("/", 1)[-1]
+    return path.replace(".html", "")
 
 
 def _sanitize_filename(name: str) -> str:
     return re.sub(r"[^\w\-.]", "_", name).strip("_")[:80]
 
 
-def _derive_question_id(url: str, pillar: str) -> str:
-    """Try to extract a question/BP ID from the URL path."""
-    path = url.rstrip("/").rsplit("/", 1)[-1]
-    path = path.replace(".html", "")
-    if re.match(r"[a-z]{2,5}\d{2}-bp\d{2}", path, re.IGNORECASE):
-        return path.upper()
-    return f"{pillar[:3].upper()}-{_sanitize_filename(path)}"
+# ---------------------------------------------------------------------------
+# 2-hop crawl
+# ---------------------------------------------------------------------------
+
+
+def _crawl(start_url: str, scope: str, max_depth: int = 3) -> list[str]:
+    """Crawl from start_url up to *max_depth* hops, staying within scope.
+
+    Returns all unique discovered page URLs (excluding the start page).
+    """
+    html = _fetch(start_url)
+    if not html:
+        return []
+
+    all_urls: dict[str, None] = {}
+    frontier = _extract_html_links(html, start_url, scope)
+    for url in frontier:
+        all_urls[url] = None
+
+    for _depth in range(2, max_depth + 1):
+        next_frontier: list[str] = []
+        for url in frontier:
+            sub_html = _fetch(url)
+            if not sub_html:
+                continue
+            for link in _extract_html_links(sub_html, url, scope):
+                if link != start_url and link not in all_urls:
+                    all_urls[link] = None
+                    next_frontier.append(link)
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    return list(all_urls)
 
 
 # ---------------------------------------------------------------------------
@@ -129,51 +187,31 @@ def _scrape_pillar(pillar_slug: str, pillar_name: str) -> list[ScrapedPage]:
     pillar_url = urljoin(WAF_BASE, f"{pillar_slug}.html")
     logger.info("Scraping pillar: %s (%s)", pillar_name, pillar_url)
 
-    html = _fetch(pillar_url)
-    if not html:
+    page_urls = _crawl(pillar_url, WAF_BASE)
+    if not page_urls:
+        logger.warning("No sub-pages found for pillar: %s", pillar_name)
         return []
 
-    bp_links = _extract_links(html, pillar_url, pattern=r"bp\d{2}")
-    if not bp_links:
-        bp_links = _extract_links(html, pillar_url, pattern=pillar_slug)
-        bp_links = [lnk for lnk in bp_links if lnk != pillar_url]
-
     pages: list[ScrapedPage] = []
-
-    if not bp_links:
+    for url in page_urls:
+        html = _fetch(url)
+        if not html:
+            continue
         content = _extract_content(html)
-        if content:
-            pages.append(
-                ScrapedPage(
-                    source="well-architected-framework",
-                    pillar=pillar_slug,
-                    question_id=f"{pillar_slug[:3].upper()}-OVERVIEW",
-                    title=pillar_name,
-                    content=content,
-                    url=pillar_url,
-                )
-            )
-        return pages
-
-    for link in bp_links:
-        bp_html = _fetch(link)
-        if not bp_html:
-            continue
-        content = _extract_content(bp_html)
-        if not content:
+        if not content or len(content) < 100:
             continue
 
-        question_id = _derive_question_id(link, pillar_slug)
-        title = _extract_title(bp_html, question_id)
+        page_id = _page_id_from_url(url)
+        title = _extract_title(html, page_id)
 
         pages.append(
             ScrapedPage(
                 source="well-architected-framework",
                 pillar=pillar_slug,
-                question_id=question_id,
+                page_id=page_id,
                 title=title,
                 content=content,
-                url=link,
+                url=url,
             )
         )
 
@@ -185,61 +223,60 @@ def _scrape_pillar(pillar_slug: str, pillar_name: str) -> list[ScrapedPage]:
 # Lens scraping
 # ---------------------------------------------------------------------------
 
+LENS_URL_PATTERNS = [
+    "https://docs.aws.amazon.com/wellarchitected/latest/{slug}/welcome.html",
+    "https://docs.aws.amazon.com/wellarchitected/latest/{slug}/{slug}.html",
+    "https://docs.aws.amazon.com/wellarchitected/latest/{slug}/",
+]
 
-def _scrape_lens(lens_slug: str) -> list[ScrapedPage]:
-    """Scrape an official lens landing page and its sub-pages."""
-    lens_url = f"https://docs.aws.amazon.com/wellarchitected/latest/{lens_slug}/welcome.html"
-    logger.info("Scraping lens: %s", lens_slug)
 
-    html = _fetch(lens_url)
-    if not html:
-        alt_url = f"https://docs.aws.amazon.com/wellarchitected/latest/{lens_slug}/"
-        html = _fetch(alt_url)
-        if not html:
-            return []
-        lens_url = alt_url
+def _find_lens_landing(slug: str) -> tuple[str, str | None]:
+    """Try known URL patterns for a lens. Returns (url, html) or (url, None)."""
+    for pattern in LENS_URL_PATTERNS:
+        url = pattern.format(slug=slug)
+        html = _fetch(url)
+        if html:
+            return url, html
+    return "", None
 
-    sub_links = _extract_links(html, lens_url, pattern=lens_slug)
-    sub_links = [lnk for lnk in sub_links if lnk != lens_url]
+
+def _scrape_lens(lens_slug: str, lens_name: str) -> list[ScrapedPage]:
+    """Scrape an official lens and its sub-pages."""
+    logger.info("Scraping lens: %s", lens_name)
+
+    lens_scope = f"https://docs.aws.amazon.com/wellarchitected/latest/{lens_slug}/"
+    landing_url, landing_html = _find_lens_landing(lens_slug)
+    if not landing_html:
+        logger.warning("Could not find lens: %s", lens_slug)
+        return []
+
+    page_urls = _crawl(landing_url, lens_scope)
 
     pages: list[ScrapedPage] = []
 
-    main_content = _extract_content(html)
-    if main_content:
-        pages.append(
-            ScrapedPage(
-                source=lens_slug,
-                pillar="lens",
-                question_id=f"{lens_slug}-overview",
-                title=lens_slug.replace("-", " ").title(),
-                content=main_content,
-                url=lens_url,
-            )
-        )
-
-    for link in sub_links[:50]:
-        sub_html = _fetch(link)
-        if not sub_html:
+    for url in page_urls:
+        html = _fetch(url)
+        if not html:
             continue
-        content = _extract_content(sub_html)
-        if not content or len(content) < 50:
+        content = _extract_content(html)
+        if not content or len(content) < 100:
             continue
 
-        question_id = _derive_question_id(link, lens_slug)
-        title = _extract_title(sub_html, question_id)
+        page_id = _page_id_from_url(url)
+        title = _extract_title(html, page_id)
 
         pages.append(
             ScrapedPage(
                 source=lens_slug,
                 pillar="lens",
-                question_id=question_id,
+                page_id=page_id,
                 title=title,
                 content=content,
-                url=link,
+                url=url,
             )
         )
 
-    logger.info("Scraped %d pages from lens: %s", len(pages), lens_slug)
+    logger.info("Scraped %d pages from lens: %s", len(pages), lens_name)
     return pages
 
 
@@ -250,7 +287,7 @@ def _scrape_lens(lens_slug: str) -> list[ScrapedPage]:
 
 def _write_page(page: ScrapedPage, output_dir: Path) -> Path:
     """Write a single scraped page as a markdown file with YAML frontmatter."""
-    filename = _sanitize_filename(f"{page.question_id}.md")
+    filename = _sanitize_filename(f"{page.page_id}.md")
     sub_dir = output_dir / _sanitize_filename(page.source) / _sanitize_filename(page.pillar)
     sub_dir.mkdir(parents=True, exist_ok=True)
     filepath = sub_dir / filename
@@ -258,7 +295,7 @@ def _write_page(page: ScrapedPage, output_dir: Path) -> Path:
     frontmatter = {
         "source": page.source,
         "pillar": page.pillar,
-        "question": page.question_id,
+        "page_id": page.page_id,
         "title": page.title,
         "url": page.url,
     }
@@ -266,8 +303,7 @@ def _write_page(page: ScrapedPage, output_dir: Path) -> Path:
         frontmatter.update(page.extra_metadata)
 
     fm_text = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True)
-    content = f"---\n{fm_text}---\n\n"
-    content += f"# {page.title}\n\n{page.content}\n"
+    content = f"---\n{fm_text}---\n\n# {page.title}\n\n{page.content}\n"
 
     filepath.write_text(content, encoding="utf-8")
     return filepath
@@ -281,11 +317,7 @@ def _write_page(page: ScrapedPage, output_dir: Path) -> Path:
 def scrape_waf(output_dir: str | Path) -> int:
     """Scrape all 6 WAF pillars and official lenses.
 
-    Args:
-        output_dir: Directory to write markdown files to.
-
-    Returns:
-        Total number of pages scraped.
+    Returns the total number of pages scraped.
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -298,8 +330,8 @@ def scrape_waf(output_dir: str | Path) -> int:
             _write_page(page, output_path)
         total += len(pages)
 
-    for lens_slug in OFFICIAL_LENSES:
-        pages = _scrape_lens(lens_slug)
+    for slug, name in OFFICIAL_LENSES.items():
+        pages = _scrape_lens(slug, name)
         for page in pages:
             _write_page(page, output_path)
         total += len(pages)
