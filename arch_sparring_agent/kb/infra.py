@@ -289,7 +289,6 @@ def _create_bedrock_kb(
                 "s3VectorsConfiguration": {
                     "vectorBucketArn": vector_bucket_arn,
                     "indexArn": vector_index_arn,
-                    "indexName": VECTOR_INDEX_NAME,
                 },
             },
         )
