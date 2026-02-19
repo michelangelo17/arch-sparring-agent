@@ -3,6 +3,7 @@
 from strands import Agent, tool
 from strands.models import BedrockModel
 
+from ..profiles import get_directive
 from ..tools.cfn_analyzer import CloudFormationAnalyzer
 from ..tools.diagram_analyzer import DiagramAnalyzer
 from ..tools.source_analyzer import SourceAnalyzer
@@ -97,15 +98,6 @@ Tasks:
 
     base_prompt += """
 
-IMPORTANT - AWS Service Defaults:
-- Many AWS services have secure defaults that don't require explicit CloudFormation config.
-  For example, DynamoDB encrypts all data at rest by default (AWS-owned keys) even without
-  SSESpecification. S3 encrypts all new objects by default since Jan 2023.
-- Do NOT flag a feature as "not found" just because it isn't explicitly configured in
-  CloudFormation, if the AWS service provides that feature by default.
-- Only list something in "Features Not Found" if the requirement is genuinely unmet,
-  not merely implicit via AWS defaults.
-
 Output format:
 ### Components
 List from CloudFormation + SDK calls observed in source code
@@ -115,7 +107,11 @@ List from CloudFormation + SDK calls observed in source code
 - Include features satisfied by AWS service defaults (note "via AWS default" as evidence)
 
 ### Features Not Found
-- Feature: [only if searched AND not covered by AWS service defaults]"""
+- Feature: [only if searched AND not covered by service defaults]"""
+
+    directive = get_directive("architecture")
+    if directive:
+        base_prompt += f"\n\n{directive}"
 
     return Agent(
         name="ArchitectureEvaluator",

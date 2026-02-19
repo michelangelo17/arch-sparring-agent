@@ -35,6 +35,7 @@ dependencies = [
   "markdown>=3.10",
   "pillow>=12.0.0",
   "python-frontmatter>=1.1.0",
+  "pyyaml>=6.0",
   "strands-agents>=1.19.0",
 ]
 

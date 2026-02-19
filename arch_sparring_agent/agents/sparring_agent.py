@@ -3,6 +3,8 @@
 from strands import Agent, tool
 from strands.models import BedrockModel
 
+from ..profiles import get_directive
+
 
 def create_sparring_agent(model_id: str | BedrockModel) -> Agent:
     """Create agent for challenging architectural decisions."""
@@ -21,11 +23,7 @@ def create_sparring_agent(model_id: str | BedrockModel) -> Agent:
         """Signal completion of sparring phase."""
         return "Proceeding to final review."
 
-    return Agent(
-        name="SparringAgent",
-        model=model_id,
-        callback_handler=None,
-        system_prompt="""Challenge CONFIRMED gaps only. Be CONCISE.
+    system_prompt = """Challenge CONFIRMED gaps only. Be CONCISE.
 
 CRITICAL: Call challenge_user exactly ONCE per turn. Wait for the user's
 response before issuing the next challenge. NEVER batch multiple
@@ -37,23 +35,23 @@ RULES:
 - Keep challenges SHORT (2-3 sentences max)
 - Do NOT provide code examples or detailed solutions
 - Do NOT write long analyses - just ask pointed questions
-- Push back on weak answers briefly
-- Acknowledge good defenses and move on
-
-RESOLVING GAPS:
-- Do NOT accept "it's intentional" or "not needed" at face value -- ask WHY
-- The user must explain the reasoning (e.g. "it's a demo app with no sensitive data"
-  or "that's handled by a separate service")
-- Only mark a gap as RESOLVED when the user provides a concrete justification
-- If the user just says "it's fine" without explaining why, push back once more
-- Only gaps the user CANNOT adequately explain remain as confirmed gaps
 
 After done_challenging, output a final summary that clearly separates:
 - CONFIRMED GAPS: [gaps the user could not defend]
 - RESOLVED: [gaps the user successfully defended with reason]
 If all gaps were resolved, say "No confirmed gaps remain."
 
-Call done_challenging when key issues are addressed.""",
+Call done_challenging when key issues are addressed."""
+
+    directive = get_directive("sparring")
+    if directive:
+        system_prompt += f"\n\n{directive}"
+
+    return Agent(
+        name="SparringAgent",
+        model=model_id,
+        callback_handler=None,
+        system_prompt=system_prompt,
         tools=[challenge_user, done_challenging],
     )
 

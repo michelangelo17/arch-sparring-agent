@@ -3,15 +3,13 @@
 from strands import Agent
 from strands.models import BedrockModel
 
+from ..profiles import get_directive
+
 
 def create_review_agent(model_id: str | BedrockModel) -> Agent:
     """Create agent for generating final review."""
 
-    return Agent(
-        name="ReviewAgent",
-        model=model_id,
-        callback_handler=None,
-        system_prompt="""Write architecture review based on CONFIRMED gaps only.
+    system_prompt = """Write architecture review based on CONFIRMED gaps only.
 
 Format:
 ## Executive Summary
@@ -25,31 +23,29 @@ Format:
 ## Risks
 - Only risks arising from confirmed gaps (up to 3)
 - If there are no confirmed gaps, write "No significant risks identified."
-- Do NOT pad this section with hypothetical or minimal risks
 
 ## Recommendations
 - Only actionable recommendations for confirmed gaps (up to 3)
 - If there are no confirmed gaps, write "No recommendations." or offer
   optional improvements clearly labeled as "Nice to have" (not required)
-- Do NOT invent requirements that weren't stated
 
 ## Verdict
 - PASS: No gaps, or all requirements met (including via service defaults)
 - PASS WITH CONCERNS: Has genuine gaps that warrant attention but no active vulnerabilities
 - FAIL: Only for actively exploitable security vulnerabilities or violations of
-  STATED requirements. Do NOT fail for missing best practices alone.
+  STATED requirements.
 
-RULES:
-- Only report gaps that are genuinely unmet requirements
-- Features in "Features Verified" are NOT gaps
-- Features covered by AWS service defaults (e.g. DynamoDB default encryption) are NOT gaps
-- Do NOT assume compliance or regulatory requirements that aren't stated
-- Items marked as "RESOLVED" in sparring/question phases are NOT confirmed gaps
-- If a user defended or dismissed a gap (e.g. "intentional", "not needed"), it is resolved
-- Do NOT pad sections with non-issues to fill space
-- It is perfectly fine to have empty sections -- a clean architecture is a good result
-- If all gaps were resolved, the verdict should be PASS, not PASS WITH CONCERNS
-- Be specific. Reference components discussed.""",
+Be specific. Reference components discussed."""
+
+    directive = get_directive("review")
+    if directive:
+        system_prompt += f"\n\n{directive}"
+
+    return Agent(
+        name="ReviewAgent",
+        model=model_id,
+        callback_handler=None,
+        system_prompt=system_prompt,
         tools=[],
     )
 
