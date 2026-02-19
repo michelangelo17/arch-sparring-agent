@@ -27,25 +27,27 @@ from .context_condenser import (
     extract_phase_findings,
     extract_requirements,
 )
-from .exceptions import ConfigurationError
-from .policy import setup_architecture_review_policies
+from .infra import SharedConfig
 
 logger = logging.getLogger(__name__)
 
 
 class ReviewOrchestrator:
-    """Orchestrates multi-agent architecture review."""
+    """Orchestrates multi-agent architecture review.
+
+    Infrastructure (Gateway, Policy Engine, Cedar policies) must already
+    exist — created via ``arch-review deploy``.
+    """
 
     def __init__(
         self,
         documents_dir: str,
         templates_dir: str,
         diagrams_dir: str,
+        shared_config: SharedConfig,
         model_name: str = DEFAULT_MODEL,
-        region: str = "eu-central-1",
         ci_mode: bool = False,
         source_dir: str | None = None,
-        skip_policy_check: bool = False,
         output_fn: Callable[[str], None] | None = None,
         reasoning_level: str = DEFAULT_REASONING_LEVEL,
     ):
@@ -53,32 +55,18 @@ class ReviewOrchestrator:
         self.templates_dir = templates_dir
         self.diagrams_dir = diagrams_dir
         self.source_dir = source_dir
-        self.region = region
+        self.region = shared_config.region
         self.ci_mode = ci_mode
         self.output_fn = output_fn
         self.model_name = model_name
+        self.policy_engine_id = shared_config.policy_engine_id
 
-        logger.info("Setting up Policy Engine and Policies")
-        self.policy_engine_id = setup_architecture_review_policies(region=region)
-        if self.policy_engine_id:
-            logger.info("Policy Engine ID: %s", self.policy_engine_id)
-        elif skip_policy_check:
-            logger.warning(
-                "Policy Engine setup failed (--skip-policy-check enabled). "
-                "Agents will NOT have Cedar tool-access restrictions. "
-                "Running without security policy enforcement."
-            )
-        else:
-            raise ConfigurationError(
-                "Policy Engine setup failed. Cedar policies could not be created.\n"
-                "Agents cannot run without security policy enforcement.\n"
-                "To bypass this check (development only), use --skip-policy-check."
-            )
+        logger.info("Using Policy Engine: %s", self.policy_engine_id)
 
         # Models: reasoning enabled for analysis-heavy agents, off for extraction/summarization
         standard_model = create_model(model_name, reasoning=False)
         if reasoning_level == "off":
-            reasoning_model = standard_model  # all agents use standard
+            reasoning_model = standard_model
         else:
             reasoning_model = create_model(
                 model_name, reasoning=True, reasoning_level=reasoning_level

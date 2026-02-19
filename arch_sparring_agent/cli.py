@@ -19,7 +19,8 @@ from .config import (
     REASONING_LEVELS,
     SUPPORTED_MODELS,
 )
-from .exceptions import ArchReviewError
+from .exceptions import ArchReviewError, ConfigurationError
+from .infra import SharedConfig, delete_from_ssm, load_from_ssm, save_to_ssm
 from .orchestrator import ReviewOrchestrator
 from .state import ReviewState, extract_state_from_review, extract_verdict
 
@@ -31,7 +32,6 @@ def _configure_logging(verbose: bool) -> None:
         level=level,
         format="%(message)s",
     )
-    # Also set for our package specifically
     logging.getLogger("arch_sparring_agent").setLevel(level)
 
 
@@ -75,7 +75,6 @@ def _archive_previous(output_dir: Path) -> None:
     if not review_file.exists() and not state_file.exists():
         return
 
-    # Use date from state file if available, else current date
     if state_file.exists():
         try:
             state = ReviewState.from_file(state_file)
@@ -85,7 +84,6 @@ def _archive_previous(output_dir: Path) -> None:
     else:
         date_str = datetime.now().strftime("%Y-%m-%d")
 
-    # Add time suffix if folder exists
     history_dir = output_dir / "history" / date_str
     if history_dir.exists():
         time_str = datetime.now().strftime("%H%M%S")
@@ -93,24 +91,16 @@ def _archive_previous(output_dir: Path) -> None:
 
     history_dir.mkdir(parents=True, exist_ok=True)
 
-    # Move existing files to history
     for filename in [DEFAULT_REVIEW_FILE, DEFAULT_STATE_FILE, DEFAULT_REMEDIATION_FILE]:
         src = output_dir / filename
         if src.exists():
             shutil.move(str(src), str(history_dir / filename))
 
-    click.echo(f"📁 Archived previous review to: {history_dir}")
+    click.echo(f"Archived previous review to: {history_dir}")
 
 
 def _get_verdict_and_exit_code(review_text: str, strict: bool = False) -> tuple[str, int]:
-    """Map verdict string to exit code, applying strict mode logic.
-
-    Uses the canonical _extract_verdict from state.py for verdict extraction,
-    then maps to exit codes:
-      PASS              -> EXIT_SUCCESS (0)
-      PASS WITH CONCERNS -> EXIT_MEDIUM_RISK (2), or EXIT_HIGH_RISK (1) if strict + high impact
-      FAIL              -> EXIT_HIGH_RISK (1)
-    """
+    """Map verdict string to exit code, applying strict mode logic."""
     verdict = extract_verdict(review_text)
 
     if verdict == "FAIL":
@@ -126,8 +116,173 @@ def _get_verdict_and_exit_code(review_text: str, strict: bool = False) -> tuple[
     return "PASS", EXIT_SUCCESS
 
 
-@click.command()
+def _load_shared_config(region: str) -> SharedConfig:
+    """Load shared config from SSM, exiting with a helpful message on failure."""
+    try:
+        return load_from_ssm(region)
+    except ConfigurationError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(EXIT_ERROR)
+
+
+# ---------------------------------------------------------------------------
+# CLI group
+# ---------------------------------------------------------------------------
+
+@click.group()
 @click.version_option(version=get_version(), prog_name="arch-review")
+def cli():
+    """Architecture Review Sparring Partner
+
+    \b
+    Workflow:
+      1. arch-review deploy          Deploy shared infra (once per account)
+      2. arch-review run             Run architecture review
+      3. arch-review remediate       Discuss previous findings
+      4. arch-review destroy         Tear down shared infra
+    """
+
+
+# ---------------------------------------------------------------------------
+# deploy
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.option(
+    "--region",
+    default=lambda: get_env_or_default("AWS_REGION", DEFAULT_REGION),
+    help=f"AWS region (default: {DEFAULT_REGION})",
+)
+@click.option(
+    "--gateway-name",
+    default="ArchReviewGateway",
+    help="Name for the Gateway resource",
+)
+@click.option(
+    "--policy-engine-name",
+    default="ArchReviewPolicyEngine",
+    help="Name for the Policy Engine resource",
+)
+@click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
+def deploy(region, gateway_name, policy_engine_name, verbose):
+    """Deploy shared infrastructure to an AWS account.
+
+    Creates the Gateway, Policy Engine, and Cedar policies. Writes the
+    resulting resource IDs to SSM Parameter Store so that ``arch-review run``
+    can discover them automatically.
+
+    Idempotent — safe to run repeatedly.
+    """
+    _configure_logging(verbose)
+    os.environ["AWS_REGION"] = region
+
+    click.echo(f"Deploying arch-review infrastructure in {region}...")
+
+    gateway_arn, gateway_id, engine_id = _deploy_infra(
+        region, gateway_name, policy_engine_name
+    )
+
+    config = SharedConfig(
+        gateway_id=gateway_id,
+        gateway_arn=gateway_arn,
+        policy_engine_id=engine_id,
+        region=region,
+    )
+    save_to_ssm(config)
+
+    click.echo("\nDeployment complete.")
+    click.echo(f"  Gateway ID:       {gateway_id}")
+    click.echo(f"  Policy Engine ID: {engine_id}")
+    click.echo(f"  Config stored in: SSM {_ssm_param_name()}")
+
+
+def _deploy_infra(
+    region: str, gateway_name: str, policy_engine_name: str
+) -> tuple[str, str, str]:
+    """Run the existing setup logic and return (gateway_arn, gateway_id, engine_id).
+
+    Raises click.ClickException on failure so the CLI exits cleanly.
+    """
+    from .gateway import setup_gateway
+    from .policy import setup_architecture_review_policies
+
+    gateway_arn, gateway_id = setup_gateway(region=region, gateway_name=gateway_name)
+    if not gateway_arn or not gateway_id:
+        raise click.ClickException("Gateway setup failed. Check logs with -v for details.")
+
+    engine_id = setup_architecture_review_policies(
+        region=region,
+        policy_engine_name=policy_engine_name,
+        gateway_arn=gateway_arn,
+        gateway_name=gateway_name,
+    )
+    if not engine_id:
+        raise click.ClickException(
+            "Policy Engine / Cedar policy setup failed. Check logs with -v for details."
+        )
+
+    return gateway_arn, gateway_id, engine_id
+
+
+def _ssm_param_name() -> str:
+    from .infra import SSM_PARAMETER_NAME
+    return SSM_PARAMETER_NAME
+
+
+# ---------------------------------------------------------------------------
+# destroy
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.option(
+    "--region",
+    default=lambda: get_env_or_default("AWS_REGION", DEFAULT_REGION),
+    help=f"AWS region (default: {DEFAULT_REGION})",
+)
+@click.option(
+    "--confirm",
+    is_flag=True,
+    default=False,
+    help="Required to actually destroy resources",
+)
+@click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
+def destroy(region, confirm, verbose):
+    """Tear down shared infrastructure.
+
+    Reads config from SSM, deletes Cedar policies, Policy Engine, Gateway,
+    and the SSM parameter itself.
+
+    Requires --confirm as a safety guard.
+    """
+    _configure_logging(verbose)
+    os.environ["AWS_REGION"] = region
+
+    if not confirm:
+        click.echo(
+            "This will destroy all arch-review infrastructure in the account.\n"
+            "Re-run with --confirm to proceed."
+        )
+        return
+
+    config = _load_shared_config(region)
+
+    from .gateway import destroy_gateway
+    from .policy import destroy_policy_engine
+
+    click.echo(f"Destroying arch-review infrastructure in {region}...")
+
+    destroy_policy_engine(config.policy_engine_id, region=region)
+    destroy_gateway(config.gateway_id, region=region)
+    delete_from_ssm(region=region)
+
+    click.echo("Destroy complete.")
+
+
+# ---------------------------------------------------------------------------
+# run
+# ---------------------------------------------------------------------------
+
+@cli.command()
 @click.option(
     "--documents-dir",
     type=click.Path(file_okay=False, dir_okay=True),
@@ -158,36 +313,11 @@ def _get_verdict_and_exit_code(review_text: str, strict: bool = False) -> tuple[
     default=lambda: get_env_or_default("ARCH_REVIEW_OUTPUT_DIR", DEFAULT_OUTPUT_DIR),
     help=f"Output directory for all files (default: {DEFAULT_OUTPUT_DIR})",
 )
+@click.option("--no-history", is_flag=True, default=False, help="Don't archive previous reviews")
 @click.option(
-    "--no-history",
-    is_flag=True,
-    default=False,
-    help="Don't archive previous reviews (default in CI mode)",
+    "--keep-history", is_flag=True, default=False, help="Archive previous reviews even in CI mode"
 )
-@click.option(
-    "--keep-history",
-    is_flag=True,
-    default=False,
-    help="Archive previous reviews even in CI mode",
-)
-@click.option(
-    "--no-state",
-    is_flag=True,
-    default=False,
-    help="Don't save state file after review",
-)
-@click.option(
-    "--remediate",
-    is_flag=True,
-    default=False,
-    help="Enter remediation mode to discuss previous findings",
-)
-@click.option(
-    "--no-remediation-output",
-    is_flag=True,
-    default=False,
-    help="Don't save remediation notes to file",
-)
+@click.option("--no-state", is_flag=True, default=False, help="Don't save state file after review")
 @click.option(
     "--model",
     type=click.Choice(list(SUPPORTED_MODELS.keys()), case_sensitive=False),
@@ -205,38 +335,16 @@ def _get_verdict_and_exit_code(review_text: str, strict: bool = False) -> tuple[
     default=lambda: get_env_or_default("CI", "").lower() in ("true", "1", "yes"),
     help="CI/CD mode: non-interactive, no history by default",
 )
-@click.option(
-    "--json",
-    "json_output",
-    is_flag=True,
-    help="Output results as JSON (implies --ci)",
-)
-@click.option(
-    "--strict",
-    is_flag=True,
-    default=False,
-    help="Strict mode: any High impact risk fails",
-)
+@click.option("--json", "json_output", is_flag=True, help="Output results as JSON (implies --ci)")
+@click.option("--strict", is_flag=True, default=False, help="Strict: any High impact risk fails")
 @click.option(
     "--reasoning-level",
     type=click.Choice(REASONING_LEVELS, case_sensitive=False),
     default=lambda: get_env_or_default("ARCH_REVIEW_REASONING_LEVEL", DEFAULT_REASONING_LEVEL),
     help=f"Reasoning effort for analysis agents (default: {DEFAULT_REASONING_LEVEL})",
 )
-@click.option(
-    "--skip-policy-check",
-    is_flag=True,
-    default=False,
-    help="Skip policy engine enforcement (development only - NOT recommended for production)",
-)
-@click.option(
-    "-v",
-    "--verbose",
-    is_flag=True,
-    default=False,
-    help="Enable verbose output (show policy setup details, debug info)",
-)
-def main(
+@click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
+def run(
     documents_dir,
     templates_dir,
     diagrams_dir,
@@ -245,62 +353,37 @@ def main(
     no_history,
     keep_history,
     no_state,
-    remediate,
-    no_remediation_output,
     model,
     region,
     ci,
     json_output,
     strict,
     reasoning_level,
-    skip_policy_check,
     verbose,
 ):
-    """
-    Architecture Review Sparring Partner
-
-    Analyzes requirements, CloudFormation templates, diagrams, and source code.
-    Outputs to .arch-review/ folder with automatic history archiving.
+    """Run an architecture review.
 
     \b
-    Modes:
-      Default       - Run full architecture review (archives previous)
-      --remediate   - Discuss and resolve previous review findings
-      --ci          - Non-interactive CI/CD mode (no archive by default)
+    Requires infrastructure to be deployed first (arch-review deploy).
 
     \b
     Output Structure:
       .arch-review/
-      ├── review.md           # Latest review
-      ├── state.json          # Latest state (for remediation)
-      ├── remediation-notes.md
-      └── history/            # Archived previous reviews
-          └── 2025-12-09/
+      +-- review.md           # Latest review
+      +-- state.json          # Latest state (for remediation)
+      +-- remediation-notes.md
+      +-- history/            # Archived previous reviews
 
     \b
     Examples:
-      arch-review --documents-dir ./docs --templates-dir ./cdk.out --diagrams-dir ./diagrams
-      arch-review --remediate
-      arch-review --ci --keep-history  # CI with history archiving
+      arch-review run --documents-dir ./docs --templates-dir ./cdk.out --diagrams-dir ./diagrams
+      arch-review run --ci --keep-history
     """
     _configure_logging(verbose)
     os.environ["AWS_REGION"] = region
     ci_mode = ci or json_output
 
-    # Determine whether to archive history
-    should_archive = keep_history or (not ci_mode and not no_history)
-
-    # Remediation mode
-    if remediate:
-        _run_remediation_mode(
-            output_dir=output_dir,
-            no_remediation_output=no_remediation_output,
-            model=model,
-            region=region,
-        )
-        return
-
-    # Review mode - validate required dirs
+    # Validate required dirs
     if not documents_dir or not Path(documents_dir).is_dir():
         raise click.UsageError("--documents-dir is required and must exist")
     if not templates_dir or not Path(templates_dir).is_dir():
@@ -310,7 +393,10 @@ def main(
     if source_dir and not Path(source_dir).is_dir():
         raise click.UsageError("--source-dir must exist if provided")
 
-    _run_review_mode(
+    shared_config = _load_shared_config(region)
+    should_archive = keep_history or (not ci_mode and not no_history)
+
+    _run_review(
         documents_dir=documents_dir,
         templates_dir=templates_dir,
         diagrams_dir=diagrams_dir,
@@ -319,53 +405,15 @@ def main(
         no_state=no_state,
         should_archive=should_archive,
         model=model,
-        region=region,
+        shared_config=shared_config,
         ci_mode=ci_mode,
         json_output=json_output,
         strict=strict,
         reasoning_level=reasoning_level,
-        skip_policy_check=skip_policy_check,
     )
 
 
-def _run_remediation_mode(
-    output_dir: str,
-    no_remediation_output: bool,
-    model: str,
-    region: str,
-):
-    """Run remediation mode."""
-    out_path = _get_output_dir(output_dir)
-    state_path = out_path / DEFAULT_STATE_FILE
-
-    if not state_path.exists():
-        click.echo(f"Error: State file not found: {state_path}", err=True)
-        click.echo("Run a review first to generate a state file.", err=True)
-        sys.exit(EXIT_ERROR)
-
-    try:
-        state = ReviewState.from_file(state_path)
-        click.echo(f"✓ Loaded state from: {state_path}")
-
-        model_id = SUPPORTED_MODELS[model]["model_id"]
-
-        agent = create_remediation_agent(state=state, model_id=model_id, region=region)
-        notes = run_remediation(agent, state, output_fn=click.echo)
-
-        if not no_remediation_output:
-            remediation_path = out_path / DEFAULT_REMEDIATION_FILE
-            remediation_path.write_text(notes)
-            click.echo(f"\n✓ Remediation notes saved to: {remediation_path}")
-
-    except ArchReviewError as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(EXIT_ERROR)
-    except (OSError, json.JSONDecodeError, ValueError) as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(EXIT_ERROR)
-
-
-def _run_review_mode(
+def _run_review(
     documents_dir: str,
     templates_dir: str,
     diagrams_dir: str,
@@ -374,17 +422,15 @@ def _run_review_mode(
     no_state: bool,
     should_archive: bool,
     model: str,
-    region: str,
+    shared_config: SharedConfig,
     ci_mode: bool,
     json_output: bool,
     strict: bool,
     reasoning_level: str = DEFAULT_REASONING_LEVEL,
-    skip_policy_check: bool = False,
 ):
-    """Run review mode."""
+    """Execute the review and handle output."""
     out_path = _get_output_dir(output_dir)
 
-    # Archive previous review if enabled
     if should_archive:
         _archive_previous(out_path)
 
@@ -393,11 +439,10 @@ def _run_review_mode(
             documents_dir=documents_dir,
             templates_dir=templates_dir,
             diagrams_dir=diagrams_dir,
+            shared_config=shared_config,
             source_dir=source_dir or None,
             model_name=model,
-            region=region,
             ci_mode=ci_mode,
-            skip_policy_check=skip_policy_check,
             output_fn=click.echo,
             reasoning_level=reasoning_level,
         )
@@ -418,23 +463,21 @@ def _run_review_mode(
             }
             click.echo(json.dumps(json_result, indent=2))
         else:
-            # Save review
             review_path = out_path / DEFAULT_REVIEW_FILE
             full_session = result.get("full_session", result["review"])
             review_path.write_text(full_session)
-            click.echo(f"\n✓ Review saved to: {review_path}")
+            click.echo(f"\nReview saved to: {review_path}")
 
-            # Save state
             if not no_state:
                 state = extract_state_from_review(result)
                 state_path = out_path / DEFAULT_STATE_FILE
                 state.save(state_path)
-                click.echo(f"✓ State saved to: {state_path}")
+                click.echo(f"State saved to: {state_path}")
 
             if ci_mode:
-                click.echo(f"\n📊 Verdict: {verdict}")
+                click.echo(f"\nVerdict: {verdict}")
                 if exit_code != EXIT_SUCCESS:
-                    click.echo(f"⚠️  Exiting with code {exit_code}")
+                    click.echo(f"Exiting with code {exit_code}")
 
         sys.exit(exit_code)
 
@@ -457,5 +500,73 @@ def _run_review_mode(
         sys.exit(EXIT_ERROR)
 
 
+# ---------------------------------------------------------------------------
+# remediate
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.option(
+    "--output-dir",
+    type=click.Path(file_okay=False, dir_okay=True),
+    default=lambda: get_env_or_default("ARCH_REVIEW_OUTPUT_DIR", DEFAULT_OUTPUT_DIR),
+    help=f"Output directory (default: {DEFAULT_OUTPUT_DIR})",
+)
+@click.option(
+    "--no-output",
+    is_flag=True,
+    default=False,
+    help="Don't save remediation notes to file",
+)
+@click.option(
+    "--model",
+    type=click.Choice(list(SUPPORTED_MODELS.keys()), case_sensitive=False),
+    default=lambda: get_env_or_default("ARCH_REVIEW_MODEL", DEFAULT_MODEL),
+    help=f"Model to use (default: {DEFAULT_MODEL})",
+)
+@click.option(
+    "--region",
+    default=lambda: get_env_or_default("AWS_REGION", DEFAULT_REGION),
+    help=f"AWS region (default: {DEFAULT_REGION})",
+)
+@click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
+def remediate(output_dir, no_output, model, region, verbose):
+    """Discuss and resolve previous review findings.
+
+    Loads state from a previous review and starts an interactive session
+    to work through gaps, risks, and recommendations.
+    """
+    _configure_logging(verbose)
+    os.environ["AWS_REGION"] = region
+
+    out_path = _get_output_dir(output_dir)
+    state_path = out_path / DEFAULT_STATE_FILE
+
+    if not state_path.exists():
+        click.echo(f"Error: State file not found: {state_path}", err=True)
+        click.echo("Run a review first (arch-review run) to generate a state file.", err=True)
+        sys.exit(EXIT_ERROR)
+
+    try:
+        state = ReviewState.from_file(state_path)
+        click.echo(f"Loaded state from: {state_path}")
+
+        model_id = SUPPORTED_MODELS[model]["model_id"]
+
+        agent = create_remediation_agent(state=state, model_id=model_id, region=region)
+        notes = run_remediation(agent, state, output_fn=click.echo)
+
+        if not no_output:
+            remediation_path = out_path / DEFAULT_REMEDIATION_FILE
+            remediation_path.write_text(notes)
+            click.echo(f"\nRemediation notes saved to: {remediation_path}")
+
+    except ArchReviewError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(EXIT_ERROR)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(EXIT_ERROR)
+
+
 if __name__ == "__main__":
-    main()
+    cli()

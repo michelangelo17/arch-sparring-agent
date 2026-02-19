@@ -1,9 +1,7 @@
 """Gateway setup and management for policy enforcement."""
 
-import json
 import logging
 import time
-from pathlib import Path
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -232,7 +230,6 @@ def setup_gateway(
             logger.debug("Gateway URL: %s", gateway_url)
         logger.debug("Gateway ID: %s", gateway_id)
 
-        _save_gateway_config(gateway, cognito_response, region)
         return gateway_arn, gateway_id
 
     except ImportError:
@@ -248,34 +245,22 @@ def setup_gateway(
         return None, None
 
 
-def _save_gateway_config(gateway: dict, cognito_response: dict, region: str) -> None:
-    """Save gateway config to ~/.arch-review for cleanup."""
-    config = {
-        "gateway_url": gateway.get("gatewayUrl"),
-        "gateway_id": gateway.get("gatewayId"),
-        "region": region,
-        "client_info": cognito_response.get("client_info"),
-    }
+def destroy_gateway(gateway_id: str, region: str = DEFAULT_REGION) -> bool:
+    """Delete a Gateway and its associated Cognito resources.
 
-    config_path = Path.home() / ".arch-review" / "gateway_config.json"
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(json.dumps(config, indent=2))
-
-
-def cleanup_gateway(region: str = DEFAULT_REGION) -> None:
-    """Clean up Gateway and Cognito resources."""
-    config_path = Path.home() / ".arch-review" / "gateway_config.json"
-    if not config_path.exists():
-        logger.info("No gateway config found. Nothing to clean up.")
-        return
-
+    Returns:
+        True if cleanup succeeded, False otherwise.
+    """
     try:
         from bedrock_agentcore_starter_toolkit.operations.gateway.client import GatewayClient
 
-        config = json.loads(config_path.read_text())
-        client = GatewayClient(region_name=config.get("region", region))
-        client.cleanup_gateway(config["gateway_id"], config.get("client_info"))
-        logger.info("Gateway cleanup complete!")
-        config_path.unlink()
-    except (ClientError, BotoCoreError, json.JSONDecodeError, OSError, KeyError) as e:
-        logger.warning("Could not clean up Gateway: %s", e)
+        client = GatewayClient(region_name=region)
+        client.cleanup_gateway(gateway_id, None)
+        logger.info("Gateway destroyed: %s", gateway_id)
+        return True
+    except ImportError:
+        logger.warning("bedrock-agentcore-starter-toolkit not installed — cannot destroy gateway.")
+        return False
+    except (ClientError, BotoCoreError) as e:
+        logger.warning("Could not destroy Gateway %s: %s", gateway_id, e)
+        return False

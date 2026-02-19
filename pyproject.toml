@@ -1,6 +1,6 @@
 [project]
 name = "arch-sparring-agent"
-version = "0.5.3"
+version = "0.6.0"
 description = "Multi-agent architecture review system using AWS Bedrock"
 readme = "README.md"
 license = { text = "MIT" }
@@ -77,7 +77,7 @@ known-first-party = ["arch_sparring_agent"]
 dev = ["ruff>=0.14.8", "pytest>=8.0.0"]
 
 [project.scripts]
-arch-review = "arch_sparring_agent.cli:main"
+arch-review = "arch_sparring_agent.cli:cli"
 
 [project.urls]
 Homepage = "https://github.com/michelangelo17/arch-sparring-agent"

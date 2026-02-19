@@ -12,6 +12,43 @@ from .gateway import associate_gateway_with_policy_engine, setup_gateway
 logger = logging.getLogger(__name__)
 
 
+def destroy_policy_engine(
+    policy_engine_id: str, region: str = DEFAULT_REGION
+) -> bool:
+    """Delete all policies in an engine, then delete the engine itself.
+
+    Returns:
+        True if the engine was destroyed, False otherwise.
+    """
+    try:
+        client = boto3.client("bedrock-agentcore-control", region_name=region)
+
+        # Delete all policies first (engine can't be deleted while policies exist)
+        next_token = None
+        while True:
+            kwargs = {"policyEngineId": policy_engine_id}
+            if next_token:
+                kwargs["nextToken"] = next_token
+            response = client.list_policies(**kwargs)
+            for p in response.get("policies", []):
+                pid = p["policyId"]
+                try:
+                    client.delete_policy(policyEngineId=policy_engine_id, policyId=pid)
+                    logger.info("Deleted policy: %s", p.get("name", pid))
+                except (ClientError, BotoCoreError) as e:
+                    logger.warning("Could not delete policy %s: %s", pid, e)
+            next_token = response.get("nextToken")
+            if not next_token:
+                break
+
+        client.delete_policy_engine(policyEngineId=policy_engine_id)
+        logger.info("Policy Engine destroyed: %s", policy_engine_id)
+        return True
+    except (ClientError, BotoCoreError) as e:
+        logger.warning("Could not destroy Policy Engine %s: %s", policy_engine_id, e)
+        return False
+
+
 def setup_policy_engine(
     region: str = DEFAULT_REGION, policy_engine_name: str = "ArchReviewPolicyEngine"
 ) -> str | None:

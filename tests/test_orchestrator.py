@@ -1,17 +1,19 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from arch_sparring_agent.exceptions import ConfigurationError
+from arch_sparring_agent.infra import SharedConfig
 from arch_sparring_agent.orchestrator import ReviewOrchestrator
+
+FAKE_CONFIG = SharedConfig(
+    gateway_id="gw-123",
+    gateway_arn="arn:aws:bedrock-agentcore:eu-central-1:111111111111:gateway/gw-123",
+    policy_engine_id="pe-456",
+    region="eu-central-1",
+)
 
 
 class TestReviewOrchestrator(unittest.TestCase):
     def setUp(self):
-        self.mock_setup_policies = patch(
-            "arch_sparring_agent.orchestrator.setup_architecture_review_policies"
-        ).start()
-        self.mock_setup_policies.return_value = "policy-engine-id"
-
         # Mock create_model to return distinguishable fake models
         self.mock_reasoning_model = MagicMock(name="reasoning_model")
         self.mock_standard_model = MagicMock(name="standard_model")
@@ -75,9 +77,13 @@ class TestReviewOrchestrator(unittest.TestCase):
 
     def test_init(self):
         """Test initialization of ReviewOrchestrator."""
-        orch = ReviewOrchestrator(documents_dir="docs", templates_dir="tmpl", diagrams_dir="diag")
+        orch = ReviewOrchestrator(
+            documents_dir="docs",
+            templates_dir="tmpl",
+            diagrams_dir="diag",
+            shared_config=FAKE_CONFIG,
+        )
 
-        self.mock_setup_policies.assert_called()
         self.mock_create_req.assert_called()
         self.mock_create_arch.assert_called()
         self.mock_create_quest.assert_called()
@@ -85,10 +91,16 @@ class TestReviewOrchestrator(unittest.TestCase):
         self.mock_create_rev.assert_called()
 
         self.assertFalse(orch.ci_mode)
+        self.assertEqual(orch.policy_engine_id, "pe-456")
 
     def test_run_review(self):
         """Test the run_review method flow with context condensation."""
-        orch = ReviewOrchestrator(documents_dir="docs", templates_dir="tmpl", diagrams_dir="diag")
+        orch = ReviewOrchestrator(
+            documents_dir="docs",
+            templates_dir="tmpl",
+            diagrams_dir="diag",
+            shared_config=FAKE_CONFIG,
+        )
 
         # Setup return values for runners
         self.mock_run_questions.return_value = "Questions Context"
@@ -135,29 +147,6 @@ class TestReviewOrchestrator(unittest.TestCase):
         self.assertEqual(result["risks"], "Sparring Context")
         self.assertEqual(result["risks_findings"], "[extracted:Sparring] Sparring Context")
 
-    def test_init_fails_if_policy_setup_fails(self):
-        """Test that init raises ConfigurationError if policy engine setup fails."""
-        self.mock_setup_policies.return_value = None
-
-        with self.assertRaises(ConfigurationError) as ctx:
-            ReviewOrchestrator(documents_dir="docs", templates_dir="tmpl", diagrams_dir="diag")
-
-        self.assertIn("Policy Engine setup failed", str(ctx.exception))
-        self.assertIn("--skip-policy-check", str(ctx.exception))
-
-    def test_init_allows_skip_policy_check(self):
-        """Test that skip_policy_check=True allows init to succeed without policies."""
-        self.mock_setup_policies.return_value = None
-
-        orch = ReviewOrchestrator(
-            documents_dir="docs",
-            templates_dir="tmpl",
-            diagrams_dir="diag",
-            skip_policy_check=True,
-        )
-
-        self.assertIsNone(orch.policy_engine_id)
-
     def test_output_fn_callback(self):
         """Test that output_fn callback is called for captured output."""
         captured = []
@@ -165,6 +154,7 @@ class TestReviewOrchestrator(unittest.TestCase):
             documents_dir="docs",
             templates_dir="tmpl",
             diagrams_dir="diag",
+            shared_config=FAKE_CONFIG,
             output_fn=captured.append,
         )
 
@@ -185,6 +175,7 @@ class TestReviewOrchestrator(unittest.TestCase):
             documents_dir="docs",
             templates_dir="tmpl",
             diagrams_dir="diag",
+            shared_config=FAKE_CONFIG,
             reasoning_level="off",
         )
 
@@ -201,6 +192,7 @@ class TestReviewOrchestrator(unittest.TestCase):
             documents_dir="docs",
             templates_dir="tmpl",
             diagrams_dir="diag",
+            shared_config=FAKE_CONFIG,
             model_name="opus-4.6",
         )
 
