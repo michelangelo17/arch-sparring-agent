@@ -230,13 +230,39 @@ LENS_URL_PATTERNS = [
 ]
 
 
+def _is_redirect_page(html: str) -> str | None:
+    """Detect meta-refresh redirect pages and return the target URL (relative)."""
+    soup = BeautifulSoup(html, "html.parser")
+    meta = soup.find("meta", attrs={"http-equiv": re.compile(r"refresh", re.I)})
+    if meta:
+        content = meta.get("content", "")
+        match = re.search(r"URL=([^\s\"']+)", content, re.I)
+        if match:
+            return match.group(1)
+    return None
+
+
 def _find_lens_landing(slug: str) -> tuple[str, str | None]:
-    """Try known URL patterns for a lens. Returns (url, html) or (url, None)."""
+    """Try known URL patterns for a lens. Returns (url, html) or (url, None).
+
+    Follows meta-refresh redirects (common on ``welcome.html`` pages).
+    """
     for pattern in LENS_URL_PATTERNS:
         url = pattern.format(slug=slug)
         html = _fetch(url)
-        if html:
-            return url, html
+        if not html:
+            continue
+
+        redirect_target = _is_redirect_page(html)
+        if redirect_target:
+            resolved = urljoin(url, redirect_target)
+            resolved_html = _fetch(resolved)
+            if resolved_html:
+                return resolved, resolved_html
+            continue
+
+        return url, html
+
     return "", None
 
 
@@ -244,16 +270,30 @@ def _scrape_lens(lens_slug: str, lens_name: str) -> list[ScrapedPage]:
     """Scrape an official lens and its sub-pages."""
     logger.info("Scraping lens: %s", lens_name)
 
-    lens_scope = f"https://docs.aws.amazon.com/wellarchitected/latest/{lens_slug}/"
+    lens_scope = (
+        f"https://docs.aws.amazon.com/wellarchitected/latest/{lens_slug}/"
+    )
     landing_url, landing_html = _find_lens_landing(lens_slug)
     if not landing_html:
         logger.warning("Could not find lens: %s", lens_slug)
         return []
 
-    page_urls = _crawl(landing_url, lens_scope)
-
     pages: list[ScrapedPage] = []
 
+    landing_content = _extract_content(landing_html)
+    if landing_content and len(landing_content) >= 100:
+        pages.append(
+            ScrapedPage(
+                source=lens_slug,
+                pillar="lens",
+                page_id=_page_id_from_url(landing_url),
+                title=_extract_title(landing_html, lens_name),
+                content=landing_content,
+                url=landing_url,
+            )
+        )
+
+    page_urls = _crawl(landing_url, lens_scope)
     for url in page_urls:
         html = _fetch(url)
         if not html:

@@ -348,7 +348,14 @@ def _create_data_source(kb_id: str, bucket_name: str, region: str) -> str:
                 },
             },
             vectorIngestionConfiguration={
-                "chunkingConfiguration": {"chunkingStrategy": "NONE"},
+                "chunkingConfiguration": {
+                    "chunkingStrategy": "SEMANTIC",
+                    "semanticChunkingConfiguration": {
+                        "maxTokens": 300,
+                        "bufferSize": 1,
+                        "breakpointPercentileThreshold": 95,
+                    },
+                },
             },
         )
         ds_id = resp["dataSource"]["dataSourceId"]
