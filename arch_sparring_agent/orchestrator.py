@@ -27,25 +27,43 @@ from .context_condenser import (
     extract_phase_findings,
     extract_requirements,
 )
-from .exceptions import ConfigurationError
-from .policy import setup_architecture_review_policies
+from .infra import SharedConfig
 
 logger = logging.getLogger(__name__)
 
+_VERIFY_DEFAULTS_PROMPT = """You are an AWS service defaults expert. For each item listed under
+"Features Not Found" below, determine whether the AWS service provides this
+feature BY DEFAULT even without explicit CloudFormation configuration.
+
+For each item:
+- If the service DOES provide it by default, move it to "Features Verified
+  (via service default)" with a one-line explanation.
+- If the service does NOT provide it by default, keep it in "Features Not Found".
+
+Preserve the "Components" and original "Features Verified" sections unchanged.
+Only reclassify items from "Features Not Found" when you are confident the
+service default covers the requirement. When uncertain, leave the item in
+"Features Not Found".
+
+Return the full updated findings with all three sections."""
+
 
 class ReviewOrchestrator:
-    """Orchestrates multi-agent architecture review."""
+    """Orchestrates multi-agent architecture review.
+
+    Infrastructure (Gateway, Policy Engine, Cedar policies) must already
+    exist — created via ``arch-review deploy``.
+    """
 
     def __init__(
         self,
         documents_dir: str,
         templates_dir: str,
         diagrams_dir: str,
+        shared_config: SharedConfig,
         model_name: str = DEFAULT_MODEL,
-        region: str = "eu-central-1",
         ci_mode: bool = False,
         source_dir: str | None = None,
-        skip_policy_check: bool = False,
         output_fn: Callable[[str], None] | None = None,
         reasoning_level: str = DEFAULT_REASONING_LEVEL,
     ):
@@ -53,40 +71,34 @@ class ReviewOrchestrator:
         self.templates_dir = templates_dir
         self.diagrams_dir = diagrams_dir
         self.source_dir = source_dir
-        self.region = region
+        self.region = shared_config.region
         self.ci_mode = ci_mode
         self.output_fn = output_fn
         self.model_name = model_name
+        self.policy_engine_id = shared_config.policy_engine_id
 
-        logger.info("Setting up Policy Engine and Policies")
-        self.policy_engine_id = setup_architecture_review_policies(region=region)
-        if self.policy_engine_id:
-            logger.info("Policy Engine ID: %s", self.policy_engine_id)
-        elif skip_policy_check:
-            logger.warning(
-                "Policy Engine setup failed (--skip-policy-check enabled). "
-                "Agents will NOT have Cedar tool-access restrictions. "
-                "Running without security policy enforcement."
-            )
-        else:
-            raise ConfigurationError(
-                "Policy Engine setup failed. Cedar policies could not be created.\n"
-                "Agents cannot run without security policy enforcement.\n"
-                "To bypass this check (development only), use --skip-policy-check."
-            )
+        logger.info("Using Policy Engine: %s", self.policy_engine_id)
 
         # Models: reasoning enabled for analysis-heavy agents, off for extraction/summarization
         standard_model = create_model(model_name, reasoning=False)
         if reasoning_level == "off":
-            reasoning_model = standard_model  # all agents use standard
+            reasoning_model = standard_model
         else:
             reasoning_model = create_model(
                 model_name, reasoning=True, reasoning_level=reasoning_level
             )
 
+        kb_id = shared_config.knowledge_base_id
+        kb_region = shared_config.region if kb_id else None
+
         self.requirements_agent = create_requirements_agent(documents_dir, standard_model)
         self.architecture_agent = create_architecture_agent(
-            templates_dir, diagrams_dir, reasoning_model, source_dir=source_dir
+            templates_dir,
+            diagrams_dir,
+            reasoning_model,
+            source_dir=source_dir,
+            knowledge_base_id=kb_id,
+            region=kb_region,
         )
 
         if ci_mode:
@@ -100,7 +112,11 @@ class ReviewOrchestrator:
                 source_dir=source_dir,
             )
             self.sparring_agent = create_sparring_agent(standard_model)
-            self.review_agent = create_review_agent(reasoning_model)
+            self.review_agent = create_review_agent(
+                reasoning_model,
+                knowledge_base_id=kb_id,
+                region=kb_region,
+            )
 
         self.standard_model = standard_model
         self.captured_output: list[str] = []
@@ -120,6 +136,32 @@ class ReviewOrchestrator:
         self.captured_output.append(content)
         if self.output_fn:
             self.output_fn(content)
+
+    def _verify_against_defaults(self, arch_findings: str) -> str:
+        """Filter false positives by verifying 'Features Not Found' against AWS service defaults.
+
+        Uses a focused model call whose only job is to check whether flagged
+        items are actually provided by the service by default.
+        """
+        if "Features Not Found" not in arch_findings:
+            return arch_findings
+
+        from strands import Agent
+
+        verifier = Agent(
+            name="DefaultsVerifier",
+            model=self.standard_model,
+            callback_handler=None,
+            system_prompt=_VERIFY_DEFAULTS_PROMPT,
+            tools=[],
+        )
+        try:
+            result = str(verifier(arch_findings))
+            logger.info("Service-defaults verification complete")
+            return result
+        except Exception:
+            logger.warning("Service-defaults verification failed, using unverified findings")
+            return arch_findings
 
     def run_review(self) -> dict:
         """Execute the 5-phase review process."""
@@ -180,6 +222,9 @@ Summarize architecture, patterns, and verify which requirements have implementat
 
         # Extract structured architecture findings for downstream phases
         arch_findings = extract_architecture_findings(arch_summary, self.standard_model)
+
+        # Verify "Features Not Found" against AWS service defaults
+        arch_findings = self._verify_against_defaults(arch_findings)
 
         # Phase 3: Questions/Gaps
         phase3_title = "Identified Gaps" if self.ci_mode else "Clarifying Questions"

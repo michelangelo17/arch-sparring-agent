@@ -3,6 +3,8 @@
 from strands import Agent
 from strands.models import BedrockModel
 
+from ..profiles import get_directive
+
 
 def create_ci_question_agent(model_id: str | BedrockModel) -> Agent:
     """Create agent that identifies gaps without user interaction."""
@@ -40,23 +42,24 @@ Copy items from "Features Not Found" section only:"""
 
 def create_ci_sparring_agent(model_id: str | BedrockModel) -> Agent:
     """Create agent that challenges architecture without user interaction."""
+    system_prompt = """Assess risks for the CONFIRMED GAPS provided.
+
+RULES:
+1. Only assess risks for gaps explicitly listed in the input
+2. If no gaps provided, say "No significant risks identified"
+
+Format per gap:
+- Risk: [gap name] - Impact: [High/Medium/Low] - Mitigation: [action]"""
+
+    directive = get_directive("ci")
+    if directive:
+        system_prompt += f"\n\n{directive}"
+
     return Agent(
         name="SparringAgent",
         model=model_id,
         callback_handler=None,
-        system_prompt="""Assess risks for the CONFIRMED GAPS provided.
-
-RULES:
-1. Only assess risks for gaps explicitly listed in the input
-2. Do NOT invent new gaps or risks
-3. Assess impact based on real-world consequences, not hypothetical compliance frameworks
-4. Only rate a gap as High impact if it creates an actively exploitable vulnerability
-   or directly violates a STATED requirement (not an assumed one)
-5. Missing best practices that don't affect functionality are Low or Medium
-6. If no gaps provided, say "No significant risks identified"
-
-Format per gap:
-- Risk: [gap name] - Impact: [High/Medium/Low] - Mitigation: [action]""",
+        system_prompt=system_prompt,
         tools=[],
     )
 
@@ -77,11 +80,7 @@ Do NOT add risks for features not in the gaps list."""
 
 def create_ci_review_agent(model_id: str | BedrockModel) -> Agent:
     """Create concise review agent for CI mode."""
-    return Agent(
-        name="ReviewAgent",
-        model=model_id,
-        callback_handler=None,
-        system_prompt="""Write a brief architecture review based ONLY on provided gaps/risks.
+    system_prompt = """Write a brief architecture review based ONLY on provided gaps/risks.
 
 ## Summary
 2 sentences on overall assessment.
@@ -93,24 +92,28 @@ Do NOT list items here that you then dismiss as non-issues.
 
 ## Risks & Mitigations
 List only risks from input. If no genuine gaps exist, write "No significant risks identified."
-Do NOT pad with hypothetical or minimal risks.
 
 ## Verdict
 - PASS: No gaps, or all requirements met (including via service defaults)
 - PASS WITH CONCERNS: Has genuine gaps that warrant attention but no active vulnerabilities
 - FAIL: Only for actively exploitable security vulnerabilities or violations of
-  STATED requirements. Do NOT fail for missing best practices alone.
+  STATED requirements.
 
 RULES:
 1. Do NOT invent gaps or risks not in the input
 2. If "Features Verified" shows a feature exists, it is NOT a gap
 3. Items marked "RESOLVED" are NOT confirmed gaps -- exclude them
-4. Base verdict on CONFIRMED gaps only
-5. Do NOT assume compliance requirements that aren't in the stated requirements
-6. Missing best practices are concerns, not failures
-7. It is fine to have empty sections -- a clean architecture is a good result
-8. Do NOT pad sections with non-issues to fill space
-9. If all gaps were resolved or none exist, verdict is PASS""",
+4. Base verdict on CONFIRMED gaps only"""
+
+    directive = get_directive("ci")
+    if directive:
+        system_prompt += f"\n\n{directive}"
+
+    return Agent(
+        name="ReviewAgent",
+        model=model_id,
+        callback_handler=None,
+        system_prompt=system_prompt,
         tools=[],
     )
 

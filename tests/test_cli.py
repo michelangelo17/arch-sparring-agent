@@ -4,7 +4,7 @@ import unittest
 
 from click.testing import CliRunner
 
-from arch_sparring_agent.cli import _get_verdict_and_exit_code, get_version, main
+from arch_sparring_agent.cli import _get_verdict_and_exit_code, cli, get_version
 
 
 class TestGetVersion(unittest.TestCase):
@@ -37,25 +37,45 @@ class TestGetVerdictAndExitCode(unittest.TestCase):
         self.assertEqual(code, 1)
 
 
-class TestMainCli(unittest.TestCase):
+class TestCliGroup(unittest.TestCase):
     def setUp(self):
         self.runner = CliRunner()
 
     def test_help_exits_0(self):
-        result = self.runner.invoke(main, ["--help"])
+        result = self.runner.invoke(cli, ["--help"])
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Architecture Review Sparring Partner", result.output)
-        self.assertIn("--help", result.output)
 
     def test_version_shows_version(self):
-        result = self.runner.invoke(main, ["--version"])
+        result = self.runner.invoke(cli, ["--version"])
         self.assertEqual(result.exit_code, 0)
         self.assertIn("arch-review", result.output)
 
-    def test_missing_required_dirs_shows_error(self):
+    def test_run_help_shows_options(self):
+        result = self.runner.invoke(cli, ["run", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("--documents-dir", result.output)
+
+    def test_deploy_help_shows_options(self):
+        result = self.runner.invoke(cli, ["deploy", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("--region", result.output)
+
+    def test_destroy_help_shows_options(self):
+        result = self.runner.invoke(cli, ["destroy", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("--confirm", result.output)
+
+    def test_remediate_help_shows_options(self):
+        result = self.runner.invoke(cli, ["remediate", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("--model", result.output)
+
+    def test_run_missing_required_dirs_shows_error(self):
         result = self.runner.invoke(
-            main,
+            cli,
             [
+                "run",
                 "--documents-dir",
                 "/nonexistent/documents",
                 "--templates-dir",

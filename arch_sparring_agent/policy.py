@@ -12,6 +12,43 @@ from .gateway import associate_gateway_with_policy_engine, setup_gateway
 logger = logging.getLogger(__name__)
 
 
+def destroy_policy_engine(
+    policy_engine_id: str, region: str = DEFAULT_REGION
+) -> bool:
+    """Delete all policies in an engine, then delete the engine itself.
+
+    Returns:
+        True if the engine was destroyed, False otherwise.
+    """
+    try:
+        client = boto3.client("bedrock-agentcore-control", region_name=region)
+
+        # Delete all policies first (engine can't be deleted while policies exist)
+        next_token = None
+        while True:
+            kwargs = {"policyEngineId": policy_engine_id}
+            if next_token:
+                kwargs["nextToken"] = next_token
+            response = client.list_policies(**kwargs)
+            for p in response.get("policies", []):
+                pid = p["policyId"]
+                try:
+                    client.delete_policy(policyEngineId=policy_engine_id, policyId=pid)
+                    logger.info("Deleted policy: %s", p.get("name", pid))
+                except (ClientError, BotoCoreError) as e:
+                    logger.warning("Could not delete policy %s: %s", pid, e)
+            next_token = response.get("nextToken")
+            if not next_token:
+                break
+
+        client.delete_policy_engine(policyEngineId=policy_engine_id)
+        logger.info("Policy Engine destroyed: %s", policy_engine_id)
+        return True
+    except (ClientError, BotoCoreError) as e:
+        logger.warning("Could not destroy Policy Engine %s: %s", policy_engine_id, e)
+        return False
+
+
 def setup_policy_engine(
     region: str = DEFAULT_REGION, policy_engine_name: str = "ArchReviewPolicyEngine"
 ) -> str | None:
@@ -276,7 +313,7 @@ def setup_architecture_review_policies(
     else:
         policies_failed.append("RequirementsAgentToolRestrictions")
 
-    # ArchitectureEvaluator: CFN and diagram tools only
+    # ArchitectureEvaluator: CFN, diagram, source, and optional KB tools
     architecture_cedar = f"""permit(
     principal is AgentCore::OAuthUser,
     action,
@@ -289,6 +326,10 @@ def setup_architecture_review_policies(
         "list_cloudformation_templates",
         "read_architecture_diagram",
         "list_architecture_diagrams",
+        "list_source_files",
+        "read_source_file",
+        "search_source_code",
+        "query_waf",
         "ask_user_question"
     ].contains(context.toolName)
 }};"""
@@ -327,6 +368,29 @@ def setup_architecture_review_policies(
         policies_created.append("ModeratorAgentToolRestrictions")
     else:
         policies_failed.append("ModeratorAgentToolRestrictions")
+
+    # ReviewAgent: optional KB query tool
+    review_cedar = f"""permit(
+    principal is AgentCore::OAuthUser,
+    action,
+    resource == AgentCore::Gateway::"{gateway_arn}"
+) when {{
+    context has agentName && context.agentName == "ReviewAgent" &&
+    context has toolName &&
+    ["query_waf"].contains(context.toolName)
+}};"""
+
+    policy_id = create_policy(
+        engine_id,
+        "ReviewAgentToolRestrictions",
+        review_cedar,
+        "Allows Review Agent to use the WAF Knowledge Base query tool",
+        region=region,
+    )
+    if policy_id:
+        policies_created.append("ReviewAgentToolRestrictions")
+    else:
+        policies_failed.append("ReviewAgentToolRestrictions")
 
     # Default deny: only registered agents are allowed (CRITICAL - must succeed)
     default_deny_cedar = f"""forbid(

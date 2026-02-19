@@ -1,0 +1,120 @@
+"""Upload scraped WAF content to S3 and trigger Bedrock KB ingestion."""
+
+from __future__ import annotations
+
+import logging
+import time
+from pathlib import Path
+
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+
+from ..config import DEFAULT_REGION
+
+logger = logging.getLogger(__name__)
+
+
+def upload_to_s3(content_dir: str | Path, bucket_name: str, region: str = DEFAULT_REGION) -> int:
+    """Upload all markdown files from *content_dir* to *bucket_name*.
+
+    Returns the number of files uploaded.
+    """
+    content_path = Path(content_dir)
+    s3 = boto3.client("s3", region_name=region)
+    count = 0
+
+    for md_file in content_path.rglob("*.md"):
+        key = str(md_file.relative_to(content_path))
+        s3.upload_file(str(md_file), bucket_name, key)
+        count += 1
+        if count % 50 == 0:
+            logger.info("Uploaded %d files...", count)
+
+    logger.info("Uploaded %d files to s3://%s", count, bucket_name)
+    return count
+
+
+def _find_data_source_id(kb_id: str, region: str) -> str | None:
+    """Find the first data source associated with a KB."""
+    bedrock = boto3.client("bedrock-agent", region_name=region)
+    resp = bedrock.list_data_sources(knowledgeBaseId=kb_id)
+    sources = resp.get("dataSourceSummaries", [])
+    return sources[0]["dataSourceId"] if sources else None
+
+
+def start_ingestion(kb_id: str, data_source_id: str, region: str = DEFAULT_REGION) -> str:
+    """Start a KB ingestion job. Returns the ingestion job ID."""
+    bedrock = boto3.client("bedrock-agent", region_name=region)
+    resp = bedrock.start_ingestion_job(
+        knowledgeBaseId=kb_id,
+        dataSourceId=data_source_id,
+    )
+    job_id = resp["ingestionJob"]["ingestionJobId"]
+    logger.info("Started ingestion job: %s", job_id)
+    return job_id
+
+
+def wait_for_ingestion(
+    kb_id: str,
+    data_source_id: str,
+    job_id: str,
+    region: str = DEFAULT_REGION,
+    timeout: int = 600,
+) -> bool:
+    """Poll until the ingestion job completes.
+
+    Returns True on success, False on failure or timeout.
+    """
+    bedrock = boto3.client("bedrock-agent", region_name=region)
+    start = time.monotonic()
+
+    while (time.monotonic() - start) < timeout:
+        try:
+            resp = bedrock.get_ingestion_job(
+                knowledgeBaseId=kb_id,
+                dataSourceId=data_source_id,
+                ingestionJobId=job_id,
+            )
+            status = resp["ingestionJob"]["status"]
+            if status == "COMPLETE":
+                stats = resp["ingestionJob"].get("statistics", {})
+                logger.info(
+                    "Ingestion complete — scanned: %s, indexed: %s, failed: %s",
+                    stats.get("numberOfDocumentsScanned", "?"),
+                    stats.get("numberOfNewDocumentsIndexed", "?"),
+                    stats.get("numberOfDocumentsFailed", "?"),
+                )
+                return True
+            if status == "FAILED":
+                reasons = resp["ingestionJob"].get("failureReasons", [])
+                logger.error("Ingestion failed: %s", reasons)
+                return False
+            logger.debug("Ingestion status: %s", status)
+        except (ClientError, BotoCoreError) as e:
+            logger.warning("Error polling ingestion status: %s", e)
+
+        time.sleep(15)
+
+    logger.warning("Ingestion timed out after %ds", timeout)
+    return False
+
+
+def sync_kb(
+    content_dir: str | Path,
+    kb_id: str,
+    bucket_name: str,
+    region: str = DEFAULT_REGION,
+) -> bool:
+    """Upload content to S3, trigger ingestion, and wait for completion.
+
+    Returns True on success.
+    """
+    upload_to_s3(content_dir, bucket_name, region)
+
+    ds_id = _find_data_source_id(kb_id, region)
+    if not ds_id:
+        logger.error("No data source found for KB %s", kb_id)
+        return False
+
+    job_id = start_ingestion(kb_id, ds_id, region)
+    return wait_for_ingestion(kb_id, ds_id, job_id, region)
