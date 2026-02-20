@@ -51,37 +51,36 @@ def create_requirements_agent(
         doc = parser.read_markdown_file(filename)
         content = str(doc["content"])
 
-        # If content > threshold (~6k tokens), summarize to avoid context overflow
-        if len(content) > DOC_SUMMARY_THRESHOLD:
-            summarizer = Agent(
-                name="DocSummarizer",
-                model=model_id,
-                callback_handler=None,
-                system_prompt=_SUMMARIZE_PROMPT,
-                tools=[],
-            )
+        if len(content) <= DOC_SUMMARY_THRESHOLD:
+            return f"Content from {filename}:\n\n{content}"
+
+        try:
+            if len(content) > DOC_CHUNK_SUMMARY_THRESHOLD:
+                summary = chunked_extract(content, _SUMMARIZE_PROMPT, model_id)
+            else:
+                summarizer = Agent(
+                    name="DocSummarizer",
+                    model=model_id,
+                    callback_handler=None,
+                    system_prompt=_SUMMARIZE_PROMPT,
+                    tools=[],
+                )
+                summary = str(summarizer(f"Summarize this content:\n\n{content}"))
+
+            return f"Content from {filename} (Summarized):\n\n{summary}"
+        except (ContextWindowOverflowException, MaxTokensReachedException, ClientError) as e:
             try:
-                if len(content) > DOC_CHUNK_SUMMARY_THRESHOLD:
-                    summary = chunked_extract(content, _SUMMARIZE_PROMPT, model_id)
-                else:
-                    summary = str(summarizer(f"Summarize this content:\n\n{content}"))
-
-                return f"Content from {filename} (Summarized):\n\n{summary}"
-            except (ContextWindowOverflowException, MaxTokensReachedException, ClientError) as e:
-                try:
-                    summary = chunked_extract(content, _SUMMARIZE_PROMPT, model_id)
-                    return f"Content from {filename} (Chunk Summarized after error):\n\n{summary}"
-                except (
-                    ContextWindowOverflowException,
-                    MaxTokensReachedException,
-                    ClientError,
-                ) as chunk_err:
-                    return (
-                        f"Error reading {filename}: Could not summarize ({e}) "
-                        f"or chunk-summarize ({chunk_err})"
-                    )
-
-        return f"Content from {filename}:\n\n{content}"
+                summary = chunked_extract(content, _SUMMARIZE_PROMPT, model_id)
+                return f"Content from {filename} (Chunk Summarized after error):\n\n{summary}"
+            except (
+                ContextWindowOverflowException,
+                MaxTokensReachedException,
+                ClientError,
+            ) as chunk_err:
+                return (
+                    f"Error reading {filename}: Could not summarize ({e}) "
+                    f"or chunk-summarize ({chunk_err})"
+                )
 
     @tool
     def list_available_documents() -> list[str]:

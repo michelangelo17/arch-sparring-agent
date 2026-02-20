@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ..config import SOURCE_FILE_MAX_CHARS
 from ..exceptions import ToolError
-from . import validate_path
+from . import validate_file_size, validate_path
 
 
 class SourceAnalyzer:
@@ -44,16 +44,7 @@ class SourceAnalyzer:
         if path.suffix not in self.SUPPORTED_EXTENSIONS:
             raise ToolError(f"Unsupported file type: {path.suffix}")
 
-        file_size = path.stat().st_size
-        if file_size > SOURCE_FILE_MAX_CHARS:
-            size_kb = file_size / 1_000
-            limit_kb = SOURCE_FILE_MAX_CHARS / 1_000
-            raise ToolError(
-                f"Source file '{filename}' is {size_kb:.0f}KB which exceeds the "
-                f"{limit_kb:.0f}KB limit. Split large files or increase the "
-                f"limit with ARCH_REVIEW_SOURCE_MAX_CHARS."
-            )
-
+        validate_file_size(path, SOURCE_FILE_MAX_CHARS, "ARCH_REVIEW_SOURCE_MAX_CHARS")
         return path.read_text(encoding="utf-8")
 
     def search_source(self, pattern: str) -> str:

@@ -48,7 +48,6 @@ def setup_agentcore_memory(
         memory_id, memory_status = _find_memory_by_name(memories, memory_name)
 
         if memory_id:
-            # Check if memory is active
             if memory_status and memory_status.upper() != "ACTIVE":
                 logger.info("Memory '%s' exists but status is %s", memory_name, memory_status)
                 for attempt in range(12):
@@ -123,15 +122,13 @@ def setup_agentcore_memory(
 
 
 def create_session_manager(
-    memory_config: AgentCoreMemoryConfig | None, actor_id: str | None = None
+    memory_config: AgentCoreMemoryConfig | None,
 ) -> AgentCoreMemorySessionManager | None:
-    """Create a session manager for agent memory."""
+    """Create a session manager from a memory config."""
     if not memory_config:
         return None
 
-    if not actor_id:
-        actor_id = getattr(
-            memory_config, "actor_id", f"actor_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        )
-
+    actor_id = getattr(
+        memory_config, "actor_id", f"actor_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    )
     return AgentCoreMemorySessionManager(agentcore_memory_config=memory_config, actor_id=actor_id)

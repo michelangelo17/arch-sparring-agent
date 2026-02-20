@@ -59,8 +59,6 @@ def create_question_agent(
     """Create agent for asking clarifying questions with verification tools."""
 
     questions_asked = []
-
-    # Setup analyzers for verification
     cfn_analyzer = CloudFormationAnalyzer(templates_dir) if templates_dir else None
     source_analyzer = SourceAnalyzer(source_dir) if source_dir else None
 
@@ -78,7 +76,6 @@ def create_question_agent(
 
     tools = [ask_user, done_asking]
 
-    # Add verification tools if directories provided
     if cfn_analyzer:
 
         @tool
@@ -134,7 +131,7 @@ def create_question_agent(
     )
 
 
-def run_questions(agent: Agent, req_findings: str, arch_findings: str) -> str:
+def run_questions(agent: Agent, arch_findings: str) -> str:
     """Execute question phase with extracted findings."""
     result = agent(
         f"""Review the "Features Not Found" section below.

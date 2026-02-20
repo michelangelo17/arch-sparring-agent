@@ -6,7 +6,7 @@ import frontmatter
 
 from ..config import DOC_MAX_CHARS
 from ..exceptions import ToolError
-from . import validate_path
+from . import validate_file_size, validate_path
 
 
 class DocumentParser:
@@ -21,15 +21,7 @@ class DocumentParser:
         if not file_path.exists():
             raise ToolError(f"File not found: {file_path}")
 
-        file_size = file_path.stat().st_size
-        if file_size > DOC_MAX_CHARS:
-            size_kb = file_size / 1_000
-            limit_kb = DOC_MAX_CHARS / 1_000
-            raise ToolError(
-                f"Document '{filename}' is {size_kb:.0f}KB which exceeds the "
-                f"{limit_kb:.0f}KB limit. Split large documents or increase the "
-                f"limit with ARCH_REVIEW_DOC_MAX_CHARS."
-            )
+        validate_file_size(file_path, DOC_MAX_CHARS, "ARCH_REVIEW_DOC_MAX_CHARS")
 
         doc = frontmatter.loads(file_path.read_text(encoding="utf-8"))
         return {"filename": filename, "content": doc.content, "metadata": doc.metadata}

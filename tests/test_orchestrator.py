@@ -155,7 +155,6 @@ class TestReviewOrchestratorRunReview(unittest.TestCase):
 
         self.mock_run_questions.assert_called_with(
             orch.question_agent,
-            "[extracted] Requirements Summary",
             "[extracted] Architecture Summary",
         )
 
@@ -166,15 +165,15 @@ class TestReviewOrchestratorRunReview(unittest.TestCase):
 
         self.mock_gen_review.assert_called()
 
-        self.assertEqual(result["review"], "Final Review")
-        self.assertEqual(result["requirements_summary"], "Requirements Summary")
-        self.assertEqual(result["requirements_findings"], "[extracted] Requirements Summary")
-        self.assertEqual(result["architecture_summary"], "Architecture Summary")
-        self.assertEqual(result["architecture_findings"], "[extracted] Architecture Summary")
-        self.assertEqual(result["gaps"], "Questions Context")
-        self.assertEqual(result["gaps_findings"], "[extracted:Q&A] Questions Context")
-        self.assertEqual(result["risks"], "Sparring Context")
-        self.assertEqual(result["risks_findings"], "[extracted:Sparring] Sparring Context")
+        self.assertEqual(result.review, "Final Review")
+        self.assertEqual(result.requirements_summary, "Requirements Summary")
+        self.assertEqual(result.requirements_findings, "[extracted] Requirements Summary")
+        self.assertEqual(result.architecture_summary, "Architecture Summary")
+        self.assertEqual(result.architecture_findings, "[extracted] Architecture Summary")
+        self.assertEqual(result.gaps, "Questions Context")
+        self.assertEqual(result.gaps_findings, "[extracted:Q&A] Questions Context")
+        self.assertEqual(result.risks, "Sparring Context")
+        self.assertEqual(result.risks_findings, "[extracted:Sparring] Sparring Context")
 
     def test_output_fn_callback(self):
         captured = []

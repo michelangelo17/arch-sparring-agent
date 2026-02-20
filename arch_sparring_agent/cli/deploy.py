@@ -81,7 +81,7 @@ def deploy(region, gateway_name, policy_engine_name, with_kb, verbose):
     click.echo(f"  Policy Engine ID: {engine_id}")
     if kb_id:
         click.echo(f"  Knowledge Base:   {kb_id}")
-    click.echo(f"  Config stored in: SSM {_ssm_param_name()}")
+    click.echo(f"  Config stored in: SSM {SSM_PARAMETER_NAME}")
 
 
 def _deploy_infra(region: str, gateway_name: str, policy_engine_name: str) -> tuple[str, str, str]:
@@ -107,10 +107,6 @@ def _deploy_infra(region: str, gateway_name: str, policy_engine_name: str) -> tu
         raise click.ClickException(f"Policy Engine / Cedar policy setup failed: {e}") from e
 
     return gateway_arn, gateway_id, engine_id
-
-
-def _ssm_param_name() -> str:
-    return SSM_PARAMETER_NAME
 
 
 @cli.command()

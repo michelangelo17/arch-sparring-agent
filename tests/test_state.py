@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from arch_sparring_agent.orchestrator import ReviewResult
 from arch_sparring_agent.state import (
     ReviewState,
     _extract_gaps,
@@ -286,8 +287,8 @@ class TestExtractionLogic(unittest.TestCase):
     # Full integration: CI-style review
     # ----------------------------------------------------------------
     def test_extract_state_from_review_flat_format(self):
-        review_result = {
-            "review": """
+        review_result = ReviewResult(
+            review="""
 ## Gaps
 - Missing Gap 1
 
@@ -299,11 +300,16 @@ class TestExtractionLogic(unittest.TestCase):
 
 Verdict: PASS
 """,
-            "gaps": "",
-            "risks": "",
-            "requirements_summary": "Reqs",
-            "architecture_summary": "Arch",
-        }
+            full_session="",
+            requirements_summary="Reqs",
+            requirements_findings="",
+            architecture_summary="Arch",
+            architecture_findings="",
+            gaps="",
+            gaps_findings="",
+            risks="",
+            risks_findings="",
+        )
 
         state = extract_state_from_review(review_result)
 
@@ -315,8 +321,8 @@ Verdict: PASS
 
     def test_extract_state_from_review_ci_format(self):
         """Full integration test with the nested CI-style review format."""
-        review_result = {
-            "review": """### Architecture Review
+        review_result = ReviewResult(
+            review="""### Architecture Review
 
 #### Summary
 The architecture shows potential inefficiencies in resource utilization.
@@ -341,11 +347,16 @@ The architecture shows potential inefficiencies in resource utilization.
 
 Verdict: PASS WITH CONCERNS
 """,
-            "gaps": "",
-            "risks": "",
-            "requirements_summary": "Reqs",
-            "architecture_summary": "Arch",
-        }
+            full_session="",
+            requirements_summary="Reqs",
+            requirements_findings="",
+            architecture_summary="Arch",
+            architecture_findings="",
+            gaps="",
+            gaps_findings="",
+            risks="",
+            risks_findings="",
+        )
 
         state = extract_state_from_review(review_result)
 

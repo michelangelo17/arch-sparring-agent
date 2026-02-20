@@ -8,6 +8,7 @@ from botocore.exceptions import ClientError
 from strands import Agent
 from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
+from ..config import DEFAULT_REGION
 from ..infra.memory import create_session_manager, setup_agentcore_memory
 from ..state import ReviewState
 
@@ -80,11 +81,9 @@ def _number_to_prompt(num: int, state: ReviewState) -> str | None:
 def create_remediation_agent(
     state: ReviewState,
     model_id: str,
-    region: str = "eu-central-1",
+    region: str = DEFAULT_REGION,
 ) -> Agent:
     """Create agent for remediation discussions with session memory."""
-
-    # Set up memory for session continuity (stable IDs for cross-session persistence)
     session_manager = None
     if state.project_name:
         safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", state.project_name)[:40]
@@ -112,7 +111,6 @@ def create_remediation_agent(
             "Session memory requires a project name for persistence."
         )
 
-    # Build context
     gaps_text = _format_list(state.gaps, "severity")
     risks_text = _format_list(state.risks, "impact")
     recs_text = _format_recommendations(state.recommendations)

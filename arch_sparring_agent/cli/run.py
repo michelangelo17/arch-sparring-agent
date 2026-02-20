@@ -1,8 +1,10 @@
 """Run CLI command."""
 
 import json
+import os
 import shutil
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -157,9 +159,6 @@ def run(
       arch-review run --profile strict --reasoning-level medium
     """
     _configure_logging(verbose)
-
-    import os
-
     os.environ["AWS_REGION"] = region
 
     profile_data = load_profile(profile_name)
@@ -223,11 +222,10 @@ def _run_review(
         )
 
         result = orchestrator.run_review()
-        verdict, exit_code = _get_verdict_and_exit_code(result["review"])
+        verdict, exit_code = _get_verdict_and_exit_code(result.review)
 
         review_path = out_path / DEFAULT_REVIEW_FILE
-        full_session = result.get("full_session", result["review"])
-        review_path.write_text(full_session)
+        review_path.write_text(result.full_session)
         click.echo(f"\nReview saved to: {review_path}")
 
         if not no_state:
@@ -246,7 +244,5 @@ def _run_review(
         sys.exit(EXIT_ERROR)
     except Exception as e:
         click.echo(f"Unexpected error: {e}", err=True)
-        import traceback
-
         click.echo(traceback.format_exc(), err=True)
         sys.exit(EXIT_ERROR)

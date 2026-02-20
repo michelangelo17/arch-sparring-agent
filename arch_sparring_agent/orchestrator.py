@@ -3,8 +3,10 @@
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import dataclass, field
 
 from strands import Agent
+from strands.models import BedrockModel
 
 from .agents.architecture_agent import create_architecture_agent
 from .agents.question_agent import create_question_agent, run_questions
@@ -29,6 +31,24 @@ from .context_condenser import (
 from .infra import SharedConfig
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ReviewResult:
+    """Structured output from a completed review run."""
+
+    review: str
+    full_session: str
+    requirements_summary: str
+    requirements_findings: str
+    architecture_summary: str
+    architecture_findings: str
+    gaps: str
+    gaps_findings: str
+    risks: str
+    risks_findings: str
+    agents_used: list[str] = field(default_factory=list)
+
 
 _VERIFY_DEFAULTS_PROMPT = """You are an AWS service defaults expert. For each item listed under
 "Features Not Found" below, determine whether the AWS service provides this
@@ -56,12 +76,12 @@ class ReviewOrchestrator:
 
     def __init__(
         self,
-        requirements_agent,
-        architecture_agent,
-        question_agent,
-        sparring_agent,
-        review_agent,
-        standard_model,
+        requirements_agent: Agent,
+        architecture_agent: Agent,
+        question_agent: Agent,
+        sparring_agent: Agent,
+        review_agent: Agent,
+        standard_model: BedrockModel,
         output_fn: Callable[[str], None] | None = None,
     ):
         self.requirements_agent = requirements_agent
@@ -182,7 +202,7 @@ class ReviewOrchestrator:
             logger.warning("Service-defaults verification failed, using unverified findings")
             return arch_findings
 
-    def run_review(self) -> dict:
+    def run_review(self) -> ReviewResult:
         """Execute the 5-phase review process."""
         self.captured_output = []
 
@@ -219,7 +239,7 @@ Summarize architecture, patterns, and verify which requirements have implementat
 
         # Phase 3: Clarifying Questions
         self._capture("\n## Phase 3: Clarifying Questions\n")
-        qa_context = run_questions(self.question_agent, req_findings, arch_findings)
+        qa_context = run_questions(self.question_agent, arch_findings)
         self._capture(f"\n{qa_context}")
 
         qa_findings = extract_phase_findings(qa_context, "Q&A", self.standard_model)
@@ -242,25 +262,25 @@ Summarize architecture, patterns, and verify which requirements have implementat
         self._capture(review_text)
         self._capture("=" * 60)
 
-        return {
-            "review": review_text,
-            "full_session": self.get_full_session(),
-            "requirements_summary": req_summary,
-            "requirements_findings": req_findings,
-            "architecture_summary": arch_summary,
-            "architecture_findings": arch_findings,
-            "gaps": qa_context,
-            "gaps_findings": qa_findings,
-            "risks": sparring_context,
-            "risks_findings": sparring_findings,
-            "agents_used": [
+        return ReviewResult(
+            review=review_text,
+            full_session=self.get_full_session(),
+            requirements_summary=req_summary,
+            requirements_findings=req_findings,
+            architecture_summary=arch_summary,
+            architecture_findings=arch_findings,
+            gaps=qa_context,
+            gaps_findings=qa_findings,
+            risks=sparring_context,
+            risks_findings=sparring_findings,
+            agents_used=[
                 AGENT_REQUIREMENTS,
                 AGENT_ARCHITECTURE,
                 AGENT_QUESTION,
                 AGENT_SPARRING,
                 AGENT_REVIEW,
             ],
-        }
+        )
 
     def get_full_session(self) -> str:
         """Return captured session output for file export."""
