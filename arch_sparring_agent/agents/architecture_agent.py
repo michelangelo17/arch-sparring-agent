@@ -146,8 +146,13 @@ Tasks:
      "modern-industrial-data-technology-lens",
      "mergers-and-acquisitions-lens"
    Pass sources=["well-architected-framework", "<lens>"] to get both
-   core and lens-specific results. Compare each recommendation against
-   what you found in templates/source. Flag gaps."""
+   core and lens-specific results.
+   CRITICAL: Only include recommendations that apply to the ACTUAL
+   services and compute model in use. If the architecture is serverless
+   (Lambda, Step Functions, DynamoDB), do NOT recommend EC2-specific
+   practices like Spot Instances, Reserved Instances, or instance
+   right-sizing. Contextualize every recommendation against what you
+   actually found in the templates and source code. Flag real gaps only."""
         task_num += 1
 
     base_prompt += """
