@@ -6,12 +6,40 @@ from collections.abc import Callable
 
 from botocore.exceptions import ClientError
 from strands import Agent
+from strands.models import BedrockModel
 from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
-from ..memory import create_session_manager, setup_agentcore_memory
+from ..config import DEFAULT_REGION
+from ..infra.memory import create_session_manager, setup_agentcore_memory
 from ..state import ReviewState
 
 logger = logging.getLogger(__name__)
+
+_SYSTEM_PROMPT_TEMPLATE = """You help resolve architecture review findings.
+
+PROJECT: {project_name}
+VERDICT: {verdict}
+
+TECH STACK & REQUIREMENTS:
+{requirements_summary}
+
+ARCHITECTURE:
+{architecture_summary}
+
+GAPS:
+{gaps_text}
+
+RISKS:
+{risks_text}
+
+RECOMMENDATIONS:
+{recs_text}
+
+RULES:
+- Keep responses SHORT (under 200 words)
+- Only provide code when explicitly asked
+- One issue at a time
+- Use tech stack info for language-specific advice"""
 
 
 def _format_list(items: list[dict], severity_key: str) -> str:
@@ -53,12 +81,10 @@ def _number_to_prompt(num: int, state: ReviewState) -> str | None:
 
 def create_remediation_agent(
     state: ReviewState,
-    model_id: str,
-    region: str = "eu-central-1",
+    model: str | BedrockModel,
+    region: str = DEFAULT_REGION,
 ) -> Agent:
     """Create agent for remediation discussions with session memory."""
-
-    # Set up memory for session continuity (stable IDs for cross-session persistence)
     session_manager = None
     if state.project_name:
         safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", state.project_name)[:40]
@@ -86,40 +112,23 @@ def create_remediation_agent(
             "Session memory requires a project name for persistence."
         )
 
-    # Build context
     gaps_text = _format_list(state.gaps, "severity")
     risks_text = _format_list(state.risks, "impact")
     recs_text = _format_recommendations(state.recommendations)
 
-    system_prompt = f"""You help resolve architecture review findings.
-
-PROJECT: {state.project_name}
-VERDICT: {state.verdict}
-
-TECH STACK & REQUIREMENTS:
-{state.requirements_summary or "No requirements available."}
-
-ARCHITECTURE:
-{state.architecture_summary or "No architecture details."}
-
-GAPS:
-{gaps_text}
-
-RISKS:
-{risks_text}
-
-RECOMMENDATIONS:
-{recs_text}
-
-RULES:
-- Keep responses SHORT (under 200 words)
-- Only provide code when explicitly asked
-- One issue at a time
-- Use tech stack info for language-specific advice"""
+    system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(
+        project_name=state.project_name,
+        verdict=state.verdict,
+        requirements_summary=state.requirements_summary or "No requirements available.",
+        architecture_summary=state.architecture_summary or "No architecture details.",
+        gaps_text=gaps_text,
+        risks_text=risks_text,
+        recs_text=recs_text,
+    )
 
     return Agent(
         name="RemediationAgent",
-        model=model_id,
+        model=model,
         system_prompt=system_prompt,
         tools=[],
         session_manager=session_manager,

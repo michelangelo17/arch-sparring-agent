@@ -9,14 +9,7 @@ from PIL import Image, UnidentifiedImageError
 
 from ..config import DEFAULT_REGION, DIAGRAM_MAX_BYTES, DIAGRAM_MAX_TOKENS
 from ..exceptions import ToolError
-
-
-def _validate_path(base_dir: Path, filename: str) -> Path:
-    """Resolve path and verify it stays within the base directory."""
-    file_path = (base_dir / filename).resolve()
-    if not file_path.is_relative_to(base_dir.resolve()):
-        raise ToolError(f"Path traversal detected: {filename}")
-    return file_path
+from . import validate_file_size, validate_path
 
 
 class DiagramAnalyzer:
@@ -35,20 +28,11 @@ class DiagramAnalyzer:
 
     def read_diagram(self, filename: str) -> str:
         """Analyze diagram and return text description."""
-        image_path = _validate_path(self.diagrams_dir, filename)
+        image_path = validate_path(self.diagrams_dir, filename)
         if not image_path.exists():
             raise ToolError(f"Diagram not found: {filename}")
 
-        # Check file size before reading
-        file_size = image_path.stat().st_size
-        if file_size > DIAGRAM_MAX_BYTES:
-            size_mb = file_size / 1_000_000
-            limit_mb = DIAGRAM_MAX_BYTES / 1_000_000
-            raise ToolError(
-                f"Diagram '{filename}' is {size_mb:.1f}MB which exceeds the "
-                f"{limit_mb:.1f}MB limit. Reduce the image size or increase the "
-                f"limit with ARCH_REVIEW_DIAGRAM_MAX_BYTES."
-            )
+        validate_file_size(image_path, DIAGRAM_MAX_BYTES, "ARCH_REVIEW_DIAGRAM_MAX_BYTES")
 
         try:
             with Image.open(image_path) as img:

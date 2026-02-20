@@ -37,14 +37,3 @@ directives:
     - Only list something in "Features Not Found" if the requirement is genuinely unmet,
       not merely implicit via AWS defaults
 
-  ci: |
-    - Do NOT invent new gaps or risks
-    - Assess impact based on real-world consequences, not hypothetical compliance frameworks
-    - Only rate a gap as High impact if it creates an actively exploitable vulnerability
-      or directly violates a STATED requirement (not an assumed one)
-    - Missing best practices that don't affect functionality are Low or Medium
-    - Do NOT fail for missing best practices alone
-    - Do NOT pad sections with non-issues to fill space
-    - It is fine to have empty sections -- a clean architecture is a good result
-    - If all gaps were resolved or none exist, verdict is PASS
-    - Do NOT assume compliance requirements that aren't in the stated requirements

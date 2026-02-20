@@ -1,10 +1,17 @@
 """Review state management for remediation mode."""
 
+from __future__ import annotations
+
 import json
 import re
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .orchestrator import ReviewResult
 
 
 @dataclass
@@ -25,7 +32,7 @@ class ReviewState:
         return json.dumps(asdict(self), indent=2)
 
     @classmethod
-    def from_json(cls, json_str: str) -> "ReviewState":
+    def from_json(cls, json_str: str) -> ReviewState:
         try:
             data = json.loads(json_str)
         except json.JSONDecodeError as e:
@@ -33,7 +40,7 @@ class ReviewState:
         return cls(**data)
 
     @classmethod
-    def from_file(cls, path: str | Path) -> "ReviewState":
+    def from_file(cls, path: str | Path) -> ReviewState:
         file_path = Path(path)
         try:
             return cls.from_json(file_path.read_text())
@@ -44,8 +51,13 @@ class ReviewState:
         Path(path).write_text(self.to_json())
 
 
+# ---------------------------------------------------------------------------
+# Markdown parsing helpers
+# ---------------------------------------------------------------------------
+
+
 def _infer_severity(text: str) -> str:
-    """Infer severity."""
+    """Infer severity from keywords in text."""
     text_lower = text.lower()
     if "critical" in text_lower or "high" in text_lower:
         return "high"
@@ -54,25 +66,23 @@ def _infer_severity(text: str) -> str:
     return "medium"
 
 
-def _is_duplicate(text: str, items: list[dict], key: str = "description") -> bool:
-    """Check for duplicates."""
-    prefix = text[:50]
-    return any(prefix in item[key] for item in items)
+def _is_duplicate(text: str, items: list, key: str | None = "description") -> bool:
+    """Check if *text* is a prefix-duplicate of any existing item.
 
-
-def _is_duplicate_str(text: str, items: list[str]) -> bool:
-    """Check for duplicates in a string list."""
+    Works with both ``list[dict]`` (default, uses *key*) and
+    ``list[str]`` (pass ``key=None``).
+    """
     prefix = text[:50]
+    if key:
+        return any(prefix in item[key] for item in items)
     return any(prefix in item for item in items)
 
 
 def _strip_markdown(text: str) -> str:
     """Remove common markdown inline formatting."""
     text = text.strip()
-    # Remove bold/italic markers: **text**, *text*, __text__, _text_
     text = re.sub(r"\*{1,2}(.*?)\*{1,2}", r"\1", text)
     text = re.sub(r"_{1,2}(.*?)_{1,2}", r"\1", text)
-    # Remove inline code backticks
     text = re.sub(r"`([^`]+)`", r"\1", text)
     return text.strip()
 
@@ -84,24 +94,22 @@ def _header_level(line: str) -> int:
 
 
 def _is_section_header(line: str, keyword: str) -> bool:
-    """Check if a line is a section header containing the keyword (case-insensitive).
-
-    Matches markdown headers (## ...) and bold headers (**...**) containing the keyword.
-    """
+    """Check if *line* is a markdown/bold section header containing *keyword*."""
     stripped = line.strip()
     if not stripped:
         return False
-    # Markdown header: any level of # containing the keyword
-    if _header_level(stripped) > 0 and keyword.lower() in stripped.lower():
+    lower = stripped.lower()
+    if keyword.lower() not in lower:
+        return False
+    if _header_level(stripped) > 0:
         return True
-    # Bold header or keyword at start: **Gaps**, Key Gaps, etc.
-    if keyword.lower() in stripped.lower() and stripped.startswith("**"):
+    if stripped.startswith("**"):
         return True
     return False
 
 
 def _is_gap_section_header(line: str) -> bool:
-    """Check if a line is a gap list section header (not a numbered gap reference).
+    """Check if *line* is a gap-list section header (not a numbered gap reference).
 
     Matches: "## Confirmed Gaps", "### Key Gaps", "## Gaps"
     Rejects: "##### Gap 1: Feature - ..." (a sub-header referencing a specific gap)
@@ -110,13 +118,10 @@ def _is_gap_section_header(line: str) -> bool:
     if not stripped:
         return False
     lower = stripped.lower()
-    # Must contain "gap" in a section-title sense
     if "gap" not in lower:
         return False
-    # Reject numbered gap references like "Gap 1:", "Gap 2:"
     if re.search(r"gap\s*\d+\s*:", lower):
         return False
-    # Accept markdown headers or bold headers
     if _header_level(stripped) > 0:
         return True
     if stripped.startswith("**"):
@@ -125,26 +130,22 @@ def _is_gap_section_header(line: str) -> bool:
 
 
 def _is_list_item(line: str) -> bool:
-    """Check if a line is a list item (bullet or numbered)."""
+    """Check if a line is a bullet or numbered list item."""
     stripped = line.strip()
     if not stripped:
         return False
-    # Bullet: - item or * item
-    if stripped.startswith("-") or stripped.startswith("*"):
+    if stripped[0] in "-*":
         return True
-    # Numbered: 1. item, 1) item, etc.
     if re.match(r"^\d+[.)]\s", stripped):
         return True
     return False
 
 
 def _extract_list_text(line: str) -> str:
-    """Extract the text content from a list item, stripping bullet/number prefix."""
+    """Strip the bullet/number prefix from a list item."""
     stripped = line.strip()
-    # Remove bullet prefix
-    if stripped.startswith("-") or stripped.startswith("*"):
+    if stripped[0] in "-*":
         return stripped[1:].strip()
-    # Remove numbered prefix: "1. " or "1) "
     match = re.match(r"^\d+[.)]\s*(.*)", stripped)
     if match:
         return match.group(1).strip()
@@ -152,24 +153,73 @@ def _extract_list_text(line: str) -> str:
 
 
 def _is_next_section_at_level(line: str, max_level: int) -> bool:
-    """Check if a line starts a section at the given level or higher (lower number).
-
-    For example, if we're in a #### section, only ## or ### would end it,
-    not ##### sub-headers within it.
-    """
+    """True if *line* is a header at *max_level* or higher (lower number)."""
     level = _header_level(line)
     return level > 0 and level <= max_level
 
 
-def extract_state_from_review(review_result: dict) -> ReviewState:
+# ---------------------------------------------------------------------------
+# Generic section extractor
+# ---------------------------------------------------------------------------
+
+
+def _extract_section_items(
+    text: str,
+    header_matcher: Callable[[str], bool],
+    *,
+    item_filter: Callable[[str], str | None] | None = None,
+) -> list[str]:
+    """Extract list-item texts from sections whose headers match *header_matcher*.
+
+    Walks through *text* line by line. When a matching header is found, all
+    subsequent list items are collected (stripped of markdown formatting) until
+    a same-level-or-higher header ends the section.
+
+    Args:
+        text: The markdown text to parse.
+        header_matcher: Callable that returns True for section-header lines.
+        item_filter: Optional transform applied to each raw item text.
+            Return None to skip the item; return a string to include it.
+    """
+    items: list[str] = []
+    in_section = False
+    section_level = 0
+
+    for line in text.split("\n"):
+        if header_matcher(line):
+            in_section = True
+            section_level = _header_level(line) or 2
+            continue
+        if in_section and _is_next_section_at_level(line, section_level):
+            in_section = False
+            continue
+        if in_section and _is_list_item(line):
+            item_text = _strip_markdown(_extract_list_text(line))
+            if not item_text:
+                continue
+            if item_filter:
+                result = item_filter(item_text)
+                if result is not None:
+                    items.append(result)
+            else:
+                items.append(item_text)
+
+    return items
+
+
+# ---------------------------------------------------------------------------
+# Extraction functions
+# ---------------------------------------------------------------------------
+
+
+def extract_state_from_review(review_result: ReviewResult) -> ReviewState:
     """Extract structured state from review result."""
-    review_text = review_result.get("review", "")
     project_name = Path.cwd().name
 
-    gaps = _extract_gaps(review_text, review_result.get("gaps", ""))
-    risks = _extract_risks(review_text, review_result.get("risks", ""))
-    recommendations = _extract_recommendations(review_text)
-    verdict = extract_verdict(review_text)
+    gaps = _extract_gaps(review_result.review, review_result.qa_context)
+    risks = _extract_risks(review_result.review, review_result.sparring_context)
+    recommendations = _extract_recommendations(review_result.review)
+    verdict = extract_verdict(review_result.review)
 
     return ReviewState(
         timestamp=datetime.now().isoformat(),
@@ -178,146 +228,81 @@ def extract_state_from_review(review_result: dict) -> ReviewState:
         risks=risks,
         recommendations=recommendations,
         verdict=verdict,
-        requirements_summary=review_result.get("requirements_summary", ""),
-        architecture_summary=review_result.get("architecture_summary", ""),
+        requirements_summary=review_result.requirements_summary,
+        architecture_summary=review_result.architecture_summary,
     )
 
 
 def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
-    """Extract gaps from review and context."""
-    gaps = []
+    """Extract gaps from review text and context."""
+    gaps: list[dict] = []
     gap_id = 1
 
+    def _collect_gap(text: str, severity_fn: Callable[[str], str] = _infer_severity) -> None:
+        nonlocal gap_id
+        if len(text) > 5 and not _is_duplicate(text, gaps):
+            gaps.append(
+                {"id": f"gap-{gap_id}", "description": text[:200], "severity": severity_fn(text)}
+            )
+            gap_id += 1
+
     for source in [review_text, gaps_context]:
-        lines = source.split("\n")
-        in_gaps_section = False
-        section_level = 0
+        for item in _extract_section_items(source, _is_gap_section_header):
+            _collect_gap(item)
 
-        for line in lines:
-            if _is_gap_section_header(line):
-                in_gaps_section = True
-                section_level = _header_level(line) or 2
-                continue
-            # Only exit on a header at the same level or higher (not sub-headers)
-            if in_gaps_section and _is_next_section_at_level(line, section_level):
-                in_gaps_section = False
-                continue
-
-            if in_gaps_section and _is_list_item(line):
-                gap_text = _strip_markdown(_extract_list_text(line))
-                if gap_text and len(gap_text) > 5 and not _is_duplicate(gap_text, gaps):
-                    gaps.append(
-                        {
-                            "id": f"gap-{gap_id}",
-                            "description": gap_text[:200],
-                            "severity": _infer_severity(gap_text),
-                        }
-                    )
-                    gap_id += 1
-
-    # Check "Features Not Found" section
     if "not found" in review_text.lower():
-        lines = review_text.split("\n")
-        in_not_found = False
-        section_level = 0
-        for line in lines:
-            if _is_section_header(line, "not found"):
-                in_not_found = True
-                section_level = _header_level(line) or 2
-                continue
-            if in_not_found and _is_next_section_at_level(line, section_level):
-                in_not_found = False
-                continue
-            if in_not_found and _is_list_item(line):
-                gap_text = _strip_markdown(_extract_list_text(line))
-                if gap_text and len(gap_text) > 5 and not _is_duplicate(gap_text, gaps):
-                    gaps.append(
-                        {
-                            "id": f"gap-{gap_id}",
-                            "description": gap_text[:200],
-                            "severity": "medium",
-                        }
-                    )
-                    gap_id += 1
+        for item in _extract_section_items(
+            review_text, lambda line: _is_section_header(line, "not found")
+        ):
+            _collect_gap(item, severity_fn=lambda _: "medium")
 
     return gaps[:20]
 
 
 def _extract_risks(review_text: str, risks_context: str) -> list[dict]:
-    """Extract risks from review.
+    """Extract risks from review text and context.
 
-    Handles two common formats:
-    1. Flat list: "## Risks" followed by bullet points
-    2. Nested: "#### Risks & Mitigations" with "##### Gap N:" sub-headers
-       containing "- **Risk**: ..." bullets
+    Handles flat lists ("## Risks" with bullet points) and nested formats
+    ("#### Risks & Mitigations" with "##### Gap N:" sub-headers).
     """
-    risks = []
+    risks: list[dict] = []
     risk_id = 1
 
+    def _risk_filter(text: str) -> str | None:
+        lower = text.lower()
+        if lower.startswith("impact:") or lower.startswith("mitigation:"):
+            return None
+        if lower.startswith("risk:"):
+            text = text[5:].strip()
+        return text if len(text) > 10 else None
+
     for source in [review_text, risks_context]:
-        lines = source.split("\n")
-        in_risks_section = False
-        section_level = 0
-
-        for line in lines:
-            if _is_section_header(line, "risk"):
-                in_risks_section = True
-                section_level = _header_level(line) or 2
-                continue
-            # Only exit on headers at the same level or higher -- allow sub-headers
-            if in_risks_section and _is_next_section_at_level(line, section_level):
-                in_risks_section = False
-                continue
-
-            if in_risks_section and _is_list_item(line):
-                risk_text = _strip_markdown(_extract_list_text(line))
-                # Skip "Impact:" and "Mitigation:" lines -- only extract "Risk:" lines
-                # or general risk descriptions
-                risk_lower = risk_text.lower()
-                if risk_lower.startswith("impact:") or risk_lower.startswith("mitigation:"):
-                    continue
-                # Strip leading "Risk:" prefix if present
-                if risk_lower.startswith("risk:"):
-                    risk_text = risk_text[5:].strip()
-                if risk_text and len(risk_text) > 10 and not _is_duplicate(risk_text, risks):
-                    risks.append(
-                        {
-                            "id": f"risk-{risk_id}",
-                            "description": risk_text[:200],
-                            "impact": _infer_severity(risk_text),
-                        }
-                    )
-                    risk_id += 1
+        for item in _extract_section_items(
+            source, lambda line: _is_section_header(line, "risk"), item_filter=_risk_filter
+        ):
+            if not _is_duplicate(item, risks):
+                risks.append(
+                    {
+                        "id": f"risk-{risk_id}",
+                        "description": item[:200],
+                        "impact": _infer_severity(item),
+                    }
+                )
+                risk_id += 1
 
     return risks[:10]
 
 
 def _extract_recommendations(review_text: str) -> list[str]:
-    """Extract recommendations from review.
+    """Extract recommendations, falling back to mitigation entries from risk sections."""
+    recommendations: list[str] = []
 
-    Looks for a "Recommendations" section first. If not found, falls back to
-    extracting "Mitigation:" entries from "Risks" sections.
-    """
-    recommendations = []
-    lines = review_text.split("\n")
-    in_recommendations = False
-    section_level = 0
+    for item in _extract_section_items(
+        review_text, lambda line: _is_section_header(line, "recommendation")
+    ):
+        if len(item) > 10:
+            recommendations.append(item[:300])
 
-    for line in lines:
-        if _is_section_header(line, "recommendation"):
-            in_recommendations = True
-            section_level = _header_level(line) or 2
-            continue
-        if in_recommendations and _is_next_section_at_level(line, section_level):
-            in_recommendations = False
-            continue
-
-        if in_recommendations and _is_list_item(line):
-            rec_text = _strip_markdown(_extract_list_text(line))
-            if rec_text and len(rec_text) > 10:
-                recommendations.append(rec_text[:300])
-
-    # Fallback: extract mitigations from risks section if no recommendations found
     if not recommendations:
         recommendations = _extract_mitigations_as_recommendations(review_text)
 
@@ -325,32 +310,22 @@ def _extract_recommendations(review_text: str) -> list[str]:
 
 
 def _extract_mitigations_as_recommendations(review_text: str) -> list[str]:
-    """Extract mitigation entries from risk sections as recommendations."""
-    recommendations = []
-    lines = review_text.split("\n")
-    in_risks_section = False
-    section_level = 0
+    """Extract "Mitigation:" entries from risk/mitigation sections."""
+    recommendations: list[str] = []
 
-    for line in lines:
-        if _is_section_header(line, "risk") or _is_section_header(line, "mitigation"):
-            in_risks_section = True
-            section_level = _header_level(line) or 2
-            continue
-        if in_risks_section and _is_next_section_at_level(line, section_level):
-            in_risks_section = False
-            continue
+    def _mitigation_filter(text: str) -> str | None:
+        if text.lower().startswith("mitigation:"):
+            rec = text[11:].strip()
+            if len(rec) > 10 and not _is_duplicate(rec, recommendations, key=None):
+                return rec[:300]
+        return None
 
-        if in_risks_section and _is_list_item(line):
-            item_text = _strip_markdown(_extract_list_text(line))
-            item_lower = item_text.lower()
-            if item_lower.startswith("mitigation:"):
-                rec_text = item_text[11:].strip()
-                if (
-                    rec_text
-                    and len(rec_text) > 10
-                    and not _is_duplicate_str(rec_text, recommendations)
-                ):
-                    recommendations.append(rec_text[:300])
+    for item in _extract_section_items(
+        review_text,
+        lambda line: _is_section_header(line, "risk") or _is_section_header(line, "mitigation"),
+        item_filter=_mitigation_filter,
+    ):
+        recommendations.append(item)
 
     return recommendations
 
@@ -360,11 +335,9 @@ def extract_verdict(review_text: str) -> str:
 
     Returns one of: "PASS", "PASS WITH CONCERNS", "FAIL".
     """
-    # Strip markdown bold markers for matching
     clean_text = review_text.replace("**", "")
     review_lower = clean_text.lower()
 
-    # Check explicit verdict
     if "verdict" in review_lower:
         after_verdict = review_lower.split("verdict")[-1][:100]
         if "fail" in after_verdict:
@@ -374,14 +347,11 @@ def extract_verdict(review_text: str) -> str:
         elif "pass" in after_verdict:
             return "PASS"
 
-    # Fallback: infer from content
     critical_terms = ["critical", "severe", "major vulnerability", "security vulnerability"]
     if any(term in review_lower for term in critical_terms):
         return "FAIL"
 
-    has_high_impact = "impact: high" in review_lower or "impact high" in review_lower
-    if has_high_impact:
+    if "impact: high" in review_lower or "impact high" in review_lower:
         return "PASS WITH CONCERNS"
 
-    # Default to PASS if no concerning signals
     return "PASS"

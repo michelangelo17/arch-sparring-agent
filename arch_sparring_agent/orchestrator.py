@@ -1,23 +1,26 @@
 """Orchestrates the 5-phase architecture review process."""
 
+from __future__ import annotations
+
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import dataclass, field
+
+from strands import Agent
+from strands.models import BedrockModel
 
 from .agents.architecture_agent import create_architecture_agent
-from .agents.ci_agents import (
-    create_ci_question_agent,
-    create_ci_review_agent,
-    create_ci_sparring_agent,
-    generate_ci_review,
-    run_ci_questions,
-    run_ci_sparring,
-)
 from .agents.question_agent import create_question_agent, run_questions
 from .agents.requirements_agent import create_requirements_agent
-from .agents.review_agent import create_review_agent, generate_review
+from .agents.review_agent import create_review_agent, run_review
 from .agents.sparring_agent import create_sparring_agent, run_sparring
 from .config import (
+    AGENT_ARCHITECTURE,
+    AGENT_QUESTION,
+    AGENT_REQUIREMENTS,
+    AGENT_REVIEW,
+    AGENT_SPARRING,
     DEFAULT_MODEL,
     DEFAULT_REASONING_LEVEL,
     create_model,
@@ -30,6 +33,24 @@ from .context_condenser import (
 from .infra import SharedConfig
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ReviewResult:
+    """Structured output from a completed review run."""
+
+    review: str
+    full_session: str
+    requirements_summary: str
+    requirements_findings: str
+    architecture_summary: str
+    architecture_findings: str
+    qa_context: str
+    qa_findings: str
+    sparring_context: str
+    sparring_findings: str
+    agents_used: list[str] = field(default_factory=list)
+
 
 _VERIFY_DEFAULTS_PROMPT = """You are an AWS service defaults expert. For each item listed under
 "Features Not Found" below, determine whether the AWS service provides this
@@ -51,35 +72,45 @@ Return the full updated findings with all three sections."""
 class ReviewOrchestrator:
     """Orchestrates multi-agent architecture review.
 
-    Infrastructure (Gateway, Policy Engine, Cedar policies) must already
-    exist — created via ``arch-review deploy``.
+    Accepts pre-built agents via the constructor for testability.
+    Use the ``create()`` classmethod for the standard construction path.
     """
 
     def __init__(
         self,
+        requirements_agent: Agent,
+        architecture_agent: Agent,
+        question_agent: Agent,
+        sparring_agent: Agent,
+        review_agent: Agent,
+        standard_model: BedrockModel,
+        output_fn: Callable[[str], None] | None = None,
+    ):
+        self.requirements_agent = requirements_agent
+        self.architecture_agent = architecture_agent
+        self.question_agent = question_agent
+        self.sparring_agent = sparring_agent
+        self.review_agent = review_agent
+        self.standard_model = standard_model
+        self.output_fn = output_fn
+        self.captured_output: list[str] = []
+
+    @classmethod
+    def create(
+        cls,
         documents_dir: str,
         templates_dir: str,
         diagrams_dir: str,
         shared_config: SharedConfig,
         model_name: str = DEFAULT_MODEL,
-        ci_mode: bool = False,
         source_dir: str | None = None,
         output_fn: Callable[[str], None] | None = None,
         reasoning_level: str = DEFAULT_REASONING_LEVEL,
-    ):
-        self.documents_dir = documents_dir
-        self.templates_dir = templates_dir
-        self.diagrams_dir = diagrams_dir
-        self.source_dir = source_dir
-        self.region = shared_config.region
-        self.ci_mode = ci_mode
-        self.output_fn = output_fn
-        self.model_name = model_name
-        self.policy_engine_id = shared_config.policy_engine_id
+        profile: dict | None = None,
+    ) -> ReviewOrchestrator:
+        """Build all agents and return a configured orchestrator."""
+        logger.info("Using Policy Engine: %s", shared_config.policy_engine_id)
 
-        logger.info("Using Policy Engine: %s", self.policy_engine_id)
-
-        # Models: reasoning enabled for analysis-heavy agents, off for extraction/summarization
         standard_model = create_model(model_name, reasoning=False)
         if reasoning_level == "off":
             reasoning_model = standard_model
@@ -91,42 +122,47 @@ class ReviewOrchestrator:
         kb_id = shared_config.knowledge_base_id
         kb_region = shared_config.region if kb_id else None
 
-        self.requirements_agent = create_requirements_agent(documents_dir, standard_model)
-        self.architecture_agent = create_architecture_agent(
+        requirements_agent = create_requirements_agent(documents_dir, standard_model)
+        architecture_agent = create_architecture_agent(
             templates_dir,
             diagrams_dir,
             reasoning_model,
             source_dir=source_dir,
             knowledge_base_id=kb_id,
             region=kb_region,
+            profile=profile,
+        )
+        question_agent = create_question_agent(
+            standard_model,
+            templates_dir=templates_dir,
+            source_dir=source_dir,
+        )
+        sparring_agent = create_sparring_agent(standard_model, profile=profile)
+        review_agent = create_review_agent(
+            reasoning_model,
+            knowledge_base_id=kb_id,
+            region=kb_region,
+            profile=profile,
         )
 
-        if ci_mode:
-            self.question_agent = create_ci_question_agent(standard_model)
-            self.sparring_agent = create_ci_sparring_agent(standard_model)
-            self.review_agent = create_ci_review_agent(reasoning_model)
-        else:
-            self.question_agent = create_question_agent(
-                standard_model,
-                templates_dir=templates_dir,
-                source_dir=source_dir,
-            )
-            self.sparring_agent = create_sparring_agent(standard_model)
-            self.review_agent = create_review_agent(
-                reasoning_model,
-                knowledge_base_id=kb_id,
-                region=kb_region,
-            )
-
-        self.standard_model = standard_model
-        self.captured_output: list[str] = []
+        return cls(
+            requirements_agent=requirements_agent,
+            architecture_agent=architecture_agent,
+            question_agent=question_agent,
+            sparring_agent=sparring_agent,
+            review_agent=review_agent,
+            standard_model=standard_model,
+            output_fn=output_fn,
+        )
 
     @staticmethod
     def _strip_redacted(text: str) -> str:
-        """Remove [REDACTED] reasoning traces from model output."""
-        # Remove lines that are just [REDACTED] (with optional surrounding whitespace/dots)
+        """Remove [REDACTED] reasoning traces from model output.
+
+        Bedrock models with extended thinking enabled emit reasoning traces
+        as [REDACTED] placeholders in the response text.
+        """
         cleaned = re.sub(r"^[.\s]*\[REDACTED\][.\s]*$", "", text, flags=re.MULTILINE)
-        # Collapse runs of 3+ blank lines into 2
         cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
         return cleaned.strip()
 
@@ -153,8 +189,6 @@ class ReviewOrchestrator:
             logger.info("No gaps to verify — skipping service-defaults check")
             return arch_findings
 
-        from strands import Agent
-
         verifier = Agent(
             name="DefaultsVerifier",
             model=self.standard_model,
@@ -170,93 +204,53 @@ class ReviewOrchestrator:
             logger.warning("Service-defaults verification failed, using unverified findings")
             return arch_findings
 
-    def run_review(self) -> dict:
+    def run_review(self) -> ReviewResult:
         """Execute the 5-phase review process."""
         self.captured_output = []
 
-        mode_label = "CI/CD MODE" if self.ci_mode else "INTERACTIVE MODE"
         self._capture("=" * 60)
-        self._capture(f"ARCHITECTURE REVIEW SESSION ({mode_label})")
+        self._capture("ARCHITECTURE REVIEW SESSION")
         self._capture("=" * 60 + "\n")
 
         # Phase 1: Requirements
         self._capture("## Phase 1: Requirements Analysis\n")
-        if self.ci_mode:
-            req_prompt = "Analyze documents. List key requirements in bullet points. Max 20 lines."
-        else:
-            req_prompt = """
-            Analyze all documents. Summarize requirements and constraints. Keep it under 600 words.
-            """
-        req_result = self.requirements_agent(req_prompt)
+        req_result = self.requirements_agent(
+            "Analyze all documents. Summarize requirements and constraints. "
+            "Keep it under 600 words."
+        )
         req_summary = str(req_result)
         self._capture(req_summary)
 
-        # Extract structured requirements for downstream phases
         req_findings = extract_requirements(req_summary, self.standard_model)
 
         # Phase 2: Architecture
         self._capture("\n## Phase 2: Architecture Analysis\n")
-        if self.ci_mode:
-            arch_prompt = f"""Analyze templates/diagrams/source code.
-
-REQUIREMENTS TO VERIFY:
-{req_findings}
-
-Tasks:
-1. List infrastructure components
-2. For each requirement above, search source code to verify it's implemented
-3. Output a "Features Verified" section listing what you found evidence for
-
-Format:
-### Components
-- Component list
-
-### Features Verified
-- Feature: [evidence found, e.g. "language caching via SUMMARY#${{language}} key in checkCache.ts"]
-
-### Features Not Found
-- Feature: [searched but no evidence]"""
-        else:
-            arch_prompt = f"""Analyze all templates, diagrams, and source code.
+        arch_result = self.architecture_agent(
+            f"""Analyze all templates, diagrams, and source code.
 
 REQUIREMENTS:
 {req_findings}
 
 Summarize architecture, patterns, and verify which requirements have implementations."""
-        arch_result = self.architecture_agent(arch_prompt)
+        )
         arch_summary = str(arch_result)
         self._capture(arch_summary)
 
-        # Extract structured architecture findings for downstream phases
         arch_findings = extract_architecture_findings(arch_summary, self.standard_model)
-
-        # Verify "Features Not Found" against AWS service defaults
         arch_findings = self._verify_against_defaults(arch_findings)
 
-        # Phase 3: Questions/Gaps
-        phase3_title = "Identified Gaps" if self.ci_mode else "Clarifying Questions"
-        self._capture(f"\n## Phase 3: {phase3_title}\n")
-        if self.ci_mode:
-            qa_context = run_ci_questions(self.question_agent, arch_findings)
-        else:
-            qa_context = run_questions(self.question_agent, req_findings, arch_findings)
-            self._capture(f"\n{qa_context}")
+        # Phase 3: Clarifying Questions
+        self._capture("\n## Phase 3: Clarifying Questions\n")
+        qa_context = run_questions(self.question_agent, arch_findings)
+        self._capture(f"\n{qa_context}")
 
-        # Extract structured Q&A findings
         qa_findings = extract_phase_findings(qa_context, "Q&A", self.standard_model)
 
-        # Phase 4: Sparring/Challenges
-        phase4_title = "Risk Analysis" if self.ci_mode else "Architecture Sparring"
-        self._capture(f"\n## Phase 4: {phase4_title}\n")
-        if self.ci_mode:
-            sparring_context = run_ci_sparring(self.sparring_agent, qa_findings)
-        else:
-            sparring_context = run_sparring(
-                self.sparring_agent, req_findings, arch_findings, qa_findings
-            )
-            self._capture(f"\n{sparring_context}")
+        # Phase 4: Architecture Sparring
+        self._capture("\n## Phase 4: Architecture Sparring\n")
+        sparring_context = run_sparring(self.sparring_agent, arch_findings, qa_findings)
+        self._capture(f"\n{sparring_context}")
 
-        # Extract structured sparring findings
         sparring_findings = extract_phase_findings(
             sparring_context, "Sparring", self.standard_model
         )
@@ -264,35 +258,31 @@ Summarize architecture, patterns, and verify which requirements have implementat
         # Phase 5: Final Review
         self._capture("\n## Phase 5: Final Review\n")
         self._capture("=" * 60)
-        if self.ci_mode:
-            review_text = generate_ci_review(self.review_agent, qa_findings, sparring_findings)
-        else:
-            review_text = generate_review(
-                self.review_agent, req_findings, arch_findings, qa_findings, sparring_findings
-            )
+        review_text = run_review(
+            self.review_agent, req_findings, arch_findings, qa_findings, sparring_findings
+        )
         self._capture(review_text)
         self._capture("=" * 60)
 
-        return {
-            "review": review_text,
-            "full_session": self.get_full_session(),
-            "requirements_summary": req_summary,
-            "requirements_findings": req_findings,
-            "architecture_summary": arch_summary,
-            "architecture_findings": arch_findings,
-            "gaps": qa_context,
-            "gaps_findings": qa_findings,
-            "risks": sparring_context,
-            "risks_findings": sparring_findings,
-            "ci_mode": self.ci_mode,
-            "agents_used": [
-                "RequirementsAnalyst",
-                "ArchitectureEvaluator",
-                "QuestionAgent",
-                "SparringAgent",
-                "ReviewAgent",
+        return ReviewResult(
+            review=review_text,
+            full_session=self.get_full_session(),
+            requirements_summary=req_summary,
+            requirements_findings=req_findings,
+            architecture_summary=arch_summary,
+            architecture_findings=arch_findings,
+            qa_context=qa_context,
+            qa_findings=qa_findings,
+            sparring_context=sparring_context,
+            sparring_findings=sparring_findings,
+            agents_used=[
+                AGENT_REQUIREMENTS,
+                AGENT_ARCHITECTURE,
+                AGENT_QUESTION,
+                AGENT_SPARRING,
+                AGENT_REVIEW,
             ],
-        }
+        )
 
     def get_full_session(self) -> str:
         """Return captured session output for file export."""

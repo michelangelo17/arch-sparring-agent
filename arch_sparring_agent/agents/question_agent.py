@@ -3,85 +3,12 @@
 from strands import Agent, tool
 from strands.models import BedrockModel
 
+from ..config import AGENT_QUESTION
+from ..tools import search_content
 from ..tools.cfn_analyzer import CloudFormationAnalyzer
 from ..tools.source_analyzer import SourceAnalyzer
 
-
-def create_question_agent(
-    model_id: str | BedrockModel,
-    templates_dir: str | None = None,
-    source_dir: str | None = None,
-) -> Agent:
-    """Create agent for asking clarifying questions with verification tools."""
-
-    questions_asked = []
-
-    # Setup analyzers for verification
-    cfn_analyzer = CloudFormationAnalyzer(templates_dir) if templates_dir else None
-    source_analyzer = SourceAnalyzer(source_dir) if source_dir else None
-
-    @tool
-    def ask_user(question: str) -> str:
-        """Ask a clarifying question to the user."""
-        questions_asked.append(question)
-        print(f"\n❓ [{len(questions_asked)}] {question}")
-        return input("Your answer: ")
-
-    @tool
-    def done_asking() -> str:
-        """Signal completion of question phase."""
-        return "Proceeding to sparring phase."
-
-    tools = [ask_user, done_asking]
-
-    # Add verification tools if directories provided
-    if cfn_analyzer:
-
-        @tool
-        def list_templates() -> list[str]:
-            """List available CloudFormation template files."""
-            return cfn_analyzer.list_templates()
-
-        @tool
-        def search_templates(pattern: str) -> str:
-            """Search CloudFormation templates for a pattern (e.g., 'encryption')."""
-            results = []
-            for template_name in cfn_analyzer.list_templates():
-                content = cfn_analyzer.read_template(template_name)
-                if pattern.lower() in content.lower():
-                    lines = content.split("\n")
-                    matches = []
-                    for i, line in enumerate(lines, 1):
-                        if pattern.lower() in line.lower():
-                            matches.append(f"  L{i}: {line.strip()}")
-                    if matches:
-                        results.append(f"\n{template_name}:\n" + "\n".join(matches[:5]))
-            if not results:
-                return f"No matches for '{pattern}' in CloudFormation templates."
-            return "".join(results[:10])
-
-        @tool
-        def read_template(filename: str) -> str:
-            """Read a specific CloudFormation template."""
-            return cfn_analyzer.read_template(filename)
-
-        tools.extend([list_templates, search_templates, read_template])
-
-    if source_analyzer:
-
-        @tool
-        def search_source(pattern: str) -> str:
-            """Search source code for a pattern."""
-            return source_analyzer.search_source(pattern)
-
-        @tool
-        def read_source(filename: str) -> str:
-            """Read a specific source file."""
-            return source_analyzer.read_source_file(filename)
-
-        tools.extend([search_source, read_source])
-
-    system_prompt = """You verify gaps and identify concerns before asking users. Your workflow:
+_SYSTEM_PROMPT = """You verify gaps and identify concerns before asking users. Your workflow:
 
 1. FIRST use list_templates to discover available template files
 2. For each item in "Features Not Found":
@@ -124,16 +51,83 @@ agent has full context. Format:
 - Gap: [description] -- Not addressed by user
 Items verified in templates/source (not gaps) can be omitted."""
 
+
+def create_question_agent(
+    model: str | BedrockModel,
+    templates_dir: str | None = None,
+    source_dir: str | None = None,
+) -> Agent:
+    """Create agent for asking clarifying questions with verification tools."""
+
+    questions_asked = []
+    cfn_analyzer = CloudFormationAnalyzer(templates_dir) if templates_dir else None
+    source_analyzer = SourceAnalyzer(source_dir) if source_dir else None
+
+    @tool
+    def ask_user(question: str) -> str:
+        """Ask a clarifying question to the user."""
+        questions_asked.append(question)
+        print(f"\n❓ [{len(questions_asked)}] {question}")
+        return input("Your answer: ")
+
+    @tool
+    def done_asking() -> str:
+        """Signal completion of question phase."""
+        return "Proceeding to sparring phase."
+
+    tools = [ask_user, done_asking]
+
+    if cfn_analyzer:
+
+        @tool
+        def list_templates() -> list[str]:
+            """List available CloudFormation template files."""
+            return cfn_analyzer.list_templates()
+
+        @tool
+        def search_templates(pattern: str) -> str:
+            """Search CloudFormation templates for a pattern (e.g., 'encryption')."""
+            results: list[str] = []
+            for template_name in cfn_analyzer.list_templates():
+                content = cfn_analyzer.read_template(template_name)
+                match_block = search_content(content, pattern, template_name)
+                if match_block:
+                    results.append(match_block)
+            if not results:
+                return f"No matches for '{pattern}' in CloudFormation templates."
+            return "".join(results[:10])
+
+        @tool
+        def read_template(filename: str) -> str:
+            """Read a specific CloudFormation template."""
+            return cfn_analyzer.read_template(filename)
+
+        tools.extend([list_templates, search_templates, read_template])
+
+    if source_analyzer:
+
+        @tool
+        def search_source(pattern: str) -> str:
+            """Search source code for a pattern."""
+            return source_analyzer.search_source(pattern)
+
+        @tool
+        def read_source(filename: str) -> str:
+            """Read a specific source file."""
+            return source_analyzer.read_source_file(filename)
+
+        tools.extend([search_source, read_source])
+
     return Agent(
-        name="QuestionAgent",
-        model=model_id,
+        name=AGENT_QUESTION,
+        model=model,
         callback_handler=None,
-        system_prompt=system_prompt,
+        system_prompt=_SYSTEM_PROMPT,
         tools=tools,
     )
 
 
-def run_questions(agent: Agent, req_findings: str, arch_findings: str) -> str:
+def run_questions(agent: Agent, arch_findings: str) -> str:
     """Execute question phase with extracted findings."""
     result = agent(
         f"""Review the "Features Not Found" section below.

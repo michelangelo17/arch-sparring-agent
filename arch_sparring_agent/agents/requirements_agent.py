@@ -5,75 +5,10 @@ from strands import Agent, tool
 from strands.models import BedrockModel
 from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
-from ..config import DOC_CHUNK_SUMMARY_THRESHOLD, DOC_SUMMARY_THRESHOLD
-from ..context_condenser import _chunked_extract
+from ..config import AGENT_REQUIREMENTS, DOC_CHUNK_SUMMARY_THRESHOLD, DOC_SUMMARY_THRESHOLD
+from ..context_condenser import chunked_extract
 
-
-def create_requirements_agent(
-    documents_dir: str,
-    model_id: str | BedrockModel,
-) -> Agent:
-    """Create agent for analyzing requirements documents."""
-
-    from ..tools.document_parser import DocumentParser
-
-    parser = DocumentParser(documents_dir)
-
-    summarize_prompt = (
-        "Summarize this document part. Preserve ALL requirements, constraints, "
-        "and technical details. Be concise but comprehensive."
-    )
-
-    @tool
-    def read_document(filename: str) -> str:
-        """Read a markdown document. Summarizes if too long."""
-        doc = parser.read_markdown_file(filename)
-        content = str(doc["content"])
-
-        # If content > threshold (~6k tokens), summarize to avoid context overflow
-        if len(content) > DOC_SUMMARY_THRESHOLD:
-            summarizer = Agent(
-                name="DocSummarizer",
-                model=model_id,
-                callback_handler=None,
-                system_prompt=summarize_prompt,
-                tools=[],
-            )
-            try:
-                # Use chunked extraction for very large files
-                if len(content) > DOC_CHUNK_SUMMARY_THRESHOLD:
-                    summary = _chunked_extract(content, summarize_prompt, model_id)
-                else:
-                    summary = str(summarizer(f"Summarize this content:\n\n{content}"))
-
-                return f"Content from {filename} (Summarized):\n\n{summary}"
-            except (ContextWindowOverflowException, MaxTokensReachedException, ClientError) as e:
-                # Fallback: try chunking with smaller chunks if single pass failed
-                try:
-                    summary = _chunked_extract(content, summarize_prompt, model_id)
-                    return f"Content from {filename} (Chunk Summarized after error):\n\n{summary}"
-                except (
-                    ContextWindowOverflowException,
-                    MaxTokensReachedException,
-                    ClientError,
-                ) as chunk_err:
-                    return (
-                        f"Error reading {filename}: Could not summarize ({e}) "
-                        f"or chunk-summarize ({chunk_err})"
-                    )
-
-        return f"Content from {filename}:\n\n{content}"
-
-    @tool
-    def list_available_documents() -> list[str]:
-        """List available markdown documents."""
-        return parser.list_documents()
-
-    return Agent(
-        name="RequirementsAnalyst",
-        model=model_id,
-        callback_handler=None,
-        system_prompt="""Analyze requirements documents.
+_SYSTEM_PROMPT = """Analyze requirements documents.
 
 Tasks:
 1. List documents
@@ -92,6 +27,70 @@ Format:
 ### Constraints
 - Item 1
 
-Do NOT copy text verbatim. Summarize.""",
+Do NOT copy text verbatim. Summarize."""
+
+_SUMMARIZE_PROMPT = (
+    "Summarize this document part. Preserve ALL requirements, constraints, "
+    "and technical details. Be concise but comprehensive."
+)
+
+
+def create_requirements_agent(
+    documents_dir: str,
+    model: str | BedrockModel,
+) -> Agent:
+    """Create agent for analyzing requirements documents."""
+
+    from ..tools.document_parser import DocumentParser
+
+    parser = DocumentParser(documents_dir)
+
+    @tool
+    def read_document(filename: str) -> str:
+        """Read a markdown document. Summarizes if too long."""
+        doc = parser.read_markdown_file(filename)
+        content = str(doc["content"])
+
+        if len(content) <= DOC_SUMMARY_THRESHOLD:
+            return f"Content from {filename}:\n\n{content}"
+
+        try:
+            if len(content) > DOC_CHUNK_SUMMARY_THRESHOLD:
+                summary = chunked_extract(content, _SUMMARIZE_PROMPT, model)
+            else:
+                summarizer = Agent(
+                    name="DocSummarizer",
+                    model=model,
+                    callback_handler=None,
+                    system_prompt=_SUMMARIZE_PROMPT,
+                    tools=[],
+                )
+                summary = str(summarizer(f"Summarize this content:\n\n{content}"))
+
+            return f"Content from {filename} (Summarized):\n\n{summary}"
+        except (ContextWindowOverflowException, MaxTokensReachedException, ClientError) as e:
+            try:
+                summary = chunked_extract(content, _SUMMARIZE_PROMPT, model)
+                return f"Content from {filename} (Chunk Summarized after error):\n\n{summary}"
+            except (
+                ContextWindowOverflowException,
+                MaxTokensReachedException,
+                ClientError,
+            ) as chunk_err:
+                return (
+                    f"Error reading {filename}: Could not summarize ({e}) "
+                    f"or chunk-summarize ({chunk_err})"
+                )
+
+    @tool
+    def list_available_documents() -> list[str]:
+        """List available markdown documents."""
+        return parser.list_documents()
+
+    return Agent(
+        name=AGENT_REQUIREMENTS,
+        model=model,
+        callback_handler=None,
+        system_prompt=_SYSTEM_PROMPT,
         tools=[read_document, list_available_documents],
     )

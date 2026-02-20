@@ -2,11 +2,21 @@
 
 import logging
 import time
+from dataclasses import dataclass
+from typing import Any
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from .config import DEFAULT_REGION
+from ..config import (
+    AGENT_ARCHITECTURE,
+    AGENT_QUESTION,
+    AGENT_REQUIREMENTS,
+    AGENT_REVIEW,
+    AGENT_SPARRING,
+    DEFAULT_REGION,
+)
+from ..exceptions import PolicySetupError
 from .gateway import associate_gateway_with_policy_engine, setup_gateway
 
 logger = logging.getLogger(__name__)
@@ -62,11 +72,14 @@ def destroy_policy_engine(policy_engine_id: str, region: str = DEFAULT_REGION) -
 
 def setup_policy_engine(
     region: str = DEFAULT_REGION, policy_engine_name: str = "ArchReviewPolicyEngine"
-) -> str | None:
+) -> str:
     """Create or retrieve a Policy Engine.
 
     Returns:
-        Engine ID string, or None on failure.
+        Engine ID string.
+
+    Raises:
+        PolicySetupError: If the engine cannot be created or found.
     """
     try:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
@@ -88,18 +101,20 @@ def setup_policy_engine(
                 name=policy_engine_name, description="Policy engine for architecture review agents"
             )
             engine_id = response.get("policyEngineId")
+            if not engine_id:
+                raise PolicySetupError(
+                    f"Policy Engine created but no ID in response: {list(response.keys())}"
+                )
             logger.info("Created Policy Engine: %s (ID: %s)", policy_engine_name, engine_id)
 
         return engine_id
 
     except (ClientError, BotoCoreError) as e:
-        logger.warning("Could not set up Policy Engine: %s", e)
-        logger.warning("Continuing without policy controls.")
-        return None
+        raise PolicySetupError(f"Could not set up Policy Engine: {e}") from e
 
 
 def _wait_for_policy_active(
-    client, policy_engine_id: str, policy_id: str, policy_name: str
+    client: Any, policy_engine_id: str, policy_id: str, policy_name: str
 ) -> bool:
     """Wait for policy to become ACTIVE.
 
@@ -201,7 +216,7 @@ def _policy_name_matches(resource: dict, target_name: str) -> bool:
     return value_lower == target_lower or value_lower.startswith(target_lower)
 
 
-def _find_policy_id_by_name(client, policy_engine_id: str, policy_name: str) -> str | None:
+def _find_policy_id_by_name(client: Any, policy_engine_id: str, policy_name: str) -> str | None:
     """Find a policy ID by name with pagination.
 
     Uses case-insensitive prefix matching to handle AWS name normalisation.
@@ -233,7 +248,7 @@ def _find_policy_id_by_name(client, policy_engine_id: str, policy_name: str) -> 
 
 
 def _update_existing_policy(
-    client,
+    client: Any,
     policy_engine_id: str,
     policy_name: str,
     cedar_statement: str,
@@ -271,64 +286,41 @@ def _update_existing_policy(
         return None
 
 
-def setup_architecture_review_policies(
-    region: str = DEFAULT_REGION,
-    policy_engine_name: str = "ArchReviewPolicyEngine",
-    gateway_arn: str | None = None,
-    gateway_name: str = "ArchReviewGateway",
-) -> str | None:
-    """Set up Cedar policies for agent tool restrictions.
+@dataclass
+class _PolicySpec:
+    """Definition of a Cedar policy to create."""
 
-    Returns:
-        Policy engine ID, or None on failure.
-    """
-    gateway_id = None
-    if not gateway_arn:
-        gateway_arn, gateway_id = setup_gateway(region=region, gateway_name=gateway_name)
-        if not gateway_arn:
-            logger.warning(
-                "Could not set up Gateway. Policies cannot be created without a Gateway."
-            )
-            return None
+    name: str
+    cedar: str
+    description: str
+    validation_mode: str = "FAIL_ON_ANY_FINDINGS"
 
-    engine_id = setup_policy_engine(region=region, policy_engine_name=policy_engine_name)
-    if not engine_id:
-        return None
 
-    logger.info("Verifying policies...")
-    policies_created = []
-    policies_failed = []
-
-    # RequirementsAnalyst: document and user interaction tools only
-    requirements_cedar = f"""permit(
+def _build_policy_specs(gateway_arn: str) -> list[_PolicySpec]:
+    """Build the Cedar policy definitions for architecture review agents."""
+    return [
+        _PolicySpec(
+            name="RequirementsAgentToolRestrictions",
+            description="Restricts Requirements Agent to document reading and user interaction",
+            cedar=f"""permit(
     principal is AgentCore::OAuthUser,
     action,
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context has agentName && context.agentName == "RequirementsAnalyst" &&
+    context has agentName && context.agentName == "{AGENT_REQUIREMENTS}" &&
     context has toolName &&
     ["read_document", "list_available_documents", "ask_user_question"].contains(context.toolName)
-}};"""
-
-    policy_id = create_policy(
-        engine_id,
-        "RequirementsAgentToolRestrictions",
-        requirements_cedar,
-        "Restricts Requirements Agent to only use document reading and user interaction tools",
-        region=region,
-    )
-    if policy_id:
-        policies_created.append("RequirementsAgentToolRestrictions")
-    else:
-        policies_failed.append("RequirementsAgentToolRestrictions")
-
-    # ArchitectureEvaluator: CFN, diagram, source, and optional KB tools
-    architecture_cedar = f"""permit(
+}};""",
+        ),
+        _PolicySpec(
+            name="ArchitectureAgentToolRestrictions",
+            description="Restricts Architecture Agent to CFN/diagram reading and user tools",
+            cedar=f"""permit(
     principal is AgentCore::OAuthUser,
     action,
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context has agentName && context.agentName == "ArchitectureEvaluator" &&
+    context has agentName && context.agentName == "{AGENT_ARCHITECTURE}" &&
     context has toolName &&
     [
         "read_cloudformation_template",
@@ -341,123 +333,103 @@ def setup_architecture_review_policies(
         "query_waf",
         "ask_user_question"
     ].contains(context.toolName)
-}};"""
-
-    policy_id = create_policy(
-        engine_id,
-        "ArchitectureAgentToolRestrictions",
-        architecture_cedar,
-        "Restricts Architecture Agent to only use CFN/diagram reading and user tools",
-        region=region,
-    )
-    if policy_id:
-        policies_created.append("ArchitectureAgentToolRestrictions")
-    else:
-        policies_failed.append("ArchitectureAgentToolRestrictions")
-
-    # ReviewModerator: agent-to-agent communication only
-    moderator_cedar = f"""permit(
+}};""",
+        ),
+        _PolicySpec(
+            name="ReviewAgentToolRestrictions",
+            description="Allows Review Agent to use the WAF Knowledge Base query tool",
+            cedar=f"""permit(
     principal is AgentCore::OAuthUser,
     action,
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context has agentName && context.agentName == "ReviewModerator" &&
-    context has toolName &&
-    ["get_requirements_analysis", "get_architecture_analysis"].contains(context.toolName)
-}};"""
-
-    policy_id = create_policy(
-        engine_id,
-        "ModeratorAgentToolRestrictions",
-        moderator_cedar,
-        "Restricts Moderator Agent to only use agent-to-agent communication tools",
-        region=region,
-    )
-    if policy_id:
-        policies_created.append("ModeratorAgentToolRestrictions")
-    else:
-        policies_failed.append("ModeratorAgentToolRestrictions")
-
-    # ReviewAgent: optional KB query tool
-    review_cedar = f"""permit(
-    principal is AgentCore::OAuthUser,
-    action,
-    resource == AgentCore::Gateway::"{gateway_arn}"
-) when {{
-    context has agentName && context.agentName == "ReviewAgent" &&
+    context has agentName && context.agentName == "{AGENT_REVIEW}" &&
     context has toolName &&
     ["query_waf"].contains(context.toolName)
-}};"""
-
-    policy_id = create_policy(
-        engine_id,
-        "ReviewAgentToolRestrictions",
-        review_cedar,
-        "Allows Review Agent to use the WAF Knowledge Base query tool",
-        region=region,
-    )
-    if policy_id:
-        policies_created.append("ReviewAgentToolRestrictions")
-    else:
-        policies_failed.append("ReviewAgentToolRestrictions")
-
-    # Default deny: only registered agents are allowed (CRITICAL - must succeed)
-    default_deny_cedar = f"""forbid(
+}};""",
+        ),
+        _PolicySpec(
+            name="DefaultDenyUnknownAgents",
+            description="Denies access for unknown agents - only registered agents are allowed",
+            validation_mode="IGNORE_ALL_FINDINGS",
+            cedar=f"""forbid(
     principal is AgentCore::OAuthUser,
     action,
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) unless {{
     context has agentName &&
-    (context.agentName == "RequirementsAnalyst" ||
-     context.agentName == "ArchitectureEvaluator" ||
-     context.agentName == "ReviewModerator" ||
-     context.agentName == "QuestionAgent" ||
-     context.agentName == "SparringAgent" ||
-     context.agentName == "ReviewAgent")
-}};"""
+    (context.agentName == "{AGENT_REQUIREMENTS}" ||
+     context.agentName == "{AGENT_ARCHITECTURE}" ||
+     context.agentName == "{AGENT_QUESTION}" ||
+     context.agentName == "{AGENT_SPARRING}" ||
+     context.agentName == "{AGENT_REVIEW}")
+}};""",
+        ),
+    ]
 
-    policy_id = create_policy(
-        engine_id,
-        "DefaultDenyUnknownAgents",
-        default_deny_cedar,
-        "Denies access for unknown agents - only registered agents are allowed",
-        region=region,
-        validation_mode="IGNORE_ALL_FINDINGS",  # Intentionally restrictive policy
-    )
-    if policy_id:
-        policies_created.append("DefaultDenyUnknownAgents")
-    else:
-        policies_failed.append("DefaultDenyUnknownAgents")
 
-    # Fail if any policy failed - all policies are required for security
-    if policies_failed:
-        logger.error(
-            "Policy setup failed. %d policies could not be activated: %s",
-            len(policies_failed),
-            ", ".join(policies_failed),
+def setup_architecture_review_policies(
+    region: str = DEFAULT_REGION,
+    policy_engine_name: str = "ArchReviewPolicyEngine",
+    gateway_arn: str | None = None,
+    gateway_name: str = "ArchReviewGateway",
+) -> str:
+    """Set up Cedar policies for agent tool restrictions.
+
+    Returns:
+        Policy engine ID.
+
+    Raises:
+        PolicySetupError: If gateway, engine, or policy creation fails.
+    """
+    gateway_id = None
+    if not gateway_arn:
+        gateway_arn, gateway_id = setup_gateway(region=region, gateway_name=gateway_name)
+
+    engine_id = setup_policy_engine(region=region, policy_engine_name=policy_engine_name)
+
+    logger.info("Verifying policies...")
+    policies_created: list[str] = []
+    policies_failed: list[str] = []
+
+    for spec in _build_policy_specs(gateway_arn):
+        policy_id = create_policy(
+            engine_id,
+            spec.name,
+            spec.cedar,
+            spec.description,
+            region=region,
+            validation_mode=spec.validation_mode,
         )
-        return None
+        if policy_id:
+            policies_created.append(spec.name)
+        else:
+            policies_failed.append(spec.name)
 
-    if policies_created:
-        logger.info("Verified %d policies:", len(policies_created))
-        for name in policies_created:
-            logger.debug("  - %s", name)
+    if policies_failed:
+        raise PolicySetupError(
+            f"Policy setup failed. {len(policies_failed)} policies could not be activated: "
+            f"{', '.join(policies_failed)}"
+        )
 
-        # Associate gateway with policy engine
-        gw_id = gateway_id
-        if not gw_id and gateway_arn and "/gateway/" in gateway_arn:
-            gw_id = gateway_arn.split("/gateway/")[-1]
+    if not policies_created:
+        raise PolicySetupError("No policies were created.")
 
-        if gw_id:
-            logger.info("Associating Gateway with Policy Engine...")
-            associate_gateway_with_policy_engine(
-                gateway_id=gw_id,
-                policy_engine_id=engine_id,
-                enforcement_mode="ENFORCE",
-                region=region,
-            )
+    logger.info("Verified %d policies:", len(policies_created))
+    for name in policies_created:
+        logger.debug("  - %s", name)
 
-        return engine_id
-    else:
-        logger.warning("No policies were created.")
-        return None
+    gw_id = gateway_id
+    if not gw_id and gateway_arn and "/gateway/" in gateway_arn:
+        gw_id = gateway_arn.split("/gateway/")[-1]
+
+    if gw_id:
+        logger.info("Associating Gateway with Policy Engine...")
+        associate_gateway_with_policy_engine(
+            gateway_id=gw_id,
+            policy_engine_id=engine_id,
+            enforcement_mode="ENFORCE",
+            region=region,
+        )
+
+    return engine_id

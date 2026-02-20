@@ -4,14 +4,7 @@ from pathlib import Path
 
 from ..config import SOURCE_FILE_MAX_CHARS
 from ..exceptions import ToolError
-
-
-def _validate_path(base_dir: Path, filename: str) -> Path:
-    """Resolve path and verify it stays within the base directory."""
-    file_path = (base_dir / filename).resolve()
-    if not file_path.is_relative_to(base_dir.resolve()):
-        raise ToolError(f"Path traversal detected: {filename}")
-    return file_path
+from . import search_content, validate_file_size, validate_path
 
 
 class SourceAnalyzer:
@@ -43,7 +36,7 @@ class SourceAnalyzer:
         Raises:
             ToolError: If file not found, not a file, or unsupported type.
         """
-        path = _validate_path(self.source_dir, filename)
+        path = validate_path(self.source_dir, filename)
         if not path.exists():
             raise ToolError(f"File not found: {filename}")
         if not path.is_file():
@@ -51,35 +44,18 @@ class SourceAnalyzer:
         if path.suffix not in self.SUPPORTED_EXTENSIONS:
             raise ToolError(f"Unsupported file type: {path.suffix}")
 
-        file_size = path.stat().st_size
-        if file_size > SOURCE_FILE_MAX_CHARS:
-            size_kb = file_size / 1_000
-            limit_kb = SOURCE_FILE_MAX_CHARS / 1_000
-            raise ToolError(
-                f"Source file '{filename}' is {size_kb:.0f}KB which exceeds the "
-                f"{limit_kb:.0f}KB limit. Split large files or increase the "
-                f"limit with ARCH_REVIEW_SOURCE_MAX_CHARS."
-            )
-
+        validate_file_size(path, SOURCE_FILE_MAX_CHARS, "ARCH_REVIEW_SOURCE_MAX_CHARS")
         return path.read_text(encoding="utf-8")
 
     def search_source(self, pattern: str) -> str:
         """Search for a pattern across all source files."""
-        results = []
-        pattern_lower = pattern.lower()
+        results: list[str] = []
 
         for filepath in self.list_source_files():
             content = self.read_source_file(filepath)
-            if pattern_lower in content.lower():
-                lines = content.split("\n")
-                matches = []
-                for i, line in enumerate(lines, 1):
-                    if pattern_lower in line.lower():
-                        matches.append(f"  L{i}: {line.strip()}")
-                if matches:
-                    results.append(f"\n{filepath}:\n" + "\n".join(matches[:5]))
-                    if len(matches) > 5:
-                        results.append(f"  ... and {len(matches) - 5} more matches")
+            match_block = search_content(content, pattern, filepath)
+            if match_block:
+                results.append(match_block)
 
         if not results:
             return f"No matches found for: {pattern}"

@@ -1,5 +1,7 @@
 """Shared infrastructure config — SSM-based discovery for deploy-once, use-many."""
 
+from __future__ import annotations
+
 import json
 import logging
 from dataclasses import asdict, dataclass
@@ -7,8 +9,8 @@ from dataclasses import asdict, dataclass
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from .config import DEFAULT_REGION
-from .exceptions import ConfigurationError
+from ..config import DEFAULT_REGION
+from ..exceptions import ConfigurationError
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +32,8 @@ class SharedConfig:
         return json.dumps(asdict(self))
 
     @classmethod
-    def from_json(cls, raw: str) -> "SharedConfig":
-        data = json.loads(raw)
-        # Tolerate configs saved before KB fields existed
-        known = {f.name for f in cls.__dataclass_fields__.values()}
-        return cls(**{k: v for k, v in data.items() if k in known})
+    def from_json(cls, raw: str) -> SharedConfig:
+        return cls(**json.loads(raw))
 
 
 def save_to_ssm(config: SharedConfig) -> None:
