@@ -37,8 +37,7 @@ def _extract_frontmatter(md_path: Path) -> dict[str, str]:
 
 def _build_sidecar(metadata: dict[str, str]) -> str:
     """Build a Bedrock KB ``.metadata.json`` sidecar from extracted fields."""
-    attrs = {k: {"value": v, "type": "STRING"} for k, v in metadata.items()}
-    return json.dumps({"metadataAttributes": attrs}, separators=(",", ":"))
+    return json.dumps({"metadataAttributes": metadata}, separators=(",", ":"))
 
 
 def upload_to_s3(
