@@ -2,22 +2,57 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from pathlib import Path
 
 import boto3
+import yaml
 from botocore.exceptions import BotoCoreError, ClientError
 
 from ..config import DEFAULT_REGION
 
 logger = logging.getLogger(__name__)
 
+METADATA_KEYS = ("source", "pillar")
 
-def upload_to_s3(content_dir: str | Path, bucket_name: str, region: str = DEFAULT_REGION) -> int:
-    """Upload all markdown files from *content_dir* to *bucket_name*.
 
-    Returns the number of files uploaded.
+def _extract_frontmatter(md_path: Path) -> dict[str, str]:
+    """Extract YAML frontmatter metadata from a markdown file."""
+    text = md_path.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        return {}
+    end = text.find("---", 3)
+    if end == -1:
+        return {}
+    try:
+        fm = yaml.safe_load(text[3:end])
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(fm, dict):
+        return {}
+    return {k: str(v) for k, v in fm.items() if k in METADATA_KEYS and v}
+
+
+def _build_sidecar(metadata: dict[str, str]) -> str:
+    """Build a Bedrock KB ``.metadata.json`` sidecar from extracted fields."""
+    attrs = {k: {"value": v, "type": "STRING"} for k, v in metadata.items()}
+    return json.dumps({"metadataAttributes": attrs}, separators=(",", ":"))
+
+
+def upload_to_s3(
+    content_dir: str | Path,
+    bucket_name: str,
+    region: str = DEFAULT_REGION,
+) -> int:
+    """Upload markdown files and metadata sidecars to *bucket_name*.
+
+    For each ``.md`` file that contains YAML frontmatter with ``source``
+    and/or ``pillar``, a companion ``.metadata.json`` file is uploaded so
+    Bedrock KB can use those fields for filtered retrieval.
+
+    Returns the number of content files uploaded.
     """
     content_path = Path(content_dir)
     s3 = boto3.client("s3", region_name=region)
@@ -27,6 +62,17 @@ def upload_to_s3(content_dir: str | Path, bucket_name: str, region: str = DEFAUL
         key = str(md_file.relative_to(content_path))
         s3.upload_file(str(md_file), bucket_name, key)
         count += 1
+
+        fm = _extract_frontmatter(md_file)
+        if fm:
+            sidecar_key = f"{key}.metadata.json"
+            s3.put_object(
+                Bucket=bucket_name,
+                Key=sidecar_key,
+                Body=_build_sidecar(fm),
+                ContentType="application/json",
+            )
+
         if count % 50 == 0:
             logger.info("Uploaded %d files...", count)
 

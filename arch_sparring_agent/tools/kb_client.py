@@ -17,19 +17,40 @@ class KnowledgeBaseClient:
         self.client = boto3.client("bedrock-agent-runtime", region_name=region)
         self.kb_id = knowledge_base_id
 
-    def query(self, query: str, num_results: int = 5) -> str:
+    def query(
+        self,
+        query: str,
+        num_results: int = 5,
+        sources: list[str] | None = None,
+    ) -> str:
         """Retrieve relevant WAF best-practice passages for *query*.
+
+        Args:
+            query: Natural-language question.
+            num_results: Maximum results to return.
+            sources: Optional list of source identifiers to restrict results
+                to (e.g. ``["well-architected-framework",
+                "serverless-applications-lens"]``).  When omitted, all
+                sources are searched.
 
         Returns a formatted string with source attributions, or an error
         message if the query fails.
         """
+        vector_cfg: dict = {"numberOfResults": num_results}
+
+        if sources:
+            if len(sources) == 1:
+                vector_cfg["filter"] = {"equals": {"key": "source", "value": sources[0]}}
+            else:
+                vector_cfg["filter"] = {
+                    "orAll": [{"equals": {"key": "source", "value": s}} for s in sources]
+                }
+
         try:
             response = self.client.retrieve(
                 knowledgeBaseId=self.kb_id,
                 retrievalQuery={"text": query},
-                retrievalConfiguration={
-                    "vectorSearchConfiguration": {"numberOfResults": num_results}
-                },
+                retrievalConfiguration={"vectorSearchConfiguration": vector_cfg},
             )
         except (ClientError, BotoCoreError) as e:
             logger.warning("KB query failed: %s", e)

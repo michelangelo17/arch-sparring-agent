@@ -80,9 +80,18 @@ def create_architecture_agent(
         _kb_client = KnowledgeBaseClient(knowledge_base_id, region)
 
         @tool
-        def query_waf(query: str) -> str:
-            """Query the AWS Well-Architected Framework knowledge base for best practices."""
-            return _kb_client.query(query)
+        def query_waf(query: str, sources: list[str] | None = None) -> str:
+            """Query the AWS Well-Architected Framework knowledge base.
+
+            Args:
+                query: Natural-language question about best practices.
+                sources: Optional filter — restrict results to these sources.
+                    Use "well-architected-framework" for core WAF content.
+                    Use a lens slug for lens-specific content, e.g.
+                    "serverless-applications-lens", "saas-lens".
+                    Omit to search all sources.
+            """
+            return _kb_client.query(query, sources=sources)
 
         tools.append(query_waf)
 
@@ -114,15 +123,23 @@ Tasks:
 
     if knowledge_base_id:
         base_prompt += f"""
-{task_num}. Query the WAF knowledge base (query_waf) for EACH pillar relevant to this architecture:
+{task_num}. Identify which WAF lenses apply to this architecture based on the services
+   and patterns you found (e.g. Lambda/API Gateway → serverless-applications-lens,
+   multi-tenant → saas-lens). Then query_waf for EACH relevant pillar:
    - Security: encryption, IAM least privilege, network controls
    - Reliability: failure handling, recovery, scaling limits
    - Performance: right-sizing, caching, timeout alignment
    - Cost Optimization: provisioning mode, unused resources
    - Operational Excellence: monitoring, alerting, observability
-   For each query result, compare the WAF recommendation against what you found in
-   the templates and source code. Flag any gap where the architecture does not meet
-   the WAF best practice."""
+   Use the sources parameter to scope queries:
+   - "well-architected-framework" = core WAF (always include)
+   - Lens slugs: "serverless-applications-lens", "saas-lens",
+     "analytics-lens", "machine-learning-lens", "iot-lens",
+     "container-build-lens", "games-industry-lens",
+     "financial-services-industry-lens", "healthcare-industry-lens"
+   Pass sources=["well-architected-framework", "<lens>"] to get both
+   core and lens-specific results. Compare each recommendation against
+   what you found in templates/source. Flag gaps."""
         task_num += 1
 
     base_prompt += """
