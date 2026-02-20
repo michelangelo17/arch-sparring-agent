@@ -125,7 +125,8 @@ Tasks:
         base_prompt += f"""
 {task_num}. Identify which WAF lenses apply to this architecture based on the services
    and patterns you found (e.g. Lambda/API Gateway → serverless-applications-lens,
-   multi-tenant → saas-lens). Then query_waf for EACH relevant pillar:
+   multi-tenant → saas-lens, Bedrock/SageMaker → generative-ai-lens).
+   Then query_waf for EACH relevant pillar:
    - Security: encryption, IAM least privilege, network controls
    - Reliability: failure handling, recovery, scaling limits
    - Performance: right-sizing, caching, timeout alignment
@@ -133,10 +134,17 @@ Tasks:
    - Operational Excellence: monitoring, alerting, observability
    Use the sources parameter to scope queries:
    - "well-architected-framework" = core WAF (always include)
-   - Lens slugs: "serverless-applications-lens", "saas-lens",
-     "analytics-lens", "machine-learning-lens", "iot-lens",
-     "container-build-lens", "games-industry-lens",
-     "financial-services-industry-lens", "healthcare-industry-lens"
+   - Technology lenses: "serverless-applications-lens", "saas-lens",
+     "analytics-lens", "machine-learning-lens", "generative-ai-lens",
+     "iot-lens", "container-build-lens", "devops-guidance",
+     "high-performance-computing-lens", "streaming-media-lens",
+     "amazon-opensearch-service-lens", "migration-lens"
+   - Industry lenses: "games-industry-lens",
+     "financial-services-industry-lens", "healthcare-industry-lens",
+     "government-lens", "sap-lens", "supply-chain-lens",
+     "connected-mobility-lens",
+     "modern-industrial-data-technology-lens",
+     "mergers-and-acquisitions-lens"
    Pass sources=["well-architected-framework", "<lens>"] to get both
    core and lens-specific results. Compare each recommendation against
    what you found in templates/source. Flag gaps."""

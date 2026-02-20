@@ -28,15 +28,29 @@ PILLARS = {
 }
 
 OFFICIAL_LENSES = {
+    # Technology & architecture
     "serverless-applications-lens": "Serverless Applications",
     "saas-lens": "SaaS",
     "analytics-lens": "Data Analytics",
     "machine-learning-lens": "Machine Learning",
+    "generative-ai-lens": "Generative AI",
     "iot-lens": "IoT",
     "container-build-lens": "Container Build",
+    "high-performance-computing-lens": "High Performance Computing",
+    "streaming-media-lens": "Streaming Media",
+    "amazon-opensearch-service-lens": "Amazon OpenSearch Service",
+    "devops-guidance": "DevOps",
+    "migration-lens": "Migration",
+    # Industry
     "games-industry-lens": "Games Industry",
     "financial-services-industry-lens": "Financial Services",
     "healthcare-industry-lens": "Healthcare",
+    "government-lens": "Government",
+    "sap-lens": "SAP",
+    "supply-chain-lens": "Supply Chain",
+    "connected-mobility-lens": "Connected Mobility",
+    "modern-industrial-data-technology-lens": "Modern Industrial Data Technology",
+    "mergers-and-acquisitions-lens": "Mergers and Acquisitions",
 }
 
 REQUEST_DELAY = 1.0
