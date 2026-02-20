@@ -90,7 +90,7 @@ class TestKBSyncHelp(unittest.TestCase):
 
 
 class TestKBSyncRequiresKB(unittest.TestCase):
-    @patch("arch_sparring_agent.cli.load_from_ssm")
+    @patch("arch_sparring_agent.cli.load_from_ssm")  # imported in cli/__init__.py
     def test_sync_fails_without_kb_in_config(self, mock_load):
         mock_load.return_value = SharedConfig(
             gateway_id="gw-1",
@@ -105,8 +105,8 @@ class TestKBSyncRequiresKB(unittest.TestCase):
 
 
 class TestDeployWithKB(unittest.TestCase):
-    @patch("arch_sparring_agent.cli.save_to_ssm")
-    @patch("arch_sparring_agent.cli._deploy_infra")
+    @patch("arch_sparring_agent.cli.deploy.save_to_ssm")
+    @patch("arch_sparring_agent.cli.deploy._deploy_infra")
     def test_deploy_without_kb_leaves_fields_none(self, mock_deploy_infra, mock_save):
         mock_deploy_infra.return_value = ("arn:gw", "gw-1", "pe-1")
         runner = CliRunner()
@@ -117,8 +117,8 @@ class TestDeployWithKB(unittest.TestCase):
         self.assertIsNone(saved_config.knowledge_base_id)
         self.assertIsNone(saved_config.kb_bucket_name)
 
-    @patch("arch_sparring_agent.cli.save_to_ssm")
-    @patch("arch_sparring_agent.cli._deploy_infra")
+    @patch("arch_sparring_agent.cli.deploy.save_to_ssm")
+    @patch("arch_sparring_agent.cli.deploy._deploy_infra")
     def test_deploy_with_kb_populates_fields(self, mock_deploy_infra, mock_save):
         mock_deploy_infra.return_value = ("arn:gw", "gw-1", "pe-1")
 
@@ -134,7 +134,7 @@ class TestDeployWithKB(unittest.TestCase):
 
 
 class TestDestroyWithKB(unittest.TestCase):
-    @patch("arch_sparring_agent.cli.delete_from_ssm")
+    @patch("arch_sparring_agent.cli.deploy.delete_from_ssm")
     @patch("arch_sparring_agent.gateway.destroy_gateway")
     @patch("arch_sparring_agent.policy.destroy_policy_engine")
     @patch("arch_sparring_agent.cli.load_from_ssm")

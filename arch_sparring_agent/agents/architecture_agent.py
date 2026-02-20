@@ -3,10 +3,84 @@
 from strands import Agent, tool
 from strands.models import BedrockModel
 
+from ..config import AGENT_ARCHITECTURE
 from ..profiles import get_directive
 from ..tools.cfn_analyzer import CloudFormationAnalyzer
 from ..tools.diagram_analyzer import DiagramAnalyzer
 from ..tools.source_analyzer import SourceAnalyzer
+
+_BASE_PROMPT = """Analyze infrastructure and verify feature implementations.
+
+UNDERSTANDING THE SOURCES:
+- CloudFormation: DEPLOYED infrastructure (IAM policies, resource configs, what EXISTS)
+- Source code: RUNTIME behavior (SDK calls, business logic, how resources are USED)
+
+Both are important:
+- CloudFormation shows what permissions/resources ARE configured
+- Source code shows what permissions/resources are NEEDED (via SDK calls)
+- If source code makes SDK calls not covered by CloudFormation IAM, that's a gap
+
+Tasks:
+1. Read ALL CloudFormation templates for deployed infrastructure
+2. Analyze architecture diagrams"""
+
+_SOURCE_TASK_TEMPLATE = """
+{task_num}. Search source code to understand:
+   - Business logic implementation
+   - SDK calls (dynamodb, s3, sns, etc.) - what services are used at runtime
+   - Environment variables - what resources are referenced
+{next_task}. If source includes IaC definitions (CDK/Terraform), note them but use
+   CloudFormation for actual deployed config since that's what's deployed"""
+
+_KB_TASK_TEMPLATE = """
+{task_num}. Identify which WAF lenses apply to this architecture based on the services
+   and patterns you found (e.g. Lambda/API Gateway → serverless-applications-lens,
+   multi-tenant → saas-lens, Bedrock/SageMaker → generative-ai-lens).
+   Then query_waf for EACH relevant pillar:
+   - Security: encryption, IAM least privilege, network controls
+   - Reliability: failure handling, recovery, scaling limits
+   - Performance: right-sizing, caching, timeout alignment
+   - Cost Optimization: provisioning mode, unused resources
+   - Operational Excellence: monitoring, alerting, observability
+   Use the sources parameter to scope queries:
+   - "well-architected-framework" = core WAF (always include)
+   - Technology lenses: "serverless-applications-lens", "saas-lens",
+     "analytics-lens", "machine-learning-lens", "generative-ai-lens",
+     "iot-lens", "container-build-lens", "devops-guidance",
+     "high-performance-computing-lens", "streaming-media-lens",
+     "amazon-opensearch-service-lens", "migration-lens"
+   - Industry lenses: "games-industry-lens",
+     "financial-services-industry-lens", "healthcare-industry-lens",
+     "government-lens", "sap-lens", "supply-chain-lens",
+     "connected-mobility-lens",
+     "modern-industrial-data-technology-lens",
+     "mergers-and-acquisitions-lens"
+   Pass sources=["well-architected-framework", "<lens>"] to get both
+   core and lens-specific results.
+   CRITICAL: Only include recommendations that apply to the ACTUAL
+   services and compute model in use. If the architecture is serverless
+   (Lambda, Step Functions, DynamoDB), do NOT recommend EC2-specific
+   practices like Spot Instances, Reserved Instances, or instance
+   right-sizing. Contextualize every recommendation against what you
+   actually found in the templates and source code. Flag real gaps only."""
+
+_OUTPUT_FORMAT = """
+
+Output format:
+### Components
+List from CloudFormation + SDK calls observed in source code
+
+### Features Verified
+- Feature: [evidence from CFN or source code]
+- Include features satisfied by AWS service defaults (note "via AWS default" as evidence)
+
+### Features Not Found
+- Feature: [only if searched AND not covered by service defaults]"""
+
+_WAF_OUTPUT_ADDENDUM = """
+
+### WAF Assessment
+- Pillar — Finding: [WAF recommendation vs actual implementation, cite the WAF source]"""
 
 
 def create_architecture_agent(
@@ -16,6 +90,7 @@ def create_architecture_agent(
     source_dir: str | None = None,
     knowledge_base_id: str | None = None,
     region: str | None = None,
+    profile: dict | None = None,
 ) -> Agent:
     """Create agent for analyzing CloudFormation templates, diagrams, and source code."""
 
@@ -95,91 +170,28 @@ def create_architecture_agent(
 
         tools.append(query_waf)
 
-    base_prompt = """Analyze infrastructure and verify feature implementations.
-
-UNDERSTANDING THE SOURCES:
-- CloudFormation: DEPLOYED infrastructure (IAM policies, resource configs, what EXISTS)
-- Source code: RUNTIME behavior (SDK calls, business logic, how resources are USED)
-
-Both are important:
-- CloudFormation shows what permissions/resources ARE configured
-- Source code shows what permissions/resources are NEEDED (via SDK calls)
-- If source code makes SDK calls not covered by CloudFormation IAM, that's a gap
-
-Tasks:
-1. Read ALL CloudFormation templates for deployed infrastructure
-2. Analyze architecture diagrams"""
+    base_prompt = _BASE_PROMPT
 
     task_num = 3
     if source_analyzer:
-        base_prompt += f"""
-{task_num}. Search source code to understand:
-   - Business logic implementation
-   - SDK calls (dynamodb, s3, sns, etc.) - what services are used at runtime
-   - Environment variables - what resources are referenced
-{task_num + 1}. If source includes IaC definitions (CDK/Terraform), note them but use
-   CloudFormation for actual deployed config since that's what's deployed"""
+        base_prompt += _SOURCE_TASK_TEMPLATE.format(task_num=task_num, next_task=task_num + 1)
         task_num += 2
 
     if knowledge_base_id:
-        base_prompt += f"""
-{task_num}. Identify which WAF lenses apply to this architecture based on the services
-   and patterns you found (e.g. Lambda/API Gateway → serverless-applications-lens,
-   multi-tenant → saas-lens, Bedrock/SageMaker → generative-ai-lens).
-   Then query_waf for EACH relevant pillar:
-   - Security: encryption, IAM least privilege, network controls
-   - Reliability: failure handling, recovery, scaling limits
-   - Performance: right-sizing, caching, timeout alignment
-   - Cost Optimization: provisioning mode, unused resources
-   - Operational Excellence: monitoring, alerting, observability
-   Use the sources parameter to scope queries:
-   - "well-architected-framework" = core WAF (always include)
-   - Technology lenses: "serverless-applications-lens", "saas-lens",
-     "analytics-lens", "machine-learning-lens", "generative-ai-lens",
-     "iot-lens", "container-build-lens", "devops-guidance",
-     "high-performance-computing-lens", "streaming-media-lens",
-     "amazon-opensearch-service-lens", "migration-lens"
-   - Industry lenses: "games-industry-lens",
-     "financial-services-industry-lens", "healthcare-industry-lens",
-     "government-lens", "sap-lens", "supply-chain-lens",
-     "connected-mobility-lens",
-     "modern-industrial-data-technology-lens",
-     "mergers-and-acquisitions-lens"
-   Pass sources=["well-architected-framework", "<lens>"] to get both
-   core and lens-specific results.
-   CRITICAL: Only include recommendations that apply to the ACTUAL
-   services and compute model in use. If the architecture is serverless
-   (Lambda, Step Functions, DynamoDB), do NOT recommend EC2-specific
-   practices like Spot Instances, Reserved Instances, or instance
-   right-sizing. Contextualize every recommendation against what you
-   actually found in the templates and source code. Flag real gaps only."""
+        base_prompt += _KB_TASK_TEMPLATE.format(task_num=task_num)
         task_num += 1
 
-    base_prompt += """
-
-Output format:
-### Components
-List from CloudFormation + SDK calls observed in source code
-
-### Features Verified
-- Feature: [evidence from CFN or source code]
-- Include features satisfied by AWS service defaults (note "via AWS default" as evidence)
-
-### Features Not Found
-- Feature: [only if searched AND not covered by service defaults]"""
+    base_prompt += _OUTPUT_FORMAT
 
     if knowledge_base_id:
-        base_prompt += """
+        base_prompt += _WAF_OUTPUT_ADDENDUM
 
-### WAF Assessment
-- Pillar — Finding: [WAF recommendation vs actual implementation, cite the WAF source]"""
-
-    directive = get_directive("architecture")
+    directive = get_directive(profile, "architecture")
     if directive:
         base_prompt += f"\n\n{directive}"
 
     return Agent(
-        name="ArchitectureEvaluator",
+        name=AGENT_ARCHITECTURE,
         model=model_id,
         callback_handler=None,
         system_prompt=base_prompt,

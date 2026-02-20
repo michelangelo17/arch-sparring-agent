@@ -10,6 +10,15 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_REGION = "eu-central-1"
 
+# --- Agent names (single source of truth for agents, Cedar policies, etc.) ---
+
+AGENT_REQUIREMENTS = "RequirementsAnalyst"
+AGENT_ARCHITECTURE = "ArchitectureEvaluator"
+AGENT_QUESTION = "QuestionAgent"
+AGENT_SPARRING = "SparringAgent"
+AGENT_REVIEW = "ReviewAgent"
+AGENT_MODERATOR = "ReviewModerator"
+
 # --- Supported models (curated, verified EU inference profiles) ---
 
 SUPPORTED_MODELS: dict[str, dict[str, str]] = {

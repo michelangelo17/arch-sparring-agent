@@ -6,7 +6,16 @@ import time
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from .config import DEFAULT_REGION
+from .config import (
+    AGENT_ARCHITECTURE,
+    AGENT_MODERATOR,
+    AGENT_QUESTION,
+    AGENT_REQUIREMENTS,
+    AGENT_REVIEW,
+    AGENT_SPARRING,
+    DEFAULT_REGION,
+)
+from .exceptions import PolicySetupError
 from .gateway import associate_gateway_with_policy_engine, setup_gateway
 
 logger = logging.getLogger(__name__)
@@ -62,11 +71,14 @@ def destroy_policy_engine(policy_engine_id: str, region: str = DEFAULT_REGION) -
 
 def setup_policy_engine(
     region: str = DEFAULT_REGION, policy_engine_name: str = "ArchReviewPolicyEngine"
-) -> str | None:
+) -> str:
     """Create or retrieve a Policy Engine.
 
     Returns:
-        Engine ID string, or None on failure.
+        Engine ID string.
+
+    Raises:
+        PolicySetupError: If the engine cannot be created or found.
     """
     try:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
@@ -93,9 +105,7 @@ def setup_policy_engine(
         return engine_id
 
     except (ClientError, BotoCoreError) as e:
-        logger.warning("Could not set up Policy Engine: %s", e)
-        logger.warning("Continuing without policy controls.")
-        return None
+        raise PolicySetupError(f"Could not set up Policy Engine: {e}") from e
 
 
 def _wait_for_policy_active(
@@ -276,24 +286,20 @@ def setup_architecture_review_policies(
     policy_engine_name: str = "ArchReviewPolicyEngine",
     gateway_arn: str | None = None,
     gateway_name: str = "ArchReviewGateway",
-) -> str | None:
+) -> str:
     """Set up Cedar policies for agent tool restrictions.
 
     Returns:
-        Policy engine ID, or None on failure.
+        Policy engine ID.
+
+    Raises:
+        PolicySetupError: If gateway, engine, or policy creation fails.
     """
     gateway_id = None
     if not gateway_arn:
         gateway_arn, gateway_id = setup_gateway(region=region, gateway_name=gateway_name)
-        if not gateway_arn:
-            logger.warning(
-                "Could not set up Gateway. Policies cannot be created without a Gateway."
-            )
-            return None
 
     engine_id = setup_policy_engine(region=region, policy_engine_name=policy_engine_name)
-    if not engine_id:
-        return None
 
     logger.info("Verifying policies...")
     policies_created = []
@@ -305,7 +311,7 @@ def setup_architecture_review_policies(
     action,
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context has agentName && context.agentName == "RequirementsAnalyst" &&
+    context has agentName && context.agentName == "{AGENT_REQUIREMENTS}" &&
     context has toolName &&
     ["read_document", "list_available_documents", "ask_user_question"].contains(context.toolName)
 }};"""
@@ -328,7 +334,7 @@ def setup_architecture_review_policies(
     action,
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context has agentName && context.agentName == "ArchitectureEvaluator" &&
+    context has agentName && context.agentName == "{AGENT_ARCHITECTURE}" &&
     context has toolName &&
     [
         "read_cloudformation_template",
@@ -361,7 +367,7 @@ def setup_architecture_review_policies(
     action,
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context has agentName && context.agentName == "ReviewModerator" &&
+    context has agentName && context.agentName == "{AGENT_MODERATOR}" &&
     context has toolName &&
     ["get_requirements_analysis", "get_architecture_analysis"].contains(context.toolName)
 }};"""
@@ -384,7 +390,7 @@ def setup_architecture_review_policies(
     action,
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) when {{
-    context has agentName && context.agentName == "ReviewAgent" &&
+    context has agentName && context.agentName == "{AGENT_REVIEW}" &&
     context has toolName &&
     ["query_waf"].contains(context.toolName)
 }};"""
@@ -408,12 +414,12 @@ def setup_architecture_review_policies(
     resource == AgentCore::Gateway::"{gateway_arn}"
 ) unless {{
     context has agentName &&
-    (context.agentName == "RequirementsAnalyst" ||
-     context.agentName == "ArchitectureEvaluator" ||
-     context.agentName == "ReviewModerator" ||
-     context.agentName == "QuestionAgent" ||
-     context.agentName == "SparringAgent" ||
-     context.agentName == "ReviewAgent")
+    (context.agentName == "{AGENT_REQUIREMENTS}" ||
+     context.agentName == "{AGENT_ARCHITECTURE}" ||
+     context.agentName == "{AGENT_MODERATOR}" ||
+     context.agentName == "{AGENT_QUESTION}" ||
+     context.agentName == "{AGENT_SPARRING}" ||
+     context.agentName == "{AGENT_REVIEW}")
 }};"""
 
     policy_id = create_policy(
@@ -431,12 +437,10 @@ def setup_architecture_review_policies(
 
     # Fail if any policy failed - all policies are required for security
     if policies_failed:
-        logger.error(
-            "Policy setup failed. %d policies could not be activated: %s",
-            len(policies_failed),
-            ", ".join(policies_failed),
+        raise PolicySetupError(
+            f"Policy setup failed. {len(policies_failed)} policies could not be activated: "
+            f"{', '.join(policies_failed)}"
         )
-        return None
 
     if policies_created:
         logger.info("Verified %d policies:", len(policies_created))
@@ -459,5 +463,4 @@ def setup_architecture_review_policies(
 
         return engine_id
     else:
-        logger.warning("No policies were created.")
-        return None
+        raise PolicySetupError("No policies were created.")

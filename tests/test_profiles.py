@@ -15,30 +15,23 @@ from arch_sparring_agent.profiles import (
     get_profile_path,
     list_profiles,
     load_profile,
-    reset,
 )
 
 
 class TestLoadProfile(unittest.TestCase):
-    def setUp(self):
-        reset()
-
-    def tearDown(self):
-        reset()
-
     def test_load_default(self):
-        load_profile("default")
-        directive = get_directive("sparring")
+        profile = load_profile("default")
+        directive = get_directive(profile, "sparring")
         self.assertIn("Push back", directive)
 
     def test_load_strict(self):
-        load_profile("strict")
-        directive = get_directive("sparring")
+        profile = load_profile("strict")
+        directive = get_directive(profile, "sparring")
         self.assertIn("firmly", directive)
 
     def test_load_lightweight(self):
-        load_profile("lightweight")
-        directive = get_directive("sparring")
+        profile = load_profile("lightweight")
+        directive = get_directive(profile, "sparring")
         self.assertIn("prototype", directive)
 
     def test_load_nonexistent_raises(self):
@@ -46,24 +39,22 @@ class TestLoadProfile(unittest.TestCase):
             load_profile("nonexistent_profile_xyz")
         self.assertIn("nonexistent_profile_xyz", str(ctx.exception))
 
-    def test_get_directive_without_loading_returns_empty(self):
-        self.assertEqual(get_directive("sparring"), "")
+    def test_get_directive_without_profile_returns_empty(self):
+        self.assertEqual(get_directive(None, "sparring"), "")
 
     def test_get_directive_unknown_agent_returns_empty(self):
-        load_profile("default")
-        self.assertEqual(get_directive("nonexistent_agent"), "")
+        profile = load_profile("default")
+        self.assertEqual(get_directive(profile, "nonexistent_agent"), "")
 
 
 class TestProfileResolutionOrder(unittest.TestCase):
     """Test that project-level profiles take precedence over builtin."""
 
     def setUp(self):
-        reset()
         self.tmp_project_dir = Path.cwd() / ".arch-review" / "profiles"
         self.tmp_project_dir.mkdir(parents=True, exist_ok=True)
 
     def tearDown(self):
-        reset()
         if self.tmp_project_dir.exists():
             shutil.rmtree(Path.cwd() / ".arch-review" / "profiles")
             project_root = Path.cwd() / ".arch-review"
@@ -79,21 +70,19 @@ class TestProfileResolutionOrder(unittest.TestCase):
         with open(self.tmp_project_dir / "default.yaml", "w") as f:
             yaml.dump(custom, f)
 
-        load_profile("default")
-        self.assertEqual(get_directive("sparring"), "Custom project sparring directive")
+        profile = load_profile("default")
+        self.assertEqual(get_directive(profile, "sparring"), "Custom project sparring directive")
 
 
 class TestProfileResolutionUserDir(unittest.TestCase):
     """Test that user-level profiles take precedence over builtin."""
 
     def setUp(self):
-        reset()
         self.tmp_user_dir = Path.home() / ".config" / "arch-review" / "profiles"
         self.created_file = self.tmp_user_dir / "_test_user_profile.yaml"
         self.tmp_user_dir.mkdir(parents=True, exist_ok=True)
 
     def tearDown(self):
-        reset()
         if self.created_file.exists():
             self.created_file.unlink()
 
@@ -106,8 +95,8 @@ class TestProfileResolutionUserDir(unittest.TestCase):
         with open(self.created_file, "w") as f:
             yaml.dump(custom, f)
 
-        load_profile("_test_user_profile")
-        self.assertEqual(get_directive("sparring"), "User sparring directive")
+        profile = load_profile("_test_user_profile")
+        self.assertEqual(get_directive(profile, "sparring"), "User sparring directive")
 
 
 class TestListProfiles(unittest.TestCase):
@@ -132,41 +121,34 @@ class TestGetProfilePath(unittest.TestCase):
 class TestDirectiveContent(unittest.TestCase):
     """Verify that each built-in profile has directives for the expected agents."""
 
-    def setUp(self):
-        reset()
-
-    def tearDown(self):
-        reset()
-
     def test_default_has_all_agent_directives(self):
-        load_profile("default")
+        profile = load_profile("default")
         for agent in ("sparring", "review", "architecture", "ci"):
             with self.subTest(agent=agent):
-                self.assertTrue(len(get_directive(agent)) > 0, f"Missing directive for {agent}")
+                self.assertTrue(
+                    len(get_directive(profile, agent)) > 0, f"Missing directive for {agent}"
+                )
 
     def test_strict_has_all_agent_directives(self):
-        load_profile("strict")
+        profile = load_profile("strict")
         for agent in ("sparring", "review", "architecture", "ci"):
             with self.subTest(agent=agent):
-                self.assertTrue(len(get_directive(agent)) > 0, f"Missing directive for {agent}")
+                self.assertTrue(
+                    len(get_directive(profile, agent)) > 0, f"Missing directive for {agent}"
+                )
 
     def test_lightweight_has_all_agent_directives(self):
-        load_profile("lightweight")
+        profile = load_profile("lightweight")
         for agent in ("sparring", "review", "architecture", "ci"):
             with self.subTest(agent=agent):
-                self.assertTrue(len(get_directive(agent)) > 0, f"Missing directive for {agent}")
+                self.assertTrue(
+                    len(get_directive(profile, agent)) > 0, f"Missing directive for {agent}"
+                )
 
     def test_profiles_differ(self):
-        load_profile("default")
-        default_sparring = get_directive("sparring")
-        reset()
-
-        load_profile("strict")
-        strict_sparring = get_directive("sparring")
-        reset()
-
-        load_profile("lightweight")
-        lightweight_sparring = get_directive("sparring")
+        default_sparring = get_directive(load_profile("default"), "sparring")
+        strict_sparring = get_directive(load_profile("strict"), "sparring")
+        lightweight_sparring = get_directive(load_profile("lightweight"), "sparring")
 
         self.assertNotEqual(default_sparring, strict_sparring)
         self.assertNotEqual(default_sparring, lightweight_sparring)

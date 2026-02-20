@@ -5,8 +5,34 @@ from strands import Agent, tool
 from strands.models import BedrockModel
 from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
-from ..config import DOC_CHUNK_SUMMARY_THRESHOLD, DOC_SUMMARY_THRESHOLD
+from ..config import AGENT_REQUIREMENTS, DOC_CHUNK_SUMMARY_THRESHOLD, DOC_SUMMARY_THRESHOLD
 from ..context_condenser import _chunked_extract
+
+_SYSTEM_PROMPT = """Analyze requirements documents.
+
+Tasks:
+1. List documents
+2. Read EVERY document
+3. Extract requirements/constraints/NFRs
+4. Return CONCISE summary (max 400 words)
+
+Format:
+### Functional Requirements
+- Item 1
+- Item 2
+
+### Non-Functional Requirements
+- Item 1
+
+### Constraints
+- Item 1
+
+Do NOT copy text verbatim. Summarize."""
+
+_SUMMARIZE_PROMPT = (
+    "Summarize this document part. Preserve ALL requirements, constraints, "
+    "and technical details. Be concise but comprehensive."
+)
 
 
 def create_requirements_agent(
@@ -18,11 +44,6 @@ def create_requirements_agent(
     from ..tools.document_parser import DocumentParser
 
     parser = DocumentParser(documents_dir)
-
-    summarize_prompt = (
-        "Summarize this document part. Preserve ALL requirements, constraints, "
-        "and technical details. Be concise but comprehensive."
-    )
 
     @tool
     def read_document(filename: str) -> str:
@@ -36,21 +57,19 @@ def create_requirements_agent(
                 name="DocSummarizer",
                 model=model_id,
                 callback_handler=None,
-                system_prompt=summarize_prompt,
+                system_prompt=_SUMMARIZE_PROMPT,
                 tools=[],
             )
             try:
-                # Use chunked extraction for very large files
                 if len(content) > DOC_CHUNK_SUMMARY_THRESHOLD:
-                    summary = _chunked_extract(content, summarize_prompt, model_id)
+                    summary = _chunked_extract(content, _SUMMARIZE_PROMPT, model_id)
                 else:
                     summary = str(summarizer(f"Summarize this content:\n\n{content}"))
 
                 return f"Content from {filename} (Summarized):\n\n{summary}"
             except (ContextWindowOverflowException, MaxTokensReachedException, ClientError) as e:
-                # Fallback: try chunking with smaller chunks if single pass failed
                 try:
-                    summary = _chunked_extract(content, summarize_prompt, model_id)
+                    summary = _chunked_extract(content, _SUMMARIZE_PROMPT, model_id)
                     return f"Content from {filename} (Chunk Summarized after error):\n\n{summary}"
                 except (
                     ContextWindowOverflowException,
@@ -70,28 +89,9 @@ def create_requirements_agent(
         return parser.list_documents()
 
     return Agent(
-        name="RequirementsAnalyst",
+        name=AGENT_REQUIREMENTS,
         model=model_id,
         callback_handler=None,
-        system_prompt="""Analyze requirements documents.
-
-Tasks:
-1. List documents
-2. Read EVERY document
-3. Extract requirements/constraints/NFRs
-4. Return CONCISE summary (max 400 words)
-
-Format:
-### Functional Requirements
-- Item 1
-- Item 2
-
-### Non-Functional Requirements
-- Item 1
-
-### Constraints
-- Item 1
-
-Do NOT copy text verbatim. Summarize.""",
+        system_prompt=_SYSTEM_PROMPT,
         tools=[read_document, list_available_documents],
     )

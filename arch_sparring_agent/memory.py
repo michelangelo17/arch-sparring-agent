@@ -50,15 +50,19 @@ def setup_agentcore_memory(
         if memory_id:
             # Check if memory is active
             if memory_status and memory_status.upper() != "ACTIVE":
-                logger.debug("Memory '%s' exists but status is %s", memory_name, memory_status)
-                # Wait for it to become active (up to 60s)
-                for _ in range(12):
+                logger.info("Memory '%s' exists but status is %s", memory_name, memory_status)
+                for attempt in range(12):
                     time.sleep(5)
+                    elapsed = (attempt + 1) * 5
                     memories = client.list_memories()
                     memory_id, memory_status = _find_memory_by_name(memories, memory_name)
                     if memory_status and memory_status.upper() == "ACTIVE":
                         break
-                    logger.debug("Waiting for memory to become active... (%s)", memory_status)
+                    logger.info(
+                        "Waiting for memory to become active... (%ds elapsed, status: %s)",
+                        elapsed,
+                        memory_status,
+                    )
 
                 if memory_status and memory_status.upper() != "ACTIVE":
                     logger.debug("Memory not active after waiting. Continuing without memory.")
@@ -75,8 +79,9 @@ def setup_agentcore_memory(
             # Wait for memory to become active (up to 3 minutes)
             logger.info("Waiting for memory to initialize...")
             memory_status = "CREATING"
-            for _ in range(36):  # 36 * 5s = 3 minutes max
+            for attempt in range(36):  # 36 * 5s = 3 minutes max
                 time.sleep(5)
+                elapsed = (attempt + 1) * 5
                 memories = client.list_memories()
                 _, memory_status = _find_memory_by_name(memories, memory_name)
                 status_upper = (memory_status or "").upper()
@@ -88,7 +93,11 @@ def setup_agentcore_memory(
                     logger.error("Memory creation failed.")
                     return None, None
 
-                logger.debug("Memory status: %s", memory_status)
+                logger.info(
+                    "Waiting for memory to initialize... (%ds elapsed, status: %s)",
+                    elapsed,
+                    memory_status,
+                )
             else:
                 logger.warning("Timeout waiting for memory. Status: %s", memory_status)
                 return None, None

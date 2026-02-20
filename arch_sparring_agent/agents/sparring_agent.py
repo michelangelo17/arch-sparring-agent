@@ -3,27 +3,10 @@
 from strands import Agent, tool
 from strands.models import BedrockModel
 
+from ..config import AGENT_SPARRING
 from ..profiles import get_directive
 
-
-def create_sparring_agent(model_id: str | BedrockModel) -> Agent:
-    """Create agent for challenging architectural decisions."""
-
-    challenges_made = []
-
-    @tool
-    def challenge_user(challenge: str) -> str:
-        """Challenge an architectural decision or gap."""
-        challenges_made.append(challenge)
-        print(f"\n⚔️  [{len(challenges_made)}] {challenge}")
-        return input("Your response: ")
-
-    @tool
-    def done_challenging() -> str:
-        """Signal completion of sparring phase."""
-        return "Proceeding to final review."
-
-    system_prompt = """Challenge CONFIRMED gaps only. Be CONCISE.
+_SYSTEM_PROMPT = """Challenge CONFIRMED gaps only. Be CONCISE.
 
 CRITICAL: Call challenge_user exactly ONCE per turn. Wait for the user's
 response before issuing the next challenge. NEVER batch multiple
@@ -43,12 +26,32 @@ If all gaps were resolved, say "No confirmed gaps remain."
 
 Call done_challenging when key issues are addressed."""
 
-    directive = get_directive("sparring")
+
+def create_sparring_agent(model_id: str | BedrockModel, profile: dict | None = None) -> Agent:
+    """Create agent for challenging architectural decisions."""
+
+    challenges_made = []
+
+    @tool
+    def challenge_user(challenge: str) -> str:
+        """Challenge an architectural decision or gap."""
+        challenges_made.append(challenge)
+        print(f"\n⚔️  [{len(challenges_made)}] {challenge}")
+        return input("Your response: ")
+
+    @tool
+    def done_challenging() -> str:
+        """Signal completion of sparring phase."""
+        return "Proceeding to final review."
+
+    system_prompt = _SYSTEM_PROMPT
+
+    directive = get_directive(profile, "sparring")
     if directive:
         system_prompt += f"\n\n{directive}"
 
     return Agent(
-        name="SparringAgent",
+        name=AGENT_SPARRING,
         model=model_id,
         callback_handler=None,
         system_prompt=system_prompt,

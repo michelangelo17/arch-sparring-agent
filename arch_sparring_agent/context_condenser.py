@@ -22,15 +22,16 @@ def _chunked_extract(content: str, system_prompt: str, model_id: str | BedrockMo
     """Fallback: extract findings from content in chunks, then merge."""
     chunks = [content[i : i + CHUNK_SIZE] for i in range(0, len(content), CHUNK_SIZE)]
 
+    extractor = Agent(
+        name="ChunkExtractor",
+        model=model_id,
+        callback_handler=None,
+        system_prompt=system_prompt,
+        tools=[],
+    )
+
     chunk_results = []
     for i, chunk in enumerate(chunks[:MAX_CHUNKS]):
-        extractor = Agent(
-            name="ChunkExtractor",
-            model=model_id,
-            callback_handler=None,
-            system_prompt=system_prompt,
-            tools=[],
-        )
         try:
             chunk_results.append(str(extractor(chunk)))
         except (ContextWindowOverflowException, MaxTokensReachedException, ClientError):

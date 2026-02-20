@@ -6,14 +6,7 @@ import frontmatter
 
 from ..config import DOC_MAX_CHARS
 from ..exceptions import ToolError
-
-
-def _validate_path(base_dir: Path, filename: str) -> Path:
-    """Resolve path and verify it stays within the base directory."""
-    file_path = (base_dir / filename).resolve()
-    if not file_path.is_relative_to(base_dir.resolve()):
-        raise ToolError(f"Path traversal detected: {filename}")
-    return file_path
+from ..utils import validate_path
 
 
 class DocumentParser:
@@ -24,7 +17,7 @@ class DocumentParser:
 
     def read_markdown_file(self, filename: str) -> dict:
         """Read markdown file, returning content and metadata."""
-        file_path = _validate_path(self.document_dir, filename)
+        file_path = validate_path(self.document_dir, filename)
         if not file_path.exists():
             raise ToolError(f"File not found: {file_path}")
 

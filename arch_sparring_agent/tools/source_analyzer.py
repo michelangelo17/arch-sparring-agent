@@ -4,14 +4,7 @@ from pathlib import Path
 
 from ..config import SOURCE_FILE_MAX_CHARS
 from ..exceptions import ToolError
-
-
-def _validate_path(base_dir: Path, filename: str) -> Path:
-    """Resolve path and verify it stays within the base directory."""
-    file_path = (base_dir / filename).resolve()
-    if not file_path.is_relative_to(base_dir.resolve()):
-        raise ToolError(f"Path traversal detected: {filename}")
-    return file_path
+from ..utils import validate_path
 
 
 class SourceAnalyzer:
@@ -43,7 +36,7 @@ class SourceAnalyzer:
         Raises:
             ToolError: If file not found, not a file, or unsupported type.
         """
-        path = _validate_path(self.source_dir, filename)
+        path = validate_path(self.source_dir, filename)
         if not path.exists():
             raise ToolError(f"File not found: {filename}")
         if not path.is_file():

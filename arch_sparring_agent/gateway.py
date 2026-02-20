@@ -139,15 +139,24 @@ def associate_gateway_with_policy_engine(
 def setup_gateway(
     region: str = DEFAULT_REGION,
     gateway_name: str = "ArchReviewGateway",
-) -> tuple[str | None, str | None]:
+) -> tuple[str, str]:
     """Create or retrieve a Gateway for policy enforcement.
 
     Returns:
-        Tuple of (gateway_arn, gateway_id), or (None, None) on failure.
+        Tuple of (gateway_arn, gateway_id).
+
+    Raises:
+        PolicySetupError: If the gateway cannot be created or found.
     """
     try:
         from bedrock_agentcore_starter_toolkit.operations.gateway.client import GatewayClient
+    except ImportError as e:
+        raise PolicySetupError(
+            "bedrock-agentcore-starter-toolkit not installed. "
+            "Run: pip install bedrock-agentcore-starter-toolkit"
+        ) from e
 
+    try:
         gateway_arn, gateway_id, gateway_url = _find_gateway_by_name(gateway_name, region)
         if gateway_id:
             logger.info("Using existing Gateway: %s", gateway_name)
@@ -210,7 +219,6 @@ def setup_gateway(
         logger.info("Configuring IAM permissions...")
         client.fix_iam_permissions(gateway)
 
-        # Wait for IAM propagation with exponential backoff
         agentcore_client = boto3.client("bedrock-agentcore-control", region_name=region)
         gw_id = gateway.get("gatewayId") or gateway.get("id")
         if gw_id:
@@ -232,17 +240,10 @@ def setup_gateway(
 
         return gateway_arn, gateway_id
 
-    except ImportError:
-        logger.warning("bedrock-agentcore-starter-toolkit not installed.")
-        logger.warning("Run: pip install bedrock-agentcore-starter-toolkit")
-        return None, None
-    except (ClientError, BotoCoreError, PolicySetupError) as e:
-        import traceback
-
-        logger.warning("Could not set up Gateway: %s", e)
-        logger.debug("Details: %s", traceback.format_exc())
-        logger.warning("Continuing without Gateway. Policies will not be created.")
-        return None, None
+    except PolicySetupError:
+        raise
+    except (ClientError, BotoCoreError) as e:
+        raise PolicySetupError(f"Could not set up Gateway: {e}") from e
 
 
 def destroy_gateway(gateway_id: str, region: str = DEFAULT_REGION) -> bool:

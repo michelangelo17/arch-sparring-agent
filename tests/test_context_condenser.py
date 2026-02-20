@@ -189,7 +189,6 @@ class TestChunkedExtract(unittest.TestCase):
 
     @patch("arch_sparring_agent.context_condenser.Agent")
     def test_chunks_large_content(self, mock_agent_cls):
-        # Content larger than CHUNK_SIZE to force multiple chunks
         content = "I" * (CHUNK_SIZE * 3)
         mock_agent = MagicMock()
         mock_agent.return_value = "chunk summary"
@@ -197,12 +196,13 @@ class TestChunkedExtract(unittest.TestCase):
 
         _chunked_extract(content, "prompt", "test-model")
 
-        # Should have created multiple agents (chunks + merger)
-        self.assertTrue(mock_agent_cls.call_count >= 3)
+        # 1 extractor reused for all chunks (combined output is short → no merger)
+        self.assertEqual(mock_agent_cls.call_count, 1)
+        # Called once per chunk (3 chunks)
+        self.assertEqual(mock_agent.call_count, 3)
 
     @patch("arch_sparring_agent.context_condenser.Agent")
     def test_max_chunks_limit(self, mock_agent_cls):
-        # Content so large it would exceed MAX_CHUNKS
         content = "J" * (CHUNK_SIZE * (MAX_CHUNKS + 5))
         mock_agent = MagicMock()
         mock_agent.return_value = "chunk summary"
@@ -210,8 +210,8 @@ class TestChunkedExtract(unittest.TestCase):
 
         _chunked_extract(content, "prompt", "test-model")
 
-        # Chunk agents should be capped at MAX_CHUNKS (+ possibly 1 merger)
-        self.assertLessEqual(mock_agent_cls.call_count, MAX_CHUNKS + 1)
+        # 1 extractor + 1 merger (agent instances are reused, not created per chunk)
+        self.assertLessEqual(mock_agent_cls.call_count, 2)
 
     @patch("arch_sparring_agent.context_condenser.Agent")
     def test_failed_chunk_produces_placeholder(self, mock_agent_cls):
@@ -219,16 +219,15 @@ class TestChunkedExtract(unittest.TestCase):
 
         call_count = [0]
 
-        def side_effect(*args, **kwargs):
+        def agent_call_side_effect(*args, **kwargs):
             call_count[0] += 1
-            mock = MagicMock()
             if call_count[0] == 1:
-                mock.side_effect = FakeClientError("ServiceUnavailable")
-            else:
-                mock.return_value = "ok"
-            return mock
+                raise FakeClientError("ServiceUnavailable")
+            return "ok"
 
-        mock_agent_cls.side_effect = side_effect
+        mock_agent = MagicMock()
+        mock_agent.side_effect = agent_call_side_effect
+        mock_agent_cls.return_value = mock_agent
 
         result = _chunked_extract(content, "prompt", "test-model")
         self.assertIn("could not be processed", result)

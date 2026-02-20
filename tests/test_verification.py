@@ -3,42 +3,18 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from arch_sparring_agent.infra import SharedConfig
 from arch_sparring_agent.orchestrator import ReviewOrchestrator
-
-FAKE_CONFIG = SharedConfig(
-    gateway_id="gw-123",
-    gateway_arn="arn:aws:bedrock-agentcore:eu-central-1:111111111111:gateway/gw-123",
-    policy_engine_id="pe-456",
-    region="eu-central-1",
-)
 
 
 class TestVerifyAgainstDefaults(unittest.TestCase):
-    def setUp(self):
-        self.mock_standard_model = MagicMock(name="standard_model")
-
-        def fake_create_model(model_name, reasoning=False, reasoning_level="low"):
-            return self.mock_standard_model
-
-        patch(
-            "arch_sparring_agent.orchestrator.create_model", side_effect=fake_create_model
-        ).start()
-        patch("arch_sparring_agent.orchestrator.create_requirements_agent").start()
-        patch("arch_sparring_agent.orchestrator.create_architecture_agent").start()
-        patch("arch_sparring_agent.orchestrator.create_question_agent").start()
-        patch("arch_sparring_agent.orchestrator.create_sparring_agent").start()
-        patch("arch_sparring_agent.orchestrator.create_review_agent").start()
-
-    def tearDown(self):
-        patch.stopall()
-
     def _make_orchestrator(self):
         return ReviewOrchestrator(
-            documents_dir="docs",
-            templates_dir="tmpl",
-            diagrams_dir="diag",
-            shared_config=FAKE_CONFIG,
+            requirements_agent=MagicMock(),
+            architecture_agent=MagicMock(),
+            question_agent=MagicMock(),
+            sparring_agent=MagicMock(),
+            review_agent=MagicMock(),
+            standard_model=MagicMock(name="standard_model"),
         )
 
     def test_passthrough_when_no_features_not_found(self):
@@ -77,15 +53,6 @@ class TestVerificationIntegrationInRunReview(unittest.TestCase):
     """Ensure _verify_against_defaults is called during run_review."""
 
     def setUp(self):
-        self.mock_standard_model = MagicMock(name="standard_model")
-
-        def fake_create_model(model_name, reasoning=False, reasoning_level="low"):
-            return self.mock_standard_model
-
-        patch(
-            "arch_sparring_agent.orchestrator.create_model", side_effect=fake_create_model
-        ).start()
-
         patch("arch_sparring_agent.orchestrator.extract_requirements").start().side_effect = (
             lambda c, m: c
         )
@@ -99,21 +66,6 @@ class TestVerificationIntegrationInRunReview(unittest.TestCase):
             lambda c, p, m: c
         )
 
-        mock_req = MagicMock()
-        mock_req.return_value = "req summary"
-        patch(
-            "arch_sparring_agent.orchestrator.create_requirements_agent"
-        ).start().return_value = mock_req
-
-        mock_arch = MagicMock()
-        mock_arch.return_value = "arch summary"
-        patch(
-            "arch_sparring_agent.orchestrator.create_architecture_agent"
-        ).start().return_value = mock_arch
-
-        patch("arch_sparring_agent.orchestrator.create_question_agent").start()
-        patch("arch_sparring_agent.orchestrator.create_sparring_agent").start()
-        patch("arch_sparring_agent.orchestrator.create_review_agent").start()
         patch("arch_sparring_agent.orchestrator.run_questions").start().return_value = "q"
         patch("arch_sparring_agent.orchestrator.run_sparring").start().return_value = "s"
         patch("arch_sparring_agent.orchestrator.generate_review").start().return_value = "review"
@@ -125,11 +77,18 @@ class TestVerificationIntegrationInRunReview(unittest.TestCase):
     def test_verify_called_during_run_review(self, mock_verify):
         mock_verify.side_effect = lambda x: x.replace("Not Found", "Verified (via service default)")
 
+        mock_req = MagicMock()
+        mock_req.return_value = "req summary"
+        mock_arch = MagicMock()
+        mock_arch.return_value = "arch summary"
+
         orch = ReviewOrchestrator(
-            documents_dir="docs",
-            templates_dir="tmpl",
-            diagrams_dir="diag",
-            shared_config=FAKE_CONFIG,
+            requirements_agent=mock_req,
+            architecture_agent=mock_arch,
+            question_agent=MagicMock(),
+            sparring_agent=MagicMock(),
+            review_agent=MagicMock(),
+            standard_model=MagicMock(name="standard_model"),
         )
         orch.run_review()
 

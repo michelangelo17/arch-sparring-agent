@@ -3,33 +3,10 @@
 from strands import Agent
 from strands.models import BedrockModel
 
+from ..config import AGENT_REVIEW
 from ..profiles import get_directive
 
-
-def create_review_agent(
-    model_id: str | BedrockModel,
-    knowledge_base_id: str | None = None,
-    region: str | None = None,
-) -> Agent:
-    """Create agent for generating final review."""
-
-    tools: list = []
-
-    if knowledge_base_id and region:
-        from strands import tool
-
-        from ..tools.kb_client import KnowledgeBaseClient
-
-        _kb_client = KnowledgeBaseClient(knowledge_base_id, region)
-
-        @tool
-        def query_waf(query: str) -> str:
-            """Query the AWS Well-Architected Framework knowledge base for best practices."""
-            return _kb_client.query(query)
-
-        tools.append(query_waf)
-
-    system_prompt = """Write architecture review based on CONFIRMED gaps only.
+_SYSTEM_PROMPT = """Write architecture review based on CONFIRMED gaps only.
 
 Format:
 ## Executive Summary
@@ -57,20 +34,49 @@ Format:
 
 Be specific. Reference components discussed."""
 
-    if knowledge_base_id:
-        system_prompt += """
+_KB_ADDENDUM = """
 
 WAF KNOWLEDGE BASE:
 You have access to the AWS Well-Architected Framework via the query_waf tool.
 Use it to reference specific WAF best practices when writing recommendations.
 Cite WAF question IDs (e.g. SEC01-BP01) where relevant."""
 
-    directive = get_directive("review")
+
+def create_review_agent(
+    model_id: str | BedrockModel,
+    knowledge_base_id: str | None = None,
+    region: str | None = None,
+    profile: dict | None = None,
+) -> Agent:
+    """Create agent for generating final review."""
+
+    tools: list = []
+
+    if knowledge_base_id and region:
+        from strands import tool
+
+        from ..tools.kb_client import KnowledgeBaseClient
+
+        _kb_client = KnowledgeBaseClient(knowledge_base_id, region)
+
+        @tool
+        def query_waf(query: str) -> str:
+            """Query the AWS Well-Architected Framework knowledge base for best practices."""
+            return _kb_client.query(query)
+
+        tools.append(query_waf)
+
+    system_prompt = _SYSTEM_PROMPT
+
+    if knowledge_base_id:
+        system_prompt += _KB_ADDENDUM
+
+    directive = get_directive(profile, "review")
     if directive:
         system_prompt += f"\n\n{directive}"
 
     return Agent(
-        name="ReviewAgent",
+        name=AGENT_REVIEW,
         model=model_id,
         callback_handler=None,
         system_prompt=system_prompt,

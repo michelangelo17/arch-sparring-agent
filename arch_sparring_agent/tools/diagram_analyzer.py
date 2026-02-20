@@ -9,14 +9,7 @@ from PIL import Image, UnidentifiedImageError
 
 from ..config import DEFAULT_REGION, DIAGRAM_MAX_BYTES, DIAGRAM_MAX_TOKENS
 from ..exceptions import ToolError
-
-
-def _validate_path(base_dir: Path, filename: str) -> Path:
-    """Resolve path and verify it stays within the base directory."""
-    file_path = (base_dir / filename).resolve()
-    if not file_path.is_relative_to(base_dir.resolve()):
-        raise ToolError(f"Path traversal detected: {filename}")
-    return file_path
+from ..utils import validate_path
 
 
 class DiagramAnalyzer:
@@ -35,7 +28,7 @@ class DiagramAnalyzer:
 
     def read_diagram(self, filename: str) -> str:
         """Analyze diagram and return text description."""
-        image_path = _validate_path(self.diagrams_dir, filename)
+        image_path = validate_path(self.diagrams_dir, filename)
         if not image_path.exists():
             raise ToolError(f"Diagram not found: {filename}")
 
