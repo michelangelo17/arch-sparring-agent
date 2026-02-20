@@ -1,5 +1,7 @@
 """Architecture analysis agent for Phase 2."""
 
+import logging
+
 from strands import Agent, tool
 from strands.models import BedrockModel
 
@@ -9,6 +11,8 @@ from ..tools.cfn_analyzer import CloudFormationAnalyzer
 from ..tools.diagram_analyzer import DiagramAnalyzer
 from ..tools.source_analyzer import SourceAnalyzer
 from . import create_kb_tool
+
+logger = logging.getLogger(__name__)
 
 _BASE_PROMPT = """Analyze infrastructure and verify feature implementations.
 
@@ -81,7 +85,12 @@ List from CloudFormation + SDK calls observed in source code
 _WAF_OUTPUT_ADDENDUM = """
 
 ### WAF Assessment
-- Pillar — Finding: [WAF recommendation vs actual implementation, cite the WAF source]"""
+- Pillar — Finding: [WAF recommendation vs actual implementation]
+  Include the [source: ...] tag from the query_waf results so the reader knows
+  which WAF document or lens the recommendation came from.
+  Example: "Security — No encryption at rest for DynamoDB [source: well-architected-framework]"
+  Example: "Reliability — No async retry strategy [source: serverless-applications-lens]"
+  If the query_waf result has no source tag, use the s3 URI instead."""
 
 
 def create_architecture_agent(
@@ -105,22 +114,28 @@ def create_architecture_agent(
     @tool
     def read_cloudformation_template(filename: str) -> str:
         """Read a CloudFormation template."""
+        logger.info("[%s] read_cloudformation_template(%s)", AGENT_ARCHITECTURE, filename)
         return cfn_analyzer.read_template(filename)
 
     @tool
     def list_cloudformation_templates() -> list[str]:
         """List available CloudFormation templates."""
-        return cfn_analyzer.list_templates()
+        templates = cfn_analyzer.list_templates()
+        logger.info("[%s] list_cfn_templates → %d files", AGENT_ARCHITECTURE, len(templates))
+        return templates
 
     @tool
     def read_architecture_diagram(filename: str) -> str:
         """Analyze an architecture diagram image."""
+        logger.info("[%s] read_architecture_diagram(%s)", AGENT_ARCHITECTURE, filename)
         return diagram_analyzer.read_diagram(filename)
 
     @tool
     def list_architecture_diagrams() -> list[str]:
         """List available architecture diagrams."""
-        return diagram_analyzer.list_diagrams()
+        diagrams = diagram_analyzer.list_diagrams()
+        logger.info("[%s] list_architecture_diagrams → %d files", AGENT_ARCHITECTURE, len(diagrams))
+        return diagrams
 
     tools = [
         read_cloudformation_template,
@@ -128,28 +143,49 @@ def create_architecture_agent(
         read_architecture_diagram,
         list_architecture_diagrams,
     ]
+    logger.info("[%s] CFN tools enabled (dir: %s)", AGENT_ARCHITECTURE, templates_dir)
+    logger.info("[%s] Diagram tools enabled (dir: %s)", AGENT_ARCHITECTURE, diagrams_dir)
 
     if source_analyzer:
 
         @tool
         def list_source_files() -> list[str]:
             """List Lambda handler and application source files."""
-            return source_analyzer.list_source_files()
+            files = source_analyzer.list_source_files()
+            logger.info("[%s] list_source_files → %d files", AGENT_ARCHITECTURE, len(files))
+            return files
 
         @tool
         def read_source_file(filename: str) -> str:
             """Read a source code file to understand business logic."""
-            return source_analyzer.read_source_file(filename)
+            logger.info("[%s] read_source(%s)", AGENT_ARCHITECTURE, filename)
+            content = source_analyzer.read_source_file(filename)
+            logger.info(
+                "[%s] read_source(%s) → %d chars", AGENT_ARCHITECTURE, filename, len(content)
+            )
+            return content
 
         @tool
         def search_source_code(pattern: str) -> str:
             """Search for a pattern in source code."""
-            return source_analyzer.search_source(pattern)
+            logger.info("[%s] search_source(%r)", AGENT_ARCHITECTURE, pattern)
+            result = source_analyzer.search_source(pattern)
+            logger.info(
+                "[%s] search_source(%r) → %d chars", AGENT_ARCHITECTURE, pattern, len(result)
+            )
+            return result
 
         tools.extend([list_source_files, read_source_file, search_source_code])
+        logger.info("[%s] Source tools enabled (dir: %s)", AGENT_ARCHITECTURE, source_dir)
 
     if knowledge_base_id and region:
         tools.append(create_kb_tool(knowledge_base_id, region, with_sources_filter=True))
+        logger.info(
+            "[%s] KB tool enabled (kb: %s, region: %s)",
+            AGENT_ARCHITECTURE,
+            knowledge_base_id,
+            region,
+        )
 
     base_prompt = _BASE_PROMPT
 

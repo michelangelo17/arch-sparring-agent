@@ -1,8 +1,12 @@
 """Agent implementations for each review phase."""
 
+import logging
+
 from strands import tool
 
 from ..tools.kb_client import KnowledgeBaseClient
+
+logger = logging.getLogger(__name__)
 
 
 def create_kb_tool(knowledge_base_id: str, region: str, *, with_sources_filter: bool = False):
@@ -30,13 +34,19 @@ def create_kb_tool(knowledge_base_id: str, region: str, *, with_sources_filter: 
                     "serverless-applications-lens", "saas-lens".
                     Omit to search all sources.
             """
-            return kb_client.query(query, sources=sources)
+            logger.info("query_waf(%r, sources=%s)", query[:80], sources or "all")
+            result = kb_client.query(query, sources=sources)
+            logger.info("query_waf → %d chars", len(result))
+            return result
 
     else:
 
         @tool
         def query_waf(query: str) -> str:
             """Query the AWS Well-Architected Framework knowledge base for best practices."""
-            return kb_client.query(query)
+            logger.info("query_waf(%r)", query[:80])
+            result = kb_client.query(query)
+            logger.info("query_waf → %d chars", len(result))
+            return result
 
     return query_waf

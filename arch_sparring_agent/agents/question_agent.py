@@ -1,5 +1,7 @@
 """Question agent for Phase 3 - clarifying questions."""
 
+import logging
+
 from strands import Agent, tool
 from strands.models import BedrockModel
 
@@ -7,6 +9,8 @@ from ..config import AGENT_QUESTION
 from ..tools import search_content
 from ..tools.cfn_analyzer import CloudFormationAnalyzer
 from ..tools.source_analyzer import SourceAnalyzer
+
+logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """You verify gaps and identify concerns before asking users. Your workflow:
 
@@ -82,11 +86,14 @@ def create_question_agent(
         @tool
         def list_templates() -> list[str]:
             """List available CloudFormation template files."""
-            return cfn_analyzer.list_templates()
+            templates = cfn_analyzer.list_templates()
+            logger.info("[%s] list_templates → %d files", AGENT_QUESTION, len(templates))
+            return templates
 
         @tool
         def search_templates(pattern: str) -> str:
             """Search CloudFormation templates for a pattern (e.g., 'encryption')."""
+            logger.info("[%s] search_templates(%r)", AGENT_QUESTION, pattern)
             results: list[str] = []
             for template_name in cfn_analyzer.list_templates():
                 content = cfn_analyzer.read_template(template_name)
@@ -94,29 +101,42 @@ def create_question_agent(
                 if match_block:
                     results.append(match_block)
             if not results:
+                logger.info("[%s] search_templates(%r) → no matches", AGENT_QUESTION, pattern)
                 return f"No matches for '{pattern}' in CloudFormation templates."
+            logger.info(
+                "[%s] search_templates(%r) → %d matches", AGENT_QUESTION, pattern, len(results)
+            )
             return "".join(results[:10])
 
         @tool
         def read_template(filename: str) -> str:
             """Read a specific CloudFormation template."""
+            logger.info("[%s] read_template(%s)", AGENT_QUESTION, filename)
             return cfn_analyzer.read_template(filename)
 
         tools.extend([list_templates, search_templates, read_template])
+        logger.info("[%s] CFN tools enabled (dir: %s)", AGENT_QUESTION, templates_dir)
 
     if source_analyzer:
 
         @tool
         def search_source(pattern: str) -> str:
             """Search source code for a pattern."""
-            return source_analyzer.search_source(pattern)
+            logger.info("[%s] search_source(%r)", AGENT_QUESTION, pattern)
+            result = source_analyzer.search_source(pattern)
+            logger.info("[%s] search_source(%r) → %d chars", AGENT_QUESTION, pattern, len(result))
+            return result
 
         @tool
         def read_source(filename: str) -> str:
             """Read a specific source file."""
-            return source_analyzer.read_source_file(filename)
+            logger.info("[%s] read_source(%s)", AGENT_QUESTION, filename)
+            content = source_analyzer.read_source_file(filename)
+            logger.info("[%s] read_source(%s) → %d chars", AGENT_QUESTION, filename, len(content))
+            return content
 
         tools.extend([search_source, read_source])
+        logger.info("[%s] Source tools enabled (dir: %s)", AGENT_QUESTION, source_dir)
 
     return Agent(
         name=AGENT_QUESTION,
