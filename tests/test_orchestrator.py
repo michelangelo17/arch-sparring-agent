@@ -121,7 +121,7 @@ class TestReviewOrchestratorRunReview(unittest.TestCase):
 
         self.mock_run_questions = patch("arch_sparring_agent.orchestrator.run_questions").start()
         self.mock_run_sparring = patch("arch_sparring_agent.orchestrator.run_sparring").start()
-        self.mock_gen_review = patch("arch_sparring_agent.orchestrator.generate_review").start()
+        self.mock_gen_review = patch("arch_sparring_agent.orchestrator.run_review").start()
 
     def tearDown(self):
         patch.stopall()
@@ -161,9 +161,8 @@ class TestReviewOrchestratorRunReview(unittest.TestCase):
 
         self.mock_run_sparring.assert_called()
         sparring_call_args = self.mock_run_sparring.call_args
-        self.assertEqual(sparring_call_args[0][1], "[extracted] Requirements Summary")
-        self.assertEqual(sparring_call_args[0][2], "[extracted] Architecture Summary")
-        self.assertEqual(sparring_call_args[0][3], "[extracted:Q&A] Questions Context")
+        self.assertEqual(sparring_call_args[0][1], "[extracted] Architecture Summary")
+        self.assertEqual(sparring_call_args[0][2], "[extracted:Q&A] Questions Context")
 
         self.mock_gen_review.assert_called()
 

@@ -8,6 +8,7 @@ from ..profiles import get_directive
 from ..tools.cfn_analyzer import CloudFormationAnalyzer
 from ..tools.diagram_analyzer import DiagramAnalyzer
 from ..tools.source_analyzer import SourceAnalyzer
+from . import create_kb_tool
 
 _BASE_PROMPT = """Analyze infrastructure and verify feature implementations.
 
@@ -150,25 +151,7 @@ def create_architecture_agent(
         tools.extend([list_source_files, read_source_file, search_source_code])
 
     if knowledge_base_id and region:
-        from ..tools.kb_client import KnowledgeBaseClient
-
-        _kb_client = KnowledgeBaseClient(knowledge_base_id, region)
-
-        @tool
-        def query_waf(query: str, sources: list[str] | None = None) -> str:
-            """Query the AWS Well-Architected Framework knowledge base.
-
-            Args:
-                query: Natural-language question about best practices.
-                sources: Optional filter — restrict results to these sources.
-                    Use "well-architected-framework" for core WAF content.
-                    Use a lens slug for lens-specific content, e.g.
-                    "serverless-applications-lens", "saas-lens".
-                    Omit to search all sources.
-            """
-            return _kb_client.query(query, sources=sources)
-
-        tools.append(query_waf)
+        tools.append(create_kb_tool(knowledge_base_id, region, with_sources_filter=True))
 
     base_prompt = _BASE_PROMPT
 

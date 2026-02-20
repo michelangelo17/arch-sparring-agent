@@ -21,8 +21,8 @@ from arch_sparring_agent.agents.ci_agents import (  # noqa: E402
     create_ci_question_agent,
     create_ci_review_agent,
     create_ci_sparring_agent,
-    generate_ci_review,
     run_ci_questions,
+    run_ci_review,
     run_ci_sparring,
 )
 
@@ -84,11 +84,11 @@ class TestCreateCiReviewAgent(unittest.TestCase):
             self.assertEqual(kwargs["tools"], [])
 
 
-class TestGenerateCiReview(unittest.TestCase):
+class TestRunCiReview(unittest.TestCase):
     def test_calls_agent_and_returns_string(self):
         agent = MagicMock()
         agent.return_value = "mock review"
-        result = generate_ci_review(agent, "qa findings", "sparring findings")
+        result = run_ci_review(agent, "qa findings", "sparring findings")
         self.assertEqual(result, "mock review")
         agent.assert_called_once()
         call_args = agent.call_args[0][0]

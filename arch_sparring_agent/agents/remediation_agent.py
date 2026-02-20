@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError
 from strands import Agent
 from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
-from ..memory import create_session_manager, setup_agentcore_memory
+from ..infra.memory import create_session_manager, setup_agentcore_memory
 from ..state import ReviewState
 
 logger = logging.getLogger(__name__)

@@ -11,7 +11,7 @@ from bedrock_agentcore.memory.integrations.strands.session_manager import (
 )
 from botocore.exceptions import BotoCoreError, ClientError
 
-from .config import DEFAULT_REGION
+from ..config import DEFAULT_REGION
 
 logger = logging.getLogger(__name__)
 

@@ -125,12 +125,12 @@ def create_ci_review_agent(model_id: str | BedrockModel, profile: dict | None = 
     )
 
 
-def generate_ci_review(
+def run_ci_review(
     agent: Agent,
     qa_findings: str = "",
     sparring_findings: str = "",
 ) -> str:
-    """Generate concise CI review from extracted findings."""
+    """Run CI review phase from extracted findings."""
     return str(
         agent(
             f"""Write review based ONLY on these inputs. Do not add new gaps.

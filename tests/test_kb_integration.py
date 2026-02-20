@@ -135,8 +135,8 @@ class TestDeployWithKB(unittest.TestCase):
 
 class TestDestroyWithKB(unittest.TestCase):
     @patch("arch_sparring_agent.cli.deploy.delete_from_ssm")
-    @patch("arch_sparring_agent.gateway.destroy_gateway")
-    @patch("arch_sparring_agent.policy.destroy_policy_engine")
+    @patch("arch_sparring_agent.cli.deploy.destroy_gateway")
+    @patch("arch_sparring_agent.cli.deploy.destroy_policy_engine")
     @patch("arch_sparring_agent.cli.load_from_ssm")
     def test_destroy_tears_down_kb_when_present(
         self, mock_load, mock_destroy_pe, mock_destroy_gw, mock_del_ssm

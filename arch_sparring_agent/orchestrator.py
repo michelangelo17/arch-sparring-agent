@@ -4,18 +4,20 @@ import logging
 import re
 from collections.abc import Callable
 
+from strands import Agent
+
 from .agents.architecture_agent import create_architecture_agent
 from .agents.ci_agents import (
     create_ci_question_agent,
     create_ci_review_agent,
     create_ci_sparring_agent,
-    generate_ci_review,
     run_ci_questions,
+    run_ci_review,
     run_ci_sparring,
 )
 from .agents.question_agent import create_question_agent, run_questions
 from .agents.requirements_agent import create_requirements_agent
-from .agents.review_agent import create_review_agent, generate_review
+from .agents.review_agent import create_review_agent, run_review
 from .agents.sparring_agent import create_sparring_agent, run_sparring
 from .config import (
     AGENT_ARCHITECTURE,
@@ -184,8 +186,6 @@ class ReviewOrchestrator:
             logger.info("No gaps to verify — skipping service-defaults check")
             return arch_findings
 
-        from strands import Agent
-
         verifier = Agent(
             name="DefaultsVerifier",
             model=self.standard_model,
@@ -277,9 +277,7 @@ Summarize architecture, patterns, and verify which requirements have implementat
         if self.ci_mode:
             sparring_context = run_ci_sparring(self.sparring_agent, qa_findings)
         else:
-            sparring_context = run_sparring(
-                self.sparring_agent, req_findings, arch_findings, qa_findings
-            )
+            sparring_context = run_sparring(self.sparring_agent, arch_findings, qa_findings)
             self._capture(f"\n{sparring_context}")
 
         sparring_findings = extract_phase_findings(
@@ -290,9 +288,9 @@ Summarize architecture, patterns, and verify which requirements have implementat
         self._capture("\n## Phase 5: Final Review\n")
         self._capture("=" * 60)
         if self.ci_mode:
-            review_text = generate_ci_review(self.review_agent, qa_findings, sparring_findings)
+            review_text = run_ci_review(self.review_agent, qa_findings, sparring_findings)
         else:
-            review_text = generate_review(
+            review_text = run_review(
                 self.review_agent, req_findings, arch_findings, qa_findings, sparring_findings
             )
         self._capture(review_text)

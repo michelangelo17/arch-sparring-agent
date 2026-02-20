@@ -6,7 +6,7 @@ import frontmatter
 
 from ..config import DOC_MAX_CHARS
 from ..exceptions import ToolError
-from ..utils import validate_path
+from . import validate_path
 
 
 class DocumentParser:

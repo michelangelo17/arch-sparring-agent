@@ -6,8 +6,8 @@ import time
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from .config import DEFAULT_REGION, IAM_PROPAGATION_TIMEOUT
-from .exceptions import PolicySetupError
+from ..config import DEFAULT_REGION, IAM_PROPAGATION_TIMEOUT
+from ..exceptions import PolicySetupError
 
 logger = logging.getLogger(__name__)
 

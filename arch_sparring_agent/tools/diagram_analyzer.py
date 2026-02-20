@@ -9,7 +9,7 @@ from PIL import Image, UnidentifiedImageError
 
 from ..config import DEFAULT_REGION, DIAGRAM_MAX_BYTES, DIAGRAM_MAX_TOKENS
 from ..exceptions import ToolError
-from ..utils import validate_path
+from . import validate_path
 
 
 class DiagramAnalyzer:

@@ -5,7 +5,9 @@ import os
 import click
 
 from ..config import DEFAULT_REGION
-from ..infra import SharedConfig, delete_from_ssm, save_to_ssm
+from ..infra import SSM_PARAMETER_NAME, SharedConfig, delete_from_ssm, save_to_ssm
+from ..infra.gateway import destroy_gateway, setup_gateway
+from ..infra.policy import destroy_policy_engine, setup_architecture_review_policies
 from . import (
     _configure_logging,
     _load_shared_config,
@@ -88,8 +90,6 @@ def _deploy_infra(region: str, gateway_name: str, policy_engine_name: str) -> tu
     Raises click.ClickException on failure so the CLI exits cleanly.
     """
     from ..exceptions import PolicySetupError
-    from ..gateway import setup_gateway
-    from ..policy import setup_architecture_review_policies
 
     try:
         gateway_arn, gateway_id = setup_gateway(region=region, gateway_name=gateway_name)
@@ -104,16 +104,12 @@ def _deploy_infra(region: str, gateway_name: str, policy_engine_name: str) -> tu
             gateway_name=gateway_name,
         )
     except PolicySetupError as e:
-        raise click.ClickException(
-            f"Policy Engine / Cedar policy setup failed: {e}"
-        ) from e
+        raise click.ClickException(f"Policy Engine / Cedar policy setup failed: {e}") from e
 
     return gateway_arn, gateway_id, engine_id
 
 
 def _ssm_param_name() -> str:
-    from ..infra import SSM_PARAMETER_NAME
-
     return SSM_PARAMETER_NAME
 
 
@@ -149,9 +145,6 @@ def destroy(region, confirm, verbose):
         return
 
     config = _load_shared_config(region)
-
-    from ..gateway import destroy_gateway
-    from ..policy import destroy_policy_engine
 
     click.echo(f"Destroying arch-review infrastructure in {region}...")
 

@@ -13,6 +13,7 @@ from ..profiles import load_profile
 from ..state import ReviewState
 from . import (
     DEFAULT_OUTPUT_DIR,
+    DEFAULT_REMEDIATION_FILE,
     DEFAULT_STATE_FILE,
     EXIT_ERROR,
     _configure_logging,
@@ -73,8 +74,6 @@ def remediate(output_dir, no_output, model, region, profile_name, verbose):
         sys.exit(EXIT_ERROR)
 
     try:
-        from . import DEFAULT_REMEDIATION_FILE
-
         state = ReviewState.from_file(state_path)
         click.echo(f"Loaded state from: {state_path}")
 

@@ -1,10 +1,16 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from arch_sparring_agent.config import (
+    CONDENSER_CHUNK_SIZE as CHUNK_SIZE,
+)
+from arch_sparring_agent.config import (
+    CONDENSER_MAX_CHUNKS as MAX_CHUNKS,
+)
+from arch_sparring_agent.config import (
+    CONDENSER_PASSTHROUGH_THRESHOLD as PASSTHROUGH_THRESHOLD,
+)
 from arch_sparring_agent.context_condenser import (
-    CHUNK_SIZE,
-    MAX_CHUNKS,
-    PASSTHROUGH_THRESHOLD,
     _chunked_extract,
     _extract,
     extract_architecture_findings,

@@ -7,8 +7,8 @@ from dataclasses import asdict, dataclass, fields
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from .config import DEFAULT_REGION
-from .exceptions import ConfigurationError
+from ..config import DEFAULT_REGION
+from ..exceptions import ConfigurationError
 
 logger = logging.getLogger(__name__)
 

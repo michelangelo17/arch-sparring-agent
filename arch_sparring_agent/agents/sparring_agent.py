@@ -59,7 +59,7 @@ def create_sparring_agent(model_id: str | BedrockModel, profile: dict | None = N
     )
 
 
-def run_sparring(agent: Agent, req_findings: str, arch_findings: str, qa_findings: str) -> str:
+def run_sparring(agent: Agent, arch_findings: str, qa_findings: str) -> str:
     """Execute sparring phase with extracted findings."""
     result = agent(
         f"""Review the architecture findings and challenge any gaps. Be BRIEF — no code examples.

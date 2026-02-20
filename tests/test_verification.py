@@ -23,7 +23,7 @@ class TestVerifyAgainstDefaults(unittest.TestCase):
         result = orch._verify_against_defaults(findings)
         self.assertEqual(result, findings)
 
-    @patch("strands.Agent")
+    @patch("arch_sparring_agent.orchestrator.Agent")
     def test_calls_verifier_when_features_not_found_present(self, mock_agent_cls):
         orch = self._make_orchestrator()
         mock_agent = MagicMock()
@@ -36,7 +36,7 @@ class TestVerifyAgainstDefaults(unittest.TestCase):
         mock_agent_cls.assert_called_once()
         self.assertEqual(result, "verified findings")
 
-    @patch("strands.Agent")
+    @patch("arch_sparring_agent.orchestrator.Agent")
     def test_returns_original_on_verifier_failure(self, mock_agent_cls):
         orch = self._make_orchestrator()
         mock_agent = MagicMock()
@@ -68,7 +68,7 @@ class TestVerificationIntegrationInRunReview(unittest.TestCase):
 
         patch("arch_sparring_agent.orchestrator.run_questions").start().return_value = "q"
         patch("arch_sparring_agent.orchestrator.run_sparring").start().return_value = "s"
-        patch("arch_sparring_agent.orchestrator.generate_review").start().return_value = "review"
+        patch("arch_sparring_agent.orchestrator.run_review").start().return_value = "review"
 
     def tearDown(self):
         patch.stopall()

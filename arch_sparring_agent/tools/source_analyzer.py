@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ..config import SOURCE_FILE_MAX_CHARS
 from ..exceptions import ToolError
-from ..utils import validate_path
+from . import validate_path
 
 
 class SourceAnalyzer:

@@ -12,15 +12,12 @@ from strands.types.exceptions import ContextWindowOverflowException, MaxTokensRe
 
 from .config import CONDENSER_CHUNK_SIZE, CONDENSER_MAX_CHUNKS, CONDENSER_PASSTHROUGH_THRESHOLD
 
-# Re-export for backwards compatibility and test access
-PASSTHROUGH_THRESHOLD = CONDENSER_PASSTHROUGH_THRESHOLD
-CHUNK_SIZE = CONDENSER_CHUNK_SIZE
-MAX_CHUNKS = CONDENSER_MAX_CHUNKS
-
 
 def _chunked_extract(content: str, system_prompt: str, model_id: str | BedrockModel) -> str:
     """Fallback: extract findings from content in chunks, then merge."""
-    chunks = [content[i : i + CHUNK_SIZE] for i in range(0, len(content), CHUNK_SIZE)]
+    chunks = [
+        content[i : i + CONDENSER_CHUNK_SIZE] for i in range(0, len(content), CONDENSER_CHUNK_SIZE)
+    ]
 
     extractor = Agent(
         name="ChunkExtractor",
@@ -31,7 +28,7 @@ def _chunked_extract(content: str, system_prompt: str, model_id: str | BedrockMo
     )
 
     chunk_results = []
-    for i, chunk in enumerate(chunks[:MAX_CHUNKS]):
+    for i, chunk in enumerate(chunks[:CONDENSER_MAX_CHUNKS]):
         try:
             chunk_results.append(str(extractor(chunk)))
         except (ContextWindowOverflowException, MaxTokensReachedException, ClientError):
@@ -39,7 +36,7 @@ def _chunked_extract(content: str, system_prompt: str, model_id: str | BedrockMo
 
     # Merge: deduplicate by running one final extraction over the combined chunk results
     combined = "\n\n".join(chunk_results)
-    if len(combined) <= PASSTHROUGH_THRESHOLD:
+    if len(combined) <= CONDENSER_PASSTHROUGH_THRESHOLD:
         return combined
 
     merger = Agent(
@@ -61,7 +58,7 @@ def _chunked_extract(content: str, system_prompt: str, model_id: str | BedrockMo
 
 def _extract(content: str, system_prompt: str, model_id: str | BedrockModel) -> str:
     """Run structured extraction, with chunked fallback for large inputs."""
-    if len(content) <= PASSTHROUGH_THRESHOLD:
+    if len(content) <= CONDENSER_PASSTHROUGH_THRESHOLD:
         return content
 
     extractor = Agent(

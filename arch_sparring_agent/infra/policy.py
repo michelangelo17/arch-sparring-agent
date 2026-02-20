@@ -6,7 +6,7 @@ import time
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from .config import (
+from ..config import (
     AGENT_ARCHITECTURE,
     AGENT_MODERATOR,
     AGENT_QUESTION,
@@ -15,7 +15,7 @@ from .config import (
     AGENT_SPARRING,
     DEFAULT_REGION,
 )
-from .exceptions import PolicySetupError
+from ..exceptions import PolicySetupError
 from .gateway import associate_gateway_with_policy_engine, setup_gateway
 
 logger = logging.getLogger(__name__)

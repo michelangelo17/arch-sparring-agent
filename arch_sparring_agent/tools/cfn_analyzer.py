@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ..config import CFN_MAX_CHARS
 from ..exceptions import ToolError
-from ..utils import validate_path
+from . import validate_path
 
 
 class CloudFormationAnalyzer:
