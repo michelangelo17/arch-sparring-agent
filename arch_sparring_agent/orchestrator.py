@@ -146,6 +146,13 @@ class ReviewOrchestrator:
         if "Features Not Found" not in arch_findings:
             return arch_findings
 
+        not_found_idx = arch_findings.index("Features Not Found")
+        after_header = arch_findings[not_found_idx + len("Features Not Found") :]
+        after_header = after_header.lstrip(":# \n")
+        if not after_header or after_header.lower().startswith("none"):
+            logger.info("No gaps to verify — skipping service-defaults check")
+            return arch_findings
+
         from strands import Agent
 
         verifier = Agent(

@@ -59,11 +59,16 @@ Call done_challenging when key issues are addressed."""
 def run_sparring(agent: Agent, req_findings: str, arch_findings: str, qa_findings: str) -> str:
     """Execute sparring phase with extracted findings."""
     result = agent(
-        f"""Challenge the gaps below. Be BRIEF in your responses - no code examples.
+        f"""Review the architecture findings and challenge any gaps. Be BRIEF — no code examples.
 
-GAPS TO CHALLENGE:
+ARCHITECTURE FINDINGS:
+{arch_findings}
+
+CLARIFYING QUESTIONS & ANSWERS:
 {qa_findings}
 
-Keep each challenge to 2-3 sentences. Call done_challenging when done."""
+Challenge items from "Features Not Found" and any weaknesses identified
+in the Q&A. Keep each challenge to 2-3 sentences.
+Call done_challenging when done."""
     )
     return str(result)
