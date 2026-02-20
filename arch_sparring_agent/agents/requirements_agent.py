@@ -6,7 +6,7 @@ from strands.models import BedrockModel
 from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
 from ..config import AGENT_REQUIREMENTS, DOC_CHUNK_SUMMARY_THRESHOLD, DOC_SUMMARY_THRESHOLD
-from ..context_condenser import _chunked_extract
+from ..context_condenser import chunked_extract
 
 _SYSTEM_PROMPT = """Analyze requirements documents.
 
@@ -62,14 +62,14 @@ def create_requirements_agent(
             )
             try:
                 if len(content) > DOC_CHUNK_SUMMARY_THRESHOLD:
-                    summary = _chunked_extract(content, _SUMMARIZE_PROMPT, model_id)
+                    summary = chunked_extract(content, _SUMMARIZE_PROMPT, model_id)
                 else:
                     summary = str(summarizer(f"Summarize this content:\n\n{content}"))
 
                 return f"Content from {filename} (Summarized):\n\n{summary}"
             except (ContextWindowOverflowException, MaxTokensReachedException, ClientError) as e:
                 try:
-                    summary = _chunked_extract(content, _SUMMARIZE_PROMPT, model_id)
+                    summary = chunked_extract(content, _SUMMARIZE_PROMPT, model_id)
                     return f"Content from {filename} (Chunk Summarized after error):\n\n{summary}"
                 except (
                     ContextWindowOverflowException,

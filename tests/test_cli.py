@@ -30,11 +30,11 @@ class TestGetVerdictAndExitCode(unittest.TestCase):
         self.assertEqual(verdict, "PASS WITH CONCERNS")
         self.assertEqual(code, 2)
 
-    def test_pass_with_concerns_high_impact_strict_returns_fail_1(self):
+    def test_pass_with_concerns_high_impact_still_returns_2(self):
         text = "Verdict: PASS WITH CONCERNS\n\nImpact: High"
-        verdict, code = _get_verdict_and_exit_code(text, strict=True)
-        self.assertEqual(verdict, "FAIL")
-        self.assertEqual(code, 1)
+        verdict, code = _get_verdict_and_exit_code(text)
+        self.assertEqual(verdict, "PASS WITH CONCERNS")
+        self.assertEqual(code, 2)
 
 
 class TestCliGroup(unittest.TestCase):

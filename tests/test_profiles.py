@@ -123,7 +123,7 @@ class TestDirectiveContent(unittest.TestCase):
 
     def test_default_has_all_agent_directives(self):
         profile = load_profile("default")
-        for agent in ("sparring", "review", "architecture", "ci"):
+        for agent in ("sparring", "review", "architecture"):
             with self.subTest(agent=agent):
                 self.assertTrue(
                     len(get_directive(profile, agent)) > 0, f"Missing directive for {agent}"
@@ -131,7 +131,7 @@ class TestDirectiveContent(unittest.TestCase):
 
     def test_strict_has_all_agent_directives(self):
         profile = load_profile("strict")
-        for agent in ("sparring", "review", "architecture", "ci"):
+        for agent in ("sparring", "review", "architecture"):
             with self.subTest(agent=agent):
                 self.assertTrue(
                     len(get_directive(profile, agent)) > 0, f"Missing directive for {agent}"
@@ -139,7 +139,7 @@ class TestDirectiveContent(unittest.TestCase):
 
     def test_lightweight_has_all_agent_directives(self):
         profile = load_profile("lightweight")
-        for agent in ("sparring", "review", "architecture", "ci"):
+        for agent in ("sparring", "review", "architecture"):
             with self.subTest(agent=agent):
                 self.assertTrue(
                     len(get_directive(profile, agent)) > 0, f"Missing directive for {agent}"

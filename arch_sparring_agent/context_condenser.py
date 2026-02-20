@@ -13,7 +13,7 @@ from strands.types.exceptions import ContextWindowOverflowException, MaxTokensRe
 from .config import CONDENSER_CHUNK_SIZE, CONDENSER_MAX_CHUNKS, CONDENSER_PASSTHROUGH_THRESHOLD
 
 
-def _chunked_extract(content: str, system_prompt: str, model_id: str | BedrockModel) -> str:
+def chunked_extract(content: str, system_prompt: str, model_id: str | BedrockModel) -> str:
     """Fallback: extract findings from content in chunks, then merge."""
     chunks = [
         content[i : i + CONDENSER_CHUNK_SIZE] for i in range(0, len(content), CONDENSER_CHUNK_SIZE)
@@ -72,12 +72,12 @@ def _extract(content: str, system_prompt: str, model_id: str | BedrockModel) -> 
     try:
         return str(extractor(content))
     except (ContextWindowOverflowException, MaxTokensReachedException):
-        return _chunked_extract(content, system_prompt, model_id)
+        return chunked_extract(content, system_prompt, model_id)
     except ClientError as e:
         # Bedrock token limit errors surface as ClientError with specific error codes
         error_code = e.response.get("Error", {}).get("Code", "")
         if error_code in ("ValidationException", "ModelErrorException"):
-            return _chunked_extract(content, system_prompt, model_id)
+            return chunked_extract(content, system_prompt, model_id)
         raise
 
 

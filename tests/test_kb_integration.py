@@ -49,8 +49,8 @@ class TestSharedConfigKBFields(unittest.TestCase):
         self.assertIsNone(config.knowledge_base_id)
         self.assertIsNone(config.kb_bucket_name)
 
-    def test_from_json_ignores_unknown_fields(self):
-        """Future fields in SSM shouldn't break old clients."""
+    def test_from_json_rejects_unknown_fields(self):
+        """Unknown fields cause a clear error."""
         future_json = json.dumps(
             {
                 "gateway_id": "gw-1",
@@ -62,8 +62,8 @@ class TestSharedConfigKBFields(unittest.TestCase):
                 "some_future_field": "value",
             }
         )
-        config = SharedConfig.from_json(future_json)
-        self.assertEqual(config.knowledge_base_id, "kb-x")
+        with self.assertRaises(TypeError):
+            SharedConfig.from_json(future_json)
 
 
 class TestDeployWithKBHelp(unittest.TestCase):

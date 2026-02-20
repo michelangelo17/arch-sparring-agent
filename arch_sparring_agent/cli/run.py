@@ -1,7 +1,6 @@
 """Run CLI command."""
 
 import json
-import os
 import shutil
 import sys
 from datetime import datetime
@@ -27,7 +26,6 @@ from . import (
     DEFAULT_REVIEW_FILE,
     DEFAULT_STATE_FILE,
     EXIT_ERROR,
-    EXIT_SUCCESS,
     _configure_logging,
     _get_output_dir,
     _get_verdict_and_exit_code,
@@ -101,9 +99,6 @@ def _archive_previous(output_dir: Path) -> None:
     help=f"Output directory for all files (default: {DEFAULT_OUTPUT_DIR})",
 )
 @click.option("--no-history", is_flag=True, default=False, help="Don't archive previous reviews")
-@click.option(
-    "--keep-history", is_flag=True, default=False, help="Archive previous reviews even in CI mode"
-)
 @click.option("--no-state", is_flag=True, default=False, help="Don't save state file after review")
 @click.option(
     "--model",
@@ -116,14 +111,6 @@ def _archive_previous(output_dir: Path) -> None:
     default=lambda: get_env_or_default("AWS_REGION", DEFAULT_REGION),
     help=f"AWS region (default: {DEFAULT_REGION})",
 )
-@click.option(
-    "--ci",
-    is_flag=True,
-    default=lambda: get_env_or_default("CI", "").lower() in ("true", "1", "yes"),
-    help="CI/CD mode: non-interactive, no history by default",
-)
-@click.option("--json", "json_output", is_flag=True, help="Output results as JSON (implies --ci)")
-@click.option("--strict", is_flag=True, default=False, help="Strict: any High impact risk fails")
 @click.option(
     "--profile",
     "profile_name",
@@ -144,18 +131,14 @@ def run(
     source_dir,
     output_dir,
     no_history,
-    keep_history,
     no_state,
     model,
     region,
-    ci,
-    json_output,
-    strict,
     profile_name,
     reasoning_level,
     verbose,
 ):
-    """Run an architecture review.
+    """Run an interactive architecture review.
 
     \b
     Requires infrastructure to be deployed first (arch-review deploy).
@@ -171,11 +154,13 @@ def run(
     \b
     Examples:
       arch-review run --documents-dir ./docs --templates-dir ./cdk.out --diagrams-dir ./diagrams
-      arch-review run --ci --keep-history --profile strict
+      arch-review run --profile strict --reasoning-level medium
     """
     _configure_logging(verbose)
+
+    import os
+
     os.environ["AWS_REGION"] = region
-    ci_mode = ci or json_output
 
     profile_data = load_profile(profile_name)
 
@@ -189,7 +174,6 @@ def run(
         raise click.UsageError("--source-dir must exist if provided")
 
     shared_config = _load_shared_config(region)
-    should_archive = keep_history or (not ci_mode and not no_history)
 
     _run_review(
         documents_dir=documents_dir,
@@ -198,12 +182,9 @@ def run(
         source_dir=source_dir,
         output_dir=output_dir,
         no_state=no_state,
-        should_archive=should_archive,
+        should_archive=not no_history,
         model=model,
         shared_config=shared_config,
-        ci_mode=ci_mode,
-        json_output=json_output,
-        strict=strict,
         reasoning_level=reasoning_level,
         profile=profile_data,
     )
@@ -219,9 +200,6 @@ def _run_review(
     should_archive: bool,
     model: str,
     shared_config: SharedConfig,
-    ci_mode: bool,
-    json_output: bool,
-    strict: bool,
     reasoning_level: str = DEFAULT_REASONING_LEVEL,
     profile: dict | None = None,
 ):
@@ -239,60 +217,36 @@ def _run_review(
             shared_config=shared_config,
             source_dir=source_dir or None,
             model_name=model,
-            ci_mode=ci_mode,
             output_fn=click.echo,
             reasoning_level=reasoning_level,
             profile=profile,
         )
 
         result = orchestrator.run_review()
-        verdict, exit_code = _get_verdict_and_exit_code(result["review"], strict=strict)
+        verdict, exit_code = _get_verdict_and_exit_code(result["review"])
 
-        if json_output:
-            json_result = {
-                "review": result["review"],
-                "requirements_summary": result.get("requirements_summary", ""),
-                "architecture_summary": result.get("architecture_summary", ""),
-                "gaps": result.get("gaps", ""),
-                "risks": result.get("risks", ""),
-                "exit_code": exit_code,
-                "verdict": verdict,
-                "agents_used": result["agents_used"],
-            }
-            click.echo(json.dumps(json_result, indent=2))
-        else:
-            review_path = out_path / DEFAULT_REVIEW_FILE
-            full_session = result.get("full_session", result["review"])
-            review_path.write_text(full_session)
-            click.echo(f"\nReview saved to: {review_path}")
+        review_path = out_path / DEFAULT_REVIEW_FILE
+        full_session = result.get("full_session", result["review"])
+        review_path.write_text(full_session)
+        click.echo(f"\nReview saved to: {review_path}")
 
-            if not no_state:
-                state = extract_state_from_review(result)
-                state_path = out_path / DEFAULT_STATE_FILE
-                state.save(state_path)
-                click.echo(f"State saved to: {state_path}")
+        if not no_state:
+            state = extract_state_from_review(result)
+            state_path = out_path / DEFAULT_STATE_FILE
+            state.save(state_path)
+            click.echo(f"State saved to: {state_path}")
 
-            if ci_mode:
-                click.echo(f"\nVerdict: {verdict}")
-                if exit_code != EXIT_SUCCESS:
-                    click.echo(f"Exiting with code {exit_code}")
-
+        click.echo(f"\nVerdict: {verdict}")
         sys.exit(exit_code)
 
     except click.UsageError:
         raise
     except ArchReviewError as e:
-        if json_output:
-            click.echo(json.dumps({"error": str(e), "exit_code": EXIT_ERROR}))
-        else:
-            click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error: {e}", err=True)
         sys.exit(EXIT_ERROR)
     except Exception as e:
-        if json_output:
-            click.echo(json.dumps({"error": str(e), "exit_code": EXIT_ERROR}))
-        else:
-            click.echo(f"Unexpected error: {e}", err=True)
-            import traceback
+        click.echo(f"Unexpected error: {e}", err=True)
+        import traceback
 
-            click.echo(traceback.format_exc(), err=True)
+        click.echo(traceback.format_exc(), err=True)
         sys.exit(EXIT_ERROR)

@@ -35,11 +35,3 @@ directives:
       the CloudFormation template, source code, or well-known service behavior
     - Err on the side of flagging: a false positive is better than a missed gap
 
-  ci: |
-    - Report ALL gaps including missing best practices
-    - Rate unmitigated security gaps as High impact
-    - Missing best practices that affect security posture are Medium, not Low
-    - FAIL for any High-impact gap that lacks a documented mitigation
-    - PASS WITH CONCERNS if best practices are missing, even without active vulnerabilities
-    - Do NOT downplay gaps based on project context -- treat every deployment as production
-    - Be specific: reference resource names and policy statements

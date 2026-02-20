@@ -7,10 +7,9 @@ Multi-agent system for architecture reviews. Analyzes requirements documents, Cl
 - **5-phase review process**: Requirements → Architecture → Questions → Sparring → Final Review
 - **Interactive sparring**: Challenges architectural gaps and pushes back on weak justifications
 - **Remediation mode**: Discuss and resolve findings from previous reviews with session memory
-- **CI/CD mode**: Non-interactive automated reviews with structured output and exit codes
 - **CDK support**: Works with CloudFormation templates and CDK synthesized output (`cdk.out/`)
 - **Multimodal analysis**: Analyzes architecture diagrams (PNG, JPEG) via Bedrock
-- **Full session export**: Saves complete review session to markdown or JSON
+- **Full session export**: Saves complete review session to markdown
 - **Review profiles**: Customizable behavioral profiles (strict, lightweight, or your own)
 - **WAF Knowledge Base**: Optional RAG-powered retrieval of AWS Well-Architected Framework best practices
 - **Shared infrastructure**: Deploy once per AWS account, shared across team members
@@ -67,10 +66,10 @@ arch-review destroy --confirm
 
 ### `arch-review run`
 
-Run an architecture review. Supports interactive and CI modes.
+Run an interactive architecture review.
 
 ```bash
-# Interactive (default)
+# Basic usage
 arch-review run \
     --documents-dir ./docs \
     --templates-dir ./templates \
@@ -83,20 +82,11 @@ arch-review run \
     --diagrams-dir ./diagrams \
     --source-dir ./src/lambdas
 
-# CI/CD mode (non-interactive)
-arch-review run --ci \
-    --documents-dir ./docs \
-    --templates-dir ./cdk.out
-
-# JSON output for programmatic processing
-arch-review run --json \
-    --documents-dir ./docs \
-    --templates-dir ./templates
-
 # Use a different profile
 arch-review run --profile strict \
     --documents-dir ./docs \
-    --templates-dir ./templates
+    --templates-dir ./templates \
+    --diagrams-dir ./diagrams
 ```
 
 ### `arch-review remediate`
@@ -142,7 +132,7 @@ Profiles control agent behavior — how strict the review is, what justification
 | `lightweight` | Pragmatic for prototypes and demos, accepts "it's a prototype"    |
 
 ```bash
-arch-review run --profile strict --documents-dir ./docs --templates-dir ./templates
+arch-review run --profile strict --documents-dir ./docs --templates-dir ./templates --diagrams-dir ./diagrams
 ```
 
 ### Custom Profiles
@@ -190,14 +180,9 @@ The KB uses **S3 Vectors** as the vector store (cost-effective, no OpenSearch Se
 | `--source-dir`            | Lambda/application source code (optional)                 |
 | `--output-dir`            | Output directory (default: `.arch-review`)                |
 | `--profile`               | Review profile: `default`, `strict`, `lightweight`, or custom |
-| `--no-history`            | Don't archive previous reviews (default in CI mode)       |
-| `--keep-history`          | Archive previous reviews even in CI mode                  |
+| `--no-history`            | Don't archive previous reviews                            |
 | `--no-state`              | Don't save state file after review                        |
-| `--ci`                    | CI/CD mode: non-interactive analysis                      |
-| `--json`                  | Output as JSON (implies --ci)                             |
-| `--strict`                | Fail on any High impact risk (ignores verdict)            |
 | `--reasoning-level`       | Reasoning effort: off, low, medium, high (default: low)   |
-| `--skip-policy-check`     | Skip policy engine setup (development only)               |
 | `-v`, `--verbose`         | Show detailed output (policy setup, debug info)           |
 | `--model`                 | Model: `nova-2-lite` or `opus-4.6` (default: nova-2-lite) |
 | `--region`                | AWS region (default: eu-central-1)                        |
@@ -281,14 +266,13 @@ All options can be set via environment variables:
 | `ARCH_REVIEW_MODEL`           | Model short name (nova-2-lite, opus-4.6) |
 | `ARCH_REVIEW_REASONING_LEVEL` | Reasoning effort: off, low, medium, high |
 | `AWS_REGION`                  | AWS region                               |
-| `CI`                          | Enable CI mode (true/1/yes)              |
 
 ## Exit Codes
 
 | Code | Meaning                                          |
 | ---- | ------------------------------------------------ |
 | 0    | PASS - no significant issues found               |
-| 1    | FAIL (or --strict with High impact)              |
+| 1    | FAIL - critical issues found                     |
 | 2    | PASS WITH CONCERNS - gaps found but non-critical |
 | 3    | Error during execution                           |
 
@@ -313,17 +297,6 @@ export AWS_REGION=us-east-1
 aws sso login --profile my-profile
 export AWS_PROFILE=my-profile
 ```
-
-### CI/CD Environments
-
-Each platform has its own credential mechanism:
-
-| Platform      | Recommended Method          | Credential Source                |
-| ------------- | --------------------------- | -------------------------------- |
-| GitHub        | OIDC                        | IAM Identity Provider for GitHub |
-| GitLab        | OIDC                        | IAM Identity Provider for GitLab |
-| AWS CodeBuild | Service Role                | Attached IAM role (automatic)    |
-| Jenkins       | Instance Profile or Secrets | EC2 role or credential plugin    |
 
 ### Required IAM Permissions
 
@@ -422,42 +395,14 @@ Each platform has its own credential mechanism:
 
 The `KnowledgeBaseOptional` statement is only needed if you use `deploy --with-kb`.
 
-## CI/CD Integration
-
-Example configurations are in `examples/ci/`.
-
-### GitHub Actions
-
-Copy `examples/ci/github-actions.yml` to `.github/workflows/arch-review.yml`:
-
-- Supports OIDC (recommended) or static credentials
-- Comments results on PRs
-- Uploads review as artifact
-
-### GitLab CI
-
-Copy `examples/ci/gitlab-ci.yml` to `.gitlab-ci.yml`:
-
-- Supports OIDC or CI/CD variables
-- Runs on merge requests
-- Optional JSON output job
-
-### AWS CodeBuild
-
-Copy `examples/ci/aws-codebuild.yml` to `buildspec.yml`:
-
-- Uses CodeBuild service role automatically
-- No credential configuration needed
-- Works with CodePipeline
-
 ## Review Phases
 
 1. **Requirements Analysis**: Extracts requirements, constraints, and NFRs from documents
 2. **Architecture Analysis**: Analyzes CloudFormation templates and diagrams (queries WAF KB if available)
 3. **Service Default Verification**: Filters false positives from features that AWS provides by default
-4. **Clarifying Questions** (interactive) / **Gap Identification** (CI): Gathers context or identifies unknowns
-5. **Sparring** (interactive) / **Risk Analysis** (CI): Challenges decisions or lists risks
-6. **Final Review**: Produces structured review with gaps, risks, recommendations
+4. **Clarifying Questions**: Gathers context by asking the user about unverified gaps
+5. **Sparring**: Challenges architectural decisions and pushes back on weak justifications
+6. **Final Review**: Produces structured review with gaps, risks, recommendations, and verdict
 
 ## Input Formats
 
@@ -484,9 +429,19 @@ arch_sparring_agent/
 │   ├── architecture_agent.py  # Phase 2: Template/diagram analysis
 │   ├── question_agent.py      # Phase 3: Interactive questions
 │   ├── sparring_agent.py      # Phase 4: Interactive sparring
-│   ├── ci_agents.py           # Phase 3-4: CI/CD non-interactive
 │   ├── review_agent.py        # Phase 5: Final review
 │   └── remediation_agent.py   # Remediation mode discussions
+├── cli/
+│   ├── run.py                 # run command
+│   ├── deploy.py              # deploy/destroy commands
+│   ├── remediate.py           # remediate command
+│   ├── profiles_cmd.py        # profiles command group
+│   └── kb.py                  # kb sync command
+├── infra/
+│   ├── shared_config.py       # SSM-based config discovery
+│   ├── gateway.py             # Gateway setup and lifecycle
+│   ├── policy.py              # Cedar policy management
+│   └── memory.py              # AgentCore memory for sessions
 ├── kb/
 │   ├── infra.py               # KB infrastructure (S3 Vectors, Bedrock KB)
 │   ├── scraper.py             # WAF documentation scraper
@@ -502,20 +457,11 @@ arch_sparring_agent/
 │   ├── source_analyzer.py     # Lambda/application source code reader
 │   └── kb_client.py           # Knowledge Base query client
 ├── orchestrator.py            # Phase orchestration + service default verification
+├── context_condenser.py       # Structured extraction to prevent token overflow
 ├── profiles.py                # Profile loading and resolution
-├── infra.py                   # SharedConfig and SSM parameter management
-├── config.py                  # Constants and AWS client setup
-├── policy.py                  # Cedar policy management
-├── gateway.py                 # Gateway setup and lifecycle
-├── memory.py                  # AgentCore memory for sessions
-├── exceptions.py              # Custom exception hierarchy
-├── context_condenser.py       # Handles large inputs
+├── config.py                  # Model registry and tuning constants
 ├── state.py                   # Review state persistence
-└── cli.py                     # CLI entry point (deploy/run/remediate/destroy)
-examples/ci/
-├── github-actions.yml         # GitHub Actions example
-├── gitlab-ci.yml              # GitLab CI example
-└── aws-codebuild.yml          # AWS CodeBuild example
+└── exceptions.py              # Custom exception hierarchy
 ```
 
 ## Development

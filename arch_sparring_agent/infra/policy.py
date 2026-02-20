@@ -8,7 +8,6 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from ..config import (
     AGENT_ARCHITECTURE,
-    AGENT_MODERATOR,
     AGENT_QUESTION,
     AGENT_REQUIREMENTS,
     AGENT_REVIEW,
@@ -361,29 +360,6 @@ def setup_architecture_review_policies(
     else:
         policies_failed.append("ArchitectureAgentToolRestrictions")
 
-    # ReviewModerator: agent-to-agent communication only
-    moderator_cedar = f"""permit(
-    principal is AgentCore::OAuthUser,
-    action,
-    resource == AgentCore::Gateway::"{gateway_arn}"
-) when {{
-    context has agentName && context.agentName == "{AGENT_MODERATOR}" &&
-    context has toolName &&
-    ["get_requirements_analysis", "get_architecture_analysis"].contains(context.toolName)
-}};"""
-
-    policy_id = create_policy(
-        engine_id,
-        "ModeratorAgentToolRestrictions",
-        moderator_cedar,
-        "Restricts Moderator Agent to only use agent-to-agent communication tools",
-        region=region,
-    )
-    if policy_id:
-        policies_created.append("ModeratorAgentToolRestrictions")
-    else:
-        policies_failed.append("ModeratorAgentToolRestrictions")
-
     # ReviewAgent: optional KB query tool
     review_cedar = f"""permit(
     principal is AgentCore::OAuthUser,
@@ -416,7 +392,6 @@ def setup_architecture_review_policies(
     context has agentName &&
     (context.agentName == "{AGENT_REQUIREMENTS}" ||
      context.agentName == "{AGENT_ARCHITECTURE}" ||
-     context.agentName == "{AGENT_MODERATOR}" ||
      context.agentName == "{AGENT_QUESTION}" ||
      context.agentName == "{AGENT_SPARRING}" ||
      context.agentName == "{AGENT_REVIEW}")

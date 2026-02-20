@@ -11,8 +11,8 @@ from arch_sparring_agent.config import (
     CONDENSER_PASSTHROUGH_THRESHOLD as PASSTHROUGH_THRESHOLD,
 )
 from arch_sparring_agent.context_condenser import (
-    _chunked_extract,
     _extract,
+    chunked_extract,
     extract_architecture_findings,
     extract_phase_findings,
     extract_requirements,
@@ -191,7 +191,7 @@ class TestChunkedFallback(unittest.TestCase):
 
 
 class TestChunkedExtract(unittest.TestCase):
-    """Test _chunked_extract directly."""
+    """Test chunked_extract directly."""
 
     @patch("arch_sparring_agent.context_condenser.Agent")
     def test_chunks_large_content(self, mock_agent_cls):
@@ -200,7 +200,7 @@ class TestChunkedExtract(unittest.TestCase):
         mock_agent.return_value = "chunk summary"
         mock_agent_cls.return_value = mock_agent
 
-        _chunked_extract(content, "prompt", "test-model")
+        chunked_extract(content, "prompt", "test-model")
 
         # 1 extractor reused for all chunks (combined output is short → no merger)
         self.assertEqual(mock_agent_cls.call_count, 1)
@@ -214,7 +214,7 @@ class TestChunkedExtract(unittest.TestCase):
         mock_agent.return_value = "chunk summary"
         mock_agent_cls.return_value = mock_agent
 
-        _chunked_extract(content, "prompt", "test-model")
+        chunked_extract(content, "prompt", "test-model")
 
         # 1 extractor + 1 merger (agent instances are reused, not created per chunk)
         self.assertLessEqual(mock_agent_cls.call_count, 2)
@@ -235,7 +235,7 @@ class TestChunkedExtract(unittest.TestCase):
         mock_agent.side_effect = agent_call_side_effect
         mock_agent_cls.return_value = mock_agent
 
-        result = _chunked_extract(content, "prompt", "test-model")
+        result = chunked_extract(content, "prompt", "test-model")
         self.assertIn("could not be processed", result)
 
 

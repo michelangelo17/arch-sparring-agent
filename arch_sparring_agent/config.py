@@ -17,7 +17,6 @@ AGENT_ARCHITECTURE = "ArchitectureEvaluator"
 AGENT_QUESTION = "QuestionAgent"
 AGENT_SPARRING = "SparringAgent"
 AGENT_REVIEW = "ReviewAgent"
-AGENT_MODERATOR = "ReviewModerator"
 
 # --- Supported models (curated, verified EU inference profiles) ---
 

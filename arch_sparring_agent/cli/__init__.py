@@ -54,20 +54,14 @@ def _get_output_dir(output_dir: str | None) -> Path:
     return path
 
 
-def _get_verdict_and_exit_code(review_text: str, strict: bool = False) -> tuple[str, int]:
-    """Map verdict string to exit code, applying strict mode logic."""
+def _get_verdict_and_exit_code(review_text: str) -> tuple[str, int]:
+    """Map verdict string to exit code."""
     verdict = extract_verdict(review_text)
 
     if verdict == "FAIL":
         return "FAIL", EXIT_HIGH_RISK
-
     if verdict == "PASS WITH CONCERNS":
-        text_lower = review_text.lower()
-        has_high_impact = "impact: high" in text_lower or "impact high" in text_lower
-        if strict and has_high_impact:
-            return "FAIL", EXIT_HIGH_RISK
         return "PASS WITH CONCERNS", EXIT_MEDIUM_RISK
-
     return "PASS", EXIT_SUCCESS
 
 

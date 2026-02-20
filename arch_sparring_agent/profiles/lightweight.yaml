@@ -32,11 +32,3 @@ directives:
     - For prototypes and demos, focus on functional correctness over security hardening
     - Keep the analysis focused on what's deployed, not what could be improved
 
-  ci: |
-    - Only flag gaps that create actively exploitable risks
-    - Missing best practices are Low impact at most
-    - Rate a gap as High only if it creates immediate, real-world danger
-      (e.g. public access to sensitive data, no auth on public endpoints)
-    - PASS is the expected verdict for prototypes and demos without active risks
-    - FAIL only for immediately dangerous configurations
-    - Keep the report concise -- 2-3 sentences per section maximum

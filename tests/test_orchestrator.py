@@ -57,7 +57,7 @@ class TestReviewOrchestratorCreate(unittest.TestCase):
         self.mock_create_spar.assert_called()
         self.mock_create_rev.assert_called()
 
-        self.assertFalse(orch.ci_mode)
+        self.assertIsNotNone(orch.standard_model)
 
     def test_reasoning_level_off_uses_standard_model_for_all(self):
         ReviewOrchestrator.create(

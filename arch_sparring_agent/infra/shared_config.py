@@ -2,7 +2,7 @@
 
 import json
 import logging
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -31,10 +31,7 @@ class SharedConfig:
 
     @classmethod
     def from_json(cls, raw: str) -> "SharedConfig":
-        data = json.loads(raw)
-        # Tolerate configs saved before KB fields existed
-        known = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in data.items() if k in known})
+        return cls(**json.loads(raw))
 
 
 def save_to_ssm(config: SharedConfig) -> None:
