@@ -2,6 +2,8 @@
 
 import logging
 import time
+from dataclasses import dataclass
+from typing import Any
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -108,7 +110,7 @@ def setup_policy_engine(
 
 
 def _wait_for_policy_active(
-    client, policy_engine_id: str, policy_id: str, policy_name: str
+    client: Any, policy_engine_id: str, policy_id: str, policy_name: str
 ) -> bool:
     """Wait for policy to become ACTIVE.
 
@@ -210,7 +212,7 @@ def _policy_name_matches(resource: dict, target_name: str) -> bool:
     return value_lower == target_lower or value_lower.startswith(target_lower)
 
 
-def _find_policy_id_by_name(client, policy_engine_id: str, policy_name: str) -> str | None:
+def _find_policy_id_by_name(client: Any, policy_engine_id: str, policy_name: str) -> str | None:
     """Find a policy ID by name with pagination.
 
     Uses case-insensitive prefix matching to handle AWS name normalisation.
@@ -242,7 +244,7 @@ def _find_policy_id_by_name(client, policy_engine_id: str, policy_name: str) -> 
 
 
 def _update_existing_policy(
-    client,
+    client: Any,
     policy_engine_id: str,
     policy_name: str,
     cedar_statement: str,
@@ -280,6 +282,88 @@ def _update_existing_policy(
         return None
 
 
+@dataclass
+class _PolicySpec:
+    """Definition of a Cedar policy to create."""
+
+    name: str
+    cedar: str
+    description: str
+    validation_mode: str = "FAIL_ON_ANY_FINDINGS"
+
+
+def _build_policy_specs(gateway_arn: str) -> list[_PolicySpec]:
+    """Build the Cedar policy definitions for architecture review agents."""
+    return [
+        _PolicySpec(
+            name="RequirementsAgentToolRestrictions",
+            description="Restricts Requirements Agent to document reading and user interaction",
+            cedar=f"""permit(
+    principal is AgentCore::OAuthUser,
+    action,
+    resource == AgentCore::Gateway::"{gateway_arn}"
+) when {{
+    context has agentName && context.agentName == "{AGENT_REQUIREMENTS}" &&
+    context has toolName &&
+    ["read_document", "list_available_documents", "ask_user_question"].contains(context.toolName)
+}};""",
+        ),
+        _PolicySpec(
+            name="ArchitectureAgentToolRestrictions",
+            description="Restricts Architecture Agent to CFN/diagram reading and user tools",
+            cedar=f"""permit(
+    principal is AgentCore::OAuthUser,
+    action,
+    resource == AgentCore::Gateway::"{gateway_arn}"
+) when {{
+    context has agentName && context.agentName == "{AGENT_ARCHITECTURE}" &&
+    context has toolName &&
+    [
+        "read_cloudformation_template",
+        "list_cloudformation_templates",
+        "read_architecture_diagram",
+        "list_architecture_diagrams",
+        "list_source_files",
+        "read_source_file",
+        "search_source_code",
+        "query_waf",
+        "ask_user_question"
+    ].contains(context.toolName)
+}};""",
+        ),
+        _PolicySpec(
+            name="ReviewAgentToolRestrictions",
+            description="Allows Review Agent to use the WAF Knowledge Base query tool",
+            cedar=f"""permit(
+    principal is AgentCore::OAuthUser,
+    action,
+    resource == AgentCore::Gateway::"{gateway_arn}"
+) when {{
+    context has agentName && context.agentName == "{AGENT_REVIEW}" &&
+    context has toolName &&
+    ["query_waf"].contains(context.toolName)
+}};""",
+        ),
+        _PolicySpec(
+            name="DefaultDenyUnknownAgents",
+            description="Denies access for unknown agents - only registered agents are allowed",
+            validation_mode="IGNORE_ALL_FINDINGS",
+            cedar=f"""forbid(
+    principal is AgentCore::OAuthUser,
+    action,
+    resource == AgentCore::Gateway::"{gateway_arn}"
+) unless {{
+    context has agentName &&
+    (context.agentName == "{AGENT_REQUIREMENTS}" ||
+     context.agentName == "{AGENT_ARCHITECTURE}" ||
+     context.agentName == "{AGENT_QUESTION}" ||
+     context.agentName == "{AGENT_SPARRING}" ||
+     context.agentName == "{AGENT_REVIEW}")
+}};""",
+        ),
+    ]
+
+
 def setup_architecture_review_policies(
     region: str = DEFAULT_REGION,
     policy_engine_name: str = "ArchReviewPolicyEngine",
@@ -301,141 +385,47 @@ def setup_architecture_review_policies(
     engine_id = setup_policy_engine(region=region, policy_engine_name=policy_engine_name)
 
     logger.info("Verifying policies...")
-    policies_created = []
-    policies_failed = []
+    policies_created: list[str] = []
+    policies_failed: list[str] = []
 
-    # RequirementsAnalyst: document and user interaction tools only
-    requirements_cedar = f"""permit(
-    principal is AgentCore::OAuthUser,
-    action,
-    resource == AgentCore::Gateway::"{gateway_arn}"
-) when {{
-    context has agentName && context.agentName == "{AGENT_REQUIREMENTS}" &&
-    context has toolName &&
-    ["read_document", "list_available_documents", "ask_user_question"].contains(context.toolName)
-}};"""
+    for spec in _build_policy_specs(gateway_arn):
+        policy_id = create_policy(
+            engine_id,
+            spec.name,
+            spec.cedar,
+            spec.description,
+            region=region,
+            validation_mode=spec.validation_mode,
+        )
+        if policy_id:
+            policies_created.append(spec.name)
+        else:
+            policies_failed.append(spec.name)
 
-    policy_id = create_policy(
-        engine_id,
-        "RequirementsAgentToolRestrictions",
-        requirements_cedar,
-        "Restricts Requirements Agent to only use document reading and user interaction tools",
-        region=region,
-    )
-    if policy_id:
-        policies_created.append("RequirementsAgentToolRestrictions")
-    else:
-        policies_failed.append("RequirementsAgentToolRestrictions")
-
-    # ArchitectureEvaluator: CFN, diagram, source, and optional KB tools
-    architecture_cedar = f"""permit(
-    principal is AgentCore::OAuthUser,
-    action,
-    resource == AgentCore::Gateway::"{gateway_arn}"
-) when {{
-    context has agentName && context.agentName == "{AGENT_ARCHITECTURE}" &&
-    context has toolName &&
-    [
-        "read_cloudformation_template",
-        "list_cloudformation_templates",
-        "read_architecture_diagram",
-        "list_architecture_diagrams",
-        "list_source_files",
-        "read_source_file",
-        "search_source_code",
-        "query_waf",
-        "ask_user_question"
-    ].contains(context.toolName)
-}};"""
-
-    policy_id = create_policy(
-        engine_id,
-        "ArchitectureAgentToolRestrictions",
-        architecture_cedar,
-        "Restricts Architecture Agent to only use CFN/diagram reading and user tools",
-        region=region,
-    )
-    if policy_id:
-        policies_created.append("ArchitectureAgentToolRestrictions")
-    else:
-        policies_failed.append("ArchitectureAgentToolRestrictions")
-
-    # ReviewAgent: optional KB query tool
-    review_cedar = f"""permit(
-    principal is AgentCore::OAuthUser,
-    action,
-    resource == AgentCore::Gateway::"{gateway_arn}"
-) when {{
-    context has agentName && context.agentName == "{AGENT_REVIEW}" &&
-    context has toolName &&
-    ["query_waf"].contains(context.toolName)
-}};"""
-
-    policy_id = create_policy(
-        engine_id,
-        "ReviewAgentToolRestrictions",
-        review_cedar,
-        "Allows Review Agent to use the WAF Knowledge Base query tool",
-        region=region,
-    )
-    if policy_id:
-        policies_created.append("ReviewAgentToolRestrictions")
-    else:
-        policies_failed.append("ReviewAgentToolRestrictions")
-
-    # Default deny: only registered agents are allowed (CRITICAL - must succeed)
-    default_deny_cedar = f"""forbid(
-    principal is AgentCore::OAuthUser,
-    action,
-    resource == AgentCore::Gateway::"{gateway_arn}"
-) unless {{
-    context has agentName &&
-    (context.agentName == "{AGENT_REQUIREMENTS}" ||
-     context.agentName == "{AGENT_ARCHITECTURE}" ||
-     context.agentName == "{AGENT_QUESTION}" ||
-     context.agentName == "{AGENT_SPARRING}" ||
-     context.agentName == "{AGENT_REVIEW}")
-}};"""
-
-    policy_id = create_policy(
-        engine_id,
-        "DefaultDenyUnknownAgents",
-        default_deny_cedar,
-        "Denies access for unknown agents - only registered agents are allowed",
-        region=region,
-        validation_mode="IGNORE_ALL_FINDINGS",  # Intentionally restrictive policy
-    )
-    if policy_id:
-        policies_created.append("DefaultDenyUnknownAgents")
-    else:
-        policies_failed.append("DefaultDenyUnknownAgents")
-
-    # Fail if any policy failed - all policies are required for security
     if policies_failed:
         raise PolicySetupError(
             f"Policy setup failed. {len(policies_failed)} policies could not be activated: "
             f"{', '.join(policies_failed)}"
         )
 
-    if policies_created:
-        logger.info("Verified %d policies:", len(policies_created))
-        for name in policies_created:
-            logger.debug("  - %s", name)
-
-        # Associate gateway with policy engine
-        gw_id = gateway_id
-        if not gw_id and gateway_arn and "/gateway/" in gateway_arn:
-            gw_id = gateway_arn.split("/gateway/")[-1]
-
-        if gw_id:
-            logger.info("Associating Gateway with Policy Engine...")
-            associate_gateway_with_policy_engine(
-                gateway_id=gw_id,
-                policy_engine_id=engine_id,
-                enforcement_mode="ENFORCE",
-                region=region,
-            )
-
-        return engine_id
-    else:
+    if not policies_created:
         raise PolicySetupError("No policies were created.")
+
+    logger.info("Verified %d policies:", len(policies_created))
+    for name in policies_created:
+        logger.debug("  - %s", name)
+
+    gw_id = gateway_id
+    if not gw_id and gateway_arn and "/gateway/" in gateway_arn:
+        gw_id = gateway_arn.split("/gateway/")[-1]
+
+    if gw_id:
+        logger.info("Associating Gateway with Policy Engine...")
+        associate_gateway_with_policy_engine(
+            gateway_id=gw_id,
+            policy_engine_id=engine_id,
+            enforcement_mode="ENFORCE",
+            region=region,
+        )
+
+    return engine_id

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ..config import SOURCE_FILE_MAX_CHARS
 from ..exceptions import ToolError
-from . import validate_file_size, validate_path
+from . import search_content, validate_file_size, validate_path
 
 
 class SourceAnalyzer:
@@ -49,21 +49,13 @@ class SourceAnalyzer:
 
     def search_source(self, pattern: str) -> str:
         """Search for a pattern across all source files."""
-        results = []
-        pattern_lower = pattern.lower()
+        results: list[str] = []
 
         for filepath in self.list_source_files():
             content = self.read_source_file(filepath)
-            if pattern_lower in content.lower():
-                lines = content.split("\n")
-                matches = []
-                for i, line in enumerate(lines, 1):
-                    if pattern_lower in line.lower():
-                        matches.append(f"  L{i}: {line.strip()}")
-                if matches:
-                    results.append(f"\n{filepath}:\n" + "\n".join(matches[:5]))
-                    if len(matches) > 5:
-                        results.append(f"  ... and {len(matches) - 5} more matches")
+            match_block = search_content(content, pattern, filepath)
+            if match_block:
+                results.append(match_block)
 
         if not results:
             return f"No matches found for: {pattern}"

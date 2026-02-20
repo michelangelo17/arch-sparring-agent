@@ -44,7 +44,7 @@ Cite WAF question IDs (e.g. SEC01-BP01) where relevant."""
 
 
 def create_review_agent(
-    model_id: str | BedrockModel,
+    model: str | BedrockModel,
     knowledge_base_id: str | None = None,
     region: str | None = None,
     profile: dict | None = None,
@@ -67,7 +67,7 @@ def create_review_agent(
 
     return Agent(
         name=AGENT_REVIEW,
-        model=model_id,
+        model=model,
         callback_handler=None,
         system_prompt=system_prompt,
         tools=tools,

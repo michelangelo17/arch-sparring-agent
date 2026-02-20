@@ -4,6 +4,7 @@ from strands import Agent, tool
 from strands.models import BedrockModel
 
 from ..config import AGENT_QUESTION
+from ..tools import search_content
 from ..tools.cfn_analyzer import CloudFormationAnalyzer
 from ..tools.source_analyzer import SourceAnalyzer
 
@@ -52,7 +53,7 @@ Items verified in templates/source (not gaps) can be omitted."""
 
 
 def create_question_agent(
-    model_id: str | BedrockModel,
+    model: str | BedrockModel,
     templates_dir: str | None = None,
     source_dir: str | None = None,
 ) -> Agent:
@@ -86,17 +87,12 @@ def create_question_agent(
         @tool
         def search_templates(pattern: str) -> str:
             """Search CloudFormation templates for a pattern (e.g., 'encryption')."""
-            results = []
+            results: list[str] = []
             for template_name in cfn_analyzer.list_templates():
                 content = cfn_analyzer.read_template(template_name)
-                if pattern.lower() in content.lower():
-                    lines = content.split("\n")
-                    matches = []
-                    for i, line in enumerate(lines, 1):
-                        if pattern.lower() in line.lower():
-                            matches.append(f"  L{i}: {line.strip()}")
-                    if matches:
-                        results.append(f"\n{template_name}:\n" + "\n".join(matches[:5]))
+                match_block = search_content(content, pattern, template_name)
+                if match_block:
+                    results.append(match_block)
             if not results:
                 return f"No matches for '{pattern}' in CloudFormation templates."
             return "".join(results[:10])
@@ -124,7 +120,7 @@ def create_question_agent(
 
     return Agent(
         name=AGENT_QUESTION,
-        model=model_id,
+        model=model,
         callback_handler=None,
         system_prompt=_SYSTEM_PROMPT,
         tools=tools,

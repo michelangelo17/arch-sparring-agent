@@ -3,6 +3,7 @@
 import json
 import logging
 import time
+from typing import Any
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -90,7 +91,7 @@ def _create_vector_bucket(vector_bucket_name: str, region: str) -> str:
         raise
 
 
-def _find_vector_bucket_arn(s3v, name: str) -> str | None:
+def _find_vector_bucket_arn(s3v: Any, name: str) -> str | None:
     resp = s3v.list_vector_buckets()
     for vb in resp.get("vectorBuckets", []):
         if vb.get("vectorBucketName") == name:
@@ -127,7 +128,7 @@ def _create_vector_index(vector_bucket_name: str, index_name: str, region: str) 
         raise
 
 
-def _find_vector_index_arn(s3v, vector_bucket_name: str, index_name: str) -> str | None:
+def _find_vector_index_arn(s3v: Any, vector_bucket_name: str, index_name: str) -> str | None:
     resp = s3v.list_indexes(vectorBucketName=vector_bucket_name)
     for idx in resp.get("indexes", []):
         if idx.get("indexName") == index_name:
@@ -330,7 +331,7 @@ def _create_bedrock_kb(
             raise
 
 
-def _find_kb_by_name(bedrock) -> str | None:
+def _find_kb_by_name(bedrock: Any) -> str | None:
     paginator = bedrock.get_paginator("list_knowledge_bases")
     for page in paginator.paginate():
         for kb in page.get("knowledgeBaseSummaries", []):
@@ -369,7 +370,7 @@ def _create_data_source(kb_id: str, bucket_name: str, region: str) -> str:
         raise
 
 
-def _find_data_source(bedrock, kb_id: str) -> str | None:
+def _find_data_source(bedrock: Any, kb_id: str) -> str | None:
     resp = bedrock.list_data_sources(knowledgeBaseId=kb_id)
     sources = resp.get("dataSourceSummaries", [])
     return sources[0]["dataSourceId"] if sources else None

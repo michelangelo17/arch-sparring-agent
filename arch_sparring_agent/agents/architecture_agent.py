@@ -87,7 +87,7 @@ _WAF_OUTPUT_ADDENDUM = """
 def create_architecture_agent(
     templates_dir: str,
     diagrams_dir: str,
-    model_id: str | BedrockModel,
+    model: str | BedrockModel,
     source_dir: str | None = None,
     knowledge_base_id: str | None = None,
     region: str | None = None,
@@ -96,9 +96,7 @@ def create_architecture_agent(
     """Create agent for analyzing CloudFormation templates, diagrams, and source code."""
 
     # DiagramAnalyzer uses raw Bedrock converse API and needs a string model_id
-    diagram_model_id = (
-        model_id.config["model_id"] if isinstance(model_id, BedrockModel) else model_id
-    )
+    diagram_model_id = model.config["model_id"] if isinstance(model, BedrockModel) else model
 
     cfn_analyzer = CloudFormationAnalyzer(templates_dir)
     diagram_analyzer = DiagramAnalyzer(diagrams_dir, model_id=diagram_model_id)
@@ -175,7 +173,7 @@ def create_architecture_agent(
 
     return Agent(
         name=AGENT_ARCHITECTURE,
-        model=model_id,
+        model=model,
         callback_handler=None,
         system_prompt=base_prompt,
         tools=tools,

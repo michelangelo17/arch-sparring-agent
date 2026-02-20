@@ -3,6 +3,7 @@
 import sys
 
 import click
+import yaml
 
 from ..profiles import get_profile_path, list_profiles
 from . import EXIT_ERROR, cli
@@ -26,8 +27,6 @@ def profiles_list():
         for name in names:
             path = get_profile_path(name)
             if path:
-                import yaml
-
                 with open(path) as f:
                     data = yaml.safe_load(f) or {}
                 desc = data.get("description", "")
@@ -70,8 +69,6 @@ def profiles_create(name, from_profile):
     if dest.exists():
         click.echo(f"Profile '{name}' already exists at {dest}", err=True)
         sys.exit(EXIT_ERROR)
-
-    import yaml
 
     with open(source) as f:
         data = yaml.safe_load(f) or {}

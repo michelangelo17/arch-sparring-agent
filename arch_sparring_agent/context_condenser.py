@@ -13,7 +13,7 @@ from strands.types.exceptions import ContextWindowOverflowException, MaxTokensRe
 from .config import CONDENSER_CHUNK_SIZE, CONDENSER_MAX_CHUNKS, CONDENSER_PASSTHROUGH_THRESHOLD
 
 
-def chunked_extract(content: str, system_prompt: str, model_id: str | BedrockModel) -> str:
+def chunked_extract(content: str, system_prompt: str, model: str | BedrockModel) -> str:
     """Fallback: extract findings from content in chunks, then merge."""
     chunks = [
         content[i : i + CONDENSER_CHUNK_SIZE] for i in range(0, len(content), CONDENSER_CHUNK_SIZE)
@@ -21,7 +21,7 @@ def chunked_extract(content: str, system_prompt: str, model_id: str | BedrockMod
 
     extractor = Agent(
         name="ChunkExtractor",
-        model=model_id,
+        model=model,
         callback_handler=None,
         system_prompt=system_prompt,
         tools=[],
@@ -41,7 +41,7 @@ def chunked_extract(content: str, system_prompt: str, model_id: str | BedrockMod
 
     merger = Agent(
         name="FindingsMerger",
-        model=model_id,
+        model=model,
         callback_handler=None,
         system_prompt=(
             "Merge these extracted findings into a single deduplicated list. "
@@ -56,14 +56,14 @@ def chunked_extract(content: str, system_prompt: str, model_id: str | BedrockMod
         return combined
 
 
-def _extract(content: str, system_prompt: str, model_id: str | BedrockModel) -> str:
+def _extract(content: str, system_prompt: str, model: str | BedrockModel) -> str:
     """Run structured extraction, with chunked fallback for large inputs."""
     if len(content) <= CONDENSER_PASSTHROUGH_THRESHOLD:
         return content
 
     extractor = Agent(
         name="FindingsExtractor",
-        model=model_id,
+        model=model,
         callback_handler=None,
         system_prompt=system_prompt,
         tools=[],
@@ -72,16 +72,16 @@ def _extract(content: str, system_prompt: str, model_id: str | BedrockModel) -> 
     try:
         return str(extractor(content))
     except (ContextWindowOverflowException, MaxTokensReachedException):
-        return chunked_extract(content, system_prompt, model_id)
+        return chunked_extract(content, system_prompt, model)
     except ClientError as e:
         # Bedrock token limit errors surface as ClientError with specific error codes
         error_code = e.response.get("Error", {}).get("Code", "")
         if error_code in ("ValidationException", "ModelErrorException"):
-            return chunked_extract(content, system_prompt, model_id)
+            return chunked_extract(content, system_prompt, model)
         raise
 
 
-def extract_requirements(raw_output: str, model_id: str | BedrockModel) -> str:
+def extract_requirements(raw_output: str, model: str | BedrockModel) -> str:
     """Extract structured requirements from Phase 1 output.
 
     Returns a compact bullet list of every requirement, constraint, and NFR.
@@ -98,11 +98,11 @@ Rules:
 - Group under: ### Functional Requirements, ### Non-Functional Requirements, ### Constraints
 
 Max 800 words.""",
-        model_id,
+        model,
     )
 
 
-def extract_architecture_findings(raw_output: str, model_id: str | BedrockModel) -> str:
+def extract_architecture_findings(raw_output: str, model: str | BedrockModel) -> str:
     """Extract structured findings from Phase 2 output.
 
     Returns Components, Features Verified, and Features Not Found sections
@@ -130,11 +130,11 @@ Rules:
 - Do not remove items that are in the input
 
 Max 600 words.""",
-        model_id,
+        model,
     )
 
 
-def extract_phase_findings(raw_output: str, phase_name: str, model_id: str | BedrockModel) -> str:
+def extract_phase_findings(raw_output: str, phase_name: str, model: str | BedrockModel) -> str:
     """Extract structured findings from Phase 3 (Q&A) or Phase 4 (Sparring) output.
 
     Returns categorized bullet points: decisions, gaps, risks, verified items.
@@ -163,5 +163,5 @@ Rules:
 - Only use categories that have items (skip empty sections)
 
 Max 400 words.""",
-        model_id,
+        model,
     )

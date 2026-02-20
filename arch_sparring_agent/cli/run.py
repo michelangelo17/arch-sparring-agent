@@ -28,12 +28,12 @@ from . import (
     DEFAULT_REVIEW_FILE,
     DEFAULT_STATE_FILE,
     EXIT_ERROR,
-    _configure_logging,
-    _get_output_dir,
-    _get_verdict_and_exit_code,
-    _load_shared_config,
     cli,
+    configure_logging,
     get_env_or_default,
+    get_output_dir,
+    get_verdict_and_exit_code,
+    load_shared_config,
 )
 
 
@@ -158,7 +158,7 @@ def run(
       arch-review run --documents-dir ./docs --templates-dir ./cdk.out --diagrams-dir ./diagrams
       arch-review run --profile strict --reasoning-level medium
     """
-    _configure_logging(verbose)
+    configure_logging(verbose)
     os.environ["AWS_REGION"] = region
 
     profile_data = load_profile(profile_name)
@@ -172,7 +172,7 @@ def run(
     if source_dir and not Path(source_dir).is_dir():
         raise click.UsageError("--source-dir must exist if provided")
 
-    shared_config = _load_shared_config(region)
+    shared_config = load_shared_config(region)
 
     _run_review(
         documents_dir=documents_dir,
@@ -203,7 +203,7 @@ def _run_review(
     profile: dict | None = None,
 ):
     """Execute the review and handle output."""
-    out_path = _get_output_dir(output_dir)
+    out_path = get_output_dir(output_dir)
 
     if should_archive:
         _archive_previous(out_path)
@@ -222,7 +222,7 @@ def _run_review(
         )
 
         result = orchestrator.run_review()
-        verdict, exit_code = _get_verdict_and_exit_code(result.review)
+        verdict, exit_code = get_verdict_and_exit_code(result.review)
 
         review_path = out_path / DEFAULT_REVIEW_FILE
         review_path.write_text(result.full_session)

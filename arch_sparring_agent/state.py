@@ -216,8 +216,8 @@ def extract_state_from_review(review_result: ReviewResult) -> ReviewState:
     """Extract structured state from review result."""
     project_name = Path.cwd().name
 
-    gaps = _extract_gaps(review_result.review, review_result.gaps)
-    risks = _extract_risks(review_result.review, review_result.risks)
+    gaps = _extract_gaps(review_result.review, review_result.qa_context)
+    risks = _extract_risks(review_result.review, review_result.sparring_context)
     recommendations = _extract_recommendations(review_result.review)
     verdict = extract_verdict(review_result.review)
 

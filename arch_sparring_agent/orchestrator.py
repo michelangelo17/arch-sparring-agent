@@ -1,5 +1,7 @@
 """Orchestrates the 5-phase architecture review process."""
 
+from __future__ import annotations
+
 import logging
 import re
 from collections.abc import Callable
@@ -43,10 +45,10 @@ class ReviewResult:
     requirements_findings: str
     architecture_summary: str
     architecture_findings: str
-    gaps: str
-    gaps_findings: str
-    risks: str
-    risks_findings: str
+    qa_context: str
+    qa_findings: str
+    sparring_context: str
+    sparring_findings: str
     agents_used: list[str] = field(default_factory=list)
 
 
@@ -105,7 +107,7 @@ class ReviewOrchestrator:
         output_fn: Callable[[str], None] | None = None,
         reasoning_level: str = DEFAULT_REASONING_LEVEL,
         profile: dict | None = None,
-    ) -> "ReviewOrchestrator":
+    ) -> ReviewOrchestrator:
         """Build all agents and return a configured orchestrator."""
         logger.info("Using Policy Engine: %s", shared_config.policy_engine_id)
 
@@ -269,10 +271,10 @@ Summarize architecture, patterns, and verify which requirements have implementat
             requirements_findings=req_findings,
             architecture_summary=arch_summary,
             architecture_findings=arch_findings,
-            gaps=qa_context,
-            gaps_findings=qa_findings,
-            risks=sparring_context,
-            risks_findings=sparring_findings,
+            qa_context=qa_context,
+            qa_findings=qa_findings,
+            sparring_context=sparring_context,
+            sparring_findings=sparring_findings,
             agents_used=[
                 AGENT_REQUIREMENTS,
                 AGENT_ARCHITECTURE,

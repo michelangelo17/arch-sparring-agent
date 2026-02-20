@@ -9,10 +9,10 @@ from ..infra import SSM_PARAMETER_NAME, SharedConfig, delete_from_ssm, save_to_s
 from ..infra.gateway import destroy_gateway, setup_gateway
 from ..infra.policy import destroy_policy_engine, setup_architecture_review_policies
 from . import (
-    _configure_logging,
-    _load_shared_config,
     cli,
+    configure_logging,
     get_env_or_default,
+    load_shared_config,
 )
 
 
@@ -48,7 +48,7 @@ def deploy(region, gateway_name, policy_engine_name, with_kb, verbose):
 
     Idempotent — safe to run repeatedly.
     """
-    _configure_logging(verbose)
+    configure_logging(verbose)
     os.environ["AWS_REGION"] = region
 
     click.echo(f"Deploying arch-review infrastructure in {region}...")
@@ -130,7 +130,7 @@ def destroy(region, confirm, verbose):
 
     Requires --confirm as a safety guard.
     """
-    _configure_logging(verbose)
+    configure_logging(verbose)
     os.environ["AWS_REGION"] = region
 
     if not confirm:
@@ -140,7 +140,7 @@ def destroy(region, confirm, verbose):
         )
         return
 
-    config = _load_shared_config(region)
+    config = load_shared_config(region)
 
     click.echo(f"Destroying arch-review infrastructure in {region}...")
 

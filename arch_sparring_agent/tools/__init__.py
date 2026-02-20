@@ -34,3 +34,27 @@ def validate_file_size(path: Path, max_size: int, env_var: str) -> None:
         f"'{path.name}' is {size_label} which exceeds the {limit_label} limit. "
         f"Reduce the file size or increase the limit with {env_var}."
     )
+
+
+def search_content(content: str, pattern: str, filename: str, max_matches: int = 5) -> str | None:
+    """Case-insensitive line search within *content*.
+
+    Returns a formatted match block for *filename*, or None if no matches.
+    At most *max_matches* matching lines are included.
+    """
+    pattern_lower = pattern.lower()
+    if pattern_lower not in content.lower():
+        return None
+
+    matches: list[str] = []
+    for i, line in enumerate(content.split("\n"), 1):
+        if pattern_lower in line.lower():
+            matches.append(f"  L{i}: {line.strip()}")
+
+    if not matches:
+        return None
+
+    result = f"\n{filename}:\n" + "\n".join(matches[:max_matches])
+    if len(matches) > max_matches:
+        result += f"\n  ... and {len(matches) - max_matches} more matches"
+    return result

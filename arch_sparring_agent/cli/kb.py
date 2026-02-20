@@ -6,7 +6,7 @@ import sys
 import click
 
 from ..config import DEFAULT_REGION
-from . import EXIT_ERROR, _configure_logging, _load_shared_config, cli, get_env_or_default
+from . import EXIT_ERROR, cli, configure_logging, get_env_or_default, load_shared_config
 
 
 @cli.group()
@@ -29,10 +29,10 @@ def kb():
 @click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
 def kb_sync(region, content_dir, verbose):
     """Scrape WAF docs, upload to S3, and trigger KB ingestion."""
-    _configure_logging(verbose)
+    configure_logging(verbose)
     os.environ["AWS_REGION"] = region
 
-    config = _load_shared_config(region)
+    config = load_shared_config(region)
     if not config.knowledge_base_id or not config.kb_bucket_name:
         click.echo(
             "Error: No Knowledge Base found in config. "

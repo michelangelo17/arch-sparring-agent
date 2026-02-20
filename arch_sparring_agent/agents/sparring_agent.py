@@ -27,7 +27,7 @@ If all gaps were resolved, say "No confirmed gaps remain."
 Call done_challenging when key issues are addressed."""
 
 
-def create_sparring_agent(model_id: str | BedrockModel, profile: dict | None = None) -> Agent:
+def create_sparring_agent(model: str | BedrockModel, profile: dict | None = None) -> Agent:
     """Create agent for challenging architectural decisions."""
 
     challenges_made = []
@@ -52,7 +52,7 @@ def create_sparring_agent(model_id: str | BedrockModel, profile: dict | None = N
 
     return Agent(
         name=AGENT_SPARRING,
-        model=model_id,
+        model=model,
         callback_handler=None,
         system_prompt=system_prompt,
         tools=[challenge_user, done_challenging],

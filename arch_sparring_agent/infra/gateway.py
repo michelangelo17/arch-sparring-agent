@@ -2,6 +2,7 @@
 
 import logging
 import time
+from typing import Any
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -12,7 +13,7 @@ from ..exceptions import PolicySetupError
 logger = logging.getLogger(__name__)
 
 
-def list_gateways(region: str = DEFAULT_REGION) -> list:
+def list_gateways(region: str = DEFAULT_REGION) -> list[dict[str, Any]]:
     """List available Gateways using boto3 directly."""
     try:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
@@ -136,6 +137,81 @@ def associate_gateway_with_policy_engine(
         return False
 
 
+def _create_gateway(gateway_name: str, region: str) -> tuple[str, str]:
+    """Create a new Gateway with Cognito auth and IAM permissions.
+
+    Returns:
+        Tuple of (gateway_arn, gateway_id).
+    """
+    from bedrock_agentcore_starter_toolkit.operations.gateway.client import GatewayClient
+
+    client = GatewayClient(region_name=region)
+
+    try:
+        logger.info("Creating OAuth authorization server...")
+        cognito_response = client.create_oauth_authorizer_with_cognito(gateway_name)
+
+        if isinstance(cognito_response, str):
+            raise PolicySetupError(f"Unexpected cognito response: {cognito_response[:100]}")
+
+        authorizer_config = cognito_response.get("authorizer_config") or cognito_response.get(
+            "authorizerConfig"
+        )
+        if not authorizer_config:
+            raise PolicySetupError(
+                f"Missing authorizer_config. Keys: {list(cognito_response.keys())}"
+            )
+        logger.info("Authorization server created")
+
+        logger.info("Creating MCP Gateway...")
+        gateway = client.create_mcp_gateway(
+            name=gateway_name,
+            role_arn=None,
+            authorizer_config=authorizer_config,
+            enable_semantic_search=False,
+        )
+
+        observability = gateway.get("observability", {})
+        if observability.get("status") == "error":
+            logger.warning(
+                "Gateway created but observability (X-Ray tracing) could not be enabled. "
+                "To fix, run: aws xray update-trace-segment-destination "
+                "--destination CloudWatchLogs --region %s",
+                region,
+            )
+
+    except (ClientError, BotoCoreError) as create_error:
+        if "already exists" in str(create_error).lower():
+            gateway_arn, gateway_id, _ = _find_gateway_by_name(gateway_name, region)
+            if gateway_id:
+                logger.info("Using existing Gateway: %s", gateway_name)
+                return gateway_arn, gateway_id
+        raise
+
+    if isinstance(gateway, str):
+        gateway = {"gatewayId": gateway}
+
+    logger.info("Gateway created")
+    logger.info("Configuring IAM permissions...")
+    client.fix_iam_permissions(gateway)
+
+    agentcore_client = boto3.client("bedrock-agentcore-control", region_name=region)
+    gateway_id = gateway.get("gatewayId") or gateway.get("id")
+    if gateway_id:
+        _wait_for_iam_propagation(agentcore_client, gateway_id)
+
+    gateway_arn = gateway.get("gatewayArn")
+    if not gateway_arn and gateway_id:
+        sts = boto3.client("sts", region_name=region)
+        account_id = sts.get_caller_identity()["Account"]
+        gateway_arn = f"arn:aws:bedrock-agentcore:{region}:{account_id}:gateway/{gateway_id}"
+
+    logger.info("Gateway setup complete: %s", gateway_name)
+    logger.debug("Gateway ID: %s", gateway_id)
+
+    return gateway_arn, gateway_id
+
+
 def setup_gateway(
     region: str = DEFAULT_REGION,
     gateway_name: str = "ArchReviewGateway",
@@ -149,7 +225,9 @@ def setup_gateway(
         PolicySetupError: If the gateway cannot be created or found.
     """
     try:
-        from bedrock_agentcore_starter_toolkit.operations.gateway.client import GatewayClient
+        from bedrock_agentcore_starter_toolkit.operations.gateway.client import (
+            GatewayClient,  # noqa: F401
+        )
     except ImportError as e:
         raise PolicySetupError(
             "bedrock-agentcore-starter-toolkit not installed. "
@@ -157,88 +235,14 @@ def setup_gateway(
         ) from e
 
     try:
-        gateway_arn, gateway_id, gateway_url = _find_gateway_by_name(gateway_name, region)
+        gateway_arn, gateway_id, _ = _find_gateway_by_name(gateway_name, region)
         if gateway_id:
             logger.info("Using existing Gateway: %s", gateway_name)
-            if gateway_url:
-                logger.debug("Gateway URL: %s", gateway_url)
             logger.debug("Gateway ID: %s", gateway_id)
             return gateway_arn, gateway_id
 
         logger.info("Creating Gateway: %s...", gateway_name)
-        client = GatewayClient(region_name=region)
-
-        try:
-            logger.info("Creating OAuth authorization server...")
-            cognito_response = client.create_oauth_authorizer_with_cognito(gateway_name)
-
-            if isinstance(cognito_response, str):
-                raise PolicySetupError(f"Unexpected cognito response: {cognito_response[:100]}")
-
-            authorizer_config = cognito_response.get("authorizer_config") or cognito_response.get(
-                "authorizerConfig"
-            )
-            if not authorizer_config:
-                raise PolicySetupError(
-                    f"Missing authorizer_config. Keys: {list(cognito_response.keys())}"
-                )
-            logger.info("Authorization server created")
-
-            logger.info("Creating MCP Gateway...")
-            gateway = client.create_mcp_gateway(
-                name=gateway_name,
-                role_arn=None,
-                authorizer_config=authorizer_config,
-                enable_semantic_search=False,
-            )
-
-            observability = gateway.get("observability", {})
-            if observability.get("status") == "error":
-                logger.warning(
-                    "Gateway created but observability (X-Ray tracing) could not be enabled. "
-                    "To fix, run: aws xray update-trace-segment-destination "
-                    "--destination CloudWatchLogs --region %s",
-                    region,
-                )
-
-        except (ClientError, BotoCoreError) as create_error:
-            if "already exists" in str(create_error).lower():
-                gateway_arn, gateway_id, gateway_url = _find_gateway_by_name(gateway_name, region)
-                if gateway_id:
-                    logger.info("Using existing Gateway: %s", gateway_name)
-                    if gateway_url:
-                        logger.debug("Gateway URL: %s", gateway_url)
-                    logger.debug("Gateway ID: %s", gateway_id)
-                    return gateway_arn, gateway_id
-            raise
-
-        if isinstance(gateway, str):
-            gateway = {"gatewayId": gateway}
-
-        logger.info("Gateway created")
-        logger.info("Configuring IAM permissions...")
-        client.fix_iam_permissions(gateway)
-
-        agentcore_client = boto3.client("bedrock-agentcore-control", region_name=region)
-        gw_id = gateway.get("gatewayId") or gateway.get("id")
-        if gw_id:
-            _wait_for_iam_propagation(agentcore_client, gw_id)
-
-        gateway_id = gw_id
-        gateway_url = gateway.get("gatewayUrl") or gateway.get("url")
-        gateway_arn = gateway.get("gatewayArn")
-
-        if not gateway_arn and gateway_id:
-            sts = boto3.client("sts", region_name=region)
-            account_id = sts.get_caller_identity()["Account"]
-            gateway_arn = f"arn:aws:bedrock-agentcore:{region}:{account_id}:gateway/{gateway_id}"
-
-        logger.info("Gateway setup complete: %s", gateway_name)
-        if gateway_url:
-            logger.debug("Gateway URL: %s", gateway_url)
-        logger.debug("Gateway ID: %s", gateway_id)
-
-        return gateway_arn, gateway_id
+        return _create_gateway(gateway_name, region)
 
     except PolicySetupError:
         raise

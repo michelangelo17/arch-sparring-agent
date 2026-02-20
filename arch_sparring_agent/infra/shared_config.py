@@ -1,5 +1,7 @@
 """Shared infrastructure config — SSM-based discovery for deploy-once, use-many."""
 
+from __future__ import annotations
+
 import json
 import logging
 from dataclasses import asdict, dataclass
@@ -30,7 +32,7 @@ class SharedConfig:
         return json.dumps(asdict(self))
 
     @classmethod
-    def from_json(cls, raw: str) -> "SharedConfig":
+    def from_json(cls, raw: str) -> SharedConfig:
         return cls(**json.loads(raw))
 
 

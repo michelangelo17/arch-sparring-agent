@@ -37,7 +37,7 @@ def get_version() -> str:
         return "unknown"
 
 
-def _configure_logging(verbose: bool) -> None:
+def configure_logging(verbose: bool) -> None:
     """Configure logging level based on verbosity."""
     level = logging.INFO if verbose else logging.WARNING
     logging.basicConfig(
@@ -47,14 +47,14 @@ def _configure_logging(verbose: bool) -> None:
     logging.getLogger("arch_sparring_agent").setLevel(level)
 
 
-def _get_output_dir(output_dir: str | None) -> Path:
+def get_output_dir(output_dir: str | None) -> Path:
     """Get output directory, creating if needed."""
     path = Path(output_dir or DEFAULT_OUTPUT_DIR)
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def _get_verdict_and_exit_code(review_text: str) -> tuple[str, int]:
+def get_verdict_and_exit_code(review_text: str) -> tuple[str, int]:
     """Map verdict string to exit code."""
     verdict = extract_verdict(review_text)
 
@@ -65,7 +65,7 @@ def _get_verdict_and_exit_code(review_text: str) -> tuple[str, int]:
     return "PASS", EXIT_SUCCESS
 
 
-def _load_shared_config(region: str) -> SharedConfig:
+def load_shared_config(region: str) -> SharedConfig:
     """Load shared config from SSM, exiting with a helpful message on failure."""
     try:
         return load_from_ssm(region)

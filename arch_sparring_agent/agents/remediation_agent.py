@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from botocore.exceptions import ClientError
 from strands import Agent
+from strands.models import BedrockModel
 from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
 from ..config import DEFAULT_REGION
@@ -80,7 +81,7 @@ def _number_to_prompt(num: int, state: ReviewState) -> str | None:
 
 def create_remediation_agent(
     state: ReviewState,
-    model_id: str,
+    model: str | BedrockModel,
     region: str = DEFAULT_REGION,
 ) -> Agent:
     """Create agent for remediation discussions with session memory."""
@@ -127,7 +128,7 @@ def create_remediation_agent(
 
     return Agent(
         name="RemediationAgent",
-        model=model_id,
+        model=model,
         system_prompt=system_prompt,
         tools=[],
         session_manager=session_manager,

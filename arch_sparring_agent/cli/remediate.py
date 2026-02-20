@@ -16,10 +16,10 @@ from . import (
     DEFAULT_REMEDIATION_FILE,
     DEFAULT_STATE_FILE,
     EXIT_ERROR,
-    _configure_logging,
-    _get_output_dir,
     cli,
+    configure_logging,
     get_env_or_default,
+    get_output_dir,
 )
 
 
@@ -60,12 +60,12 @@ def remediate(output_dir, no_output, model, region, profile_name, verbose):
     Loads state from a previous review and starts an interactive session
     to work through gaps, risks, and recommendations.
     """
-    _configure_logging(verbose)
+    configure_logging(verbose)
     os.environ["AWS_REGION"] = region
 
     load_profile(profile_name)  # validate profile exists
 
-    out_path = _get_output_dir(output_dir)
+    out_path = get_output_dir(output_dir)
     state_path = out_path / DEFAULT_STATE_FILE
 
     if not state_path.exists():
@@ -77,9 +77,9 @@ def remediate(output_dir, no_output, model, region, profile_name, verbose):
         state = ReviewState.from_file(state_path)
         click.echo(f"Loaded state from: {state_path}")
 
-        model_id = SUPPORTED_MODELS[model]["model_id"]
+        bedrock_model_id = SUPPORTED_MODELS[model]["model_id"]
 
-        agent = create_remediation_agent(state=state, model_id=model_id, region=region)
+        agent = create_remediation_agent(state=state, model=bedrock_model_id, region=region)
         notes = run_remediation(agent, state, output_fn=click.echo)
 
         if not no_output:

@@ -37,7 +37,7 @@ _SUMMARIZE_PROMPT = (
 
 def create_requirements_agent(
     documents_dir: str,
-    model_id: str | BedrockModel,
+    model: str | BedrockModel,
 ) -> Agent:
     """Create agent for analyzing requirements documents."""
 
@@ -56,11 +56,11 @@ def create_requirements_agent(
 
         try:
             if len(content) > DOC_CHUNK_SUMMARY_THRESHOLD:
-                summary = chunked_extract(content, _SUMMARIZE_PROMPT, model_id)
+                summary = chunked_extract(content, _SUMMARIZE_PROMPT, model)
             else:
                 summarizer = Agent(
                     name="DocSummarizer",
-                    model=model_id,
+                    model=model,
                     callback_handler=None,
                     system_prompt=_SUMMARIZE_PROMPT,
                     tools=[],
@@ -70,7 +70,7 @@ def create_requirements_agent(
             return f"Content from {filename} (Summarized):\n\n{summary}"
         except (ContextWindowOverflowException, MaxTokensReachedException, ClientError) as e:
             try:
-                summary = chunked_extract(content, _SUMMARIZE_PROMPT, model_id)
+                summary = chunked_extract(content, _SUMMARIZE_PROMPT, model)
                 return f"Content from {filename} (Chunk Summarized after error):\n\n{summary}"
             except (
                 ContextWindowOverflowException,
@@ -89,7 +89,7 @@ def create_requirements_agent(
 
     return Agent(
         name=AGENT_REQUIREMENTS,
-        model=model_id,
+        model=model,
         callback_handler=None,
         system_prompt=_SYSTEM_PROMPT,
         tools=[read_document, list_available_documents],

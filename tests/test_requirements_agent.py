@@ -1,103 +1,106 @@
-import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
+
+import pytest
 
 from arch_sparring_agent.agents.requirements_agent import create_requirements_agent
 
 
-class TestRequirementsAgent(unittest.TestCase):
-    def setUp(self):
-        self.mock_parser_cls = patch(
-            "arch_sparring_agent.tools.document_parser.DocumentParser"
-        ).start()
-        self.mock_parser = self.mock_parser_cls.return_value
+@pytest.fixture
+def requirements_agent_mocks():
+    mock_parser_cls = patch(
+        "arch_sparring_agent.tools.document_parser.DocumentParser"
+    ).start()
+    mock_parser = mock_parser_cls.return_value
 
-        # Patch Agent and tool in the module under test
-        self.mock_agent_cls = patch("arch_sparring_agent.agents.requirements_agent.Agent").start()
-        self.mock_tool = patch(
-            "arch_sparring_agent.agents.requirements_agent.tool", side_effect=lambda x: x
-        ).start()
+    mock_agent_cls = patch("arch_sparring_agent.agents.requirements_agent.Agent").start()
+    patch(
+        "arch_sparring_agent.agents.requirements_agent.tool", side_effect=lambda x: x
+    ).start()
 
-    def tearDown(self):
+    try:
+        yield type(
+            "Mocks",
+            (),
+            {
+                "mock_parser_cls": mock_parser_cls,
+                "mock_parser": mock_parser,
+                "mock_agent_cls": mock_agent_cls,
+            },
+        )()
+    finally:
         patch.stopall()
 
-    def test_create_requirements_agent(self):
-        create_requirements_agent("docs_dir", "test-model")
 
-        # Check Agent was created
-        self.mock_agent_cls.assert_called()
-        args, kwargs = self.mock_agent_cls.call_args
-        self.assertEqual(kwargs["name"], "RequirementsAnalyst")
-        self.assertEqual(len(kwargs["tools"]), 2)  # read_document, list_available_documents
+def test_create_requirements_agent(requirements_agent_mocks):
+    m = requirements_agent_mocks
+    create_requirements_agent("docs_dir", "test-model")
 
-        # Verify tools are what we expect
-        tools = kwargs["tools"]
-        read_doc_tool = tools[0]
-        list_docs_tool = tools[1]
+    m.mock_agent_cls.assert_called()
+    args, kwargs = m.mock_agent_cls.call_args
+    assert kwargs["name"] == "RequirementsAnalyst"
+    assert len(kwargs["tools"]) == 2
 
-        # Find which is which
-        if list_docs_tool.__name__ == "read_document":
-            read_doc_tool, list_docs_tool = list_docs_tool, read_doc_tool
+    tools = kwargs["tools"]
+    read_doc_tool = tools[0]
+    list_docs_tool = tools[1]
 
-        self.assertEqual(list_docs_tool.__name__, "list_available_documents")
-        self.assertEqual(read_doc_tool.__name__, "read_document")
+    if list_docs_tool.__name__ == "read_document":
+        read_doc_tool, list_docs_tool = list_docs_tool, read_doc_tool
 
-        self.mock_parser_cls.assert_called()
-        self.mock_parser.list_documents.return_value = ["doc1.md", "doc2.md"]
+    assert list_docs_tool.__name__ == "list_available_documents"
+    assert read_doc_tool.__name__ == "read_document"
 
-        docs = list_docs_tool()
-        self.assertEqual(docs, ["doc1.md", "doc2.md"])
-        self.mock_parser.list_documents.assert_called()
+    m.mock_parser_cls.assert_called()
+    m.mock_parser.list_documents.return_value = ["doc1.md", "doc2.md"]
 
-    def test_read_document_short(self):
-        create_requirements_agent("docs_dir", "test-model")
-        # Get the tool from the call args
-        tools = self.mock_agent_cls.call_args[1]["tools"]
-        read_doc_tool = next(t for t in tools if t.__name__ == "read_document")
-
-        self.mock_parser.read_markdown_file.return_value = {
-            "content": "Short content",
-            "metadata": {},
-        }
-
-        result = read_doc_tool("test.md")
-        self.assertIn("Short content", result)
-        self.assertNotIn("Summarized", result)
-
-    def test_read_document_long_needs_summary(self):
-        # Reset Agent calls from create_requirements_agent
-        self.mock_agent_cls.reset_mock()
-
-        create_requirements_agent("docs_dir", "test-model")
-        tools = self.mock_agent_cls.call_args[1]["tools"]
-        read_doc_tool = next(t for t in tools if t.__name__ == "read_document")
-
-        # Clear mock calls again
-        self.mock_agent_cls.reset_mock()
-
-        long_content = "A" * 30000
-        self.mock_parser.read_markdown_file.return_value = {"content": long_content, "metadata": {}}
-
-        # Setup the summarizer agent mock
-        mock_summarizer = MagicMock()
-        mock_summarizer.return_value = "Summary of content"
-        self.mock_agent_cls.return_value = mock_summarizer
-
-        result = read_doc_tool("long.md")
-
-        # Verify summarizer agent was created with the same model_id
-        self.mock_agent_cls.assert_called_with(
-            name="DocSummarizer",
-            model="test-model",
-            callback_handler=None,
-            system_prompt=unittest.mock.ANY,
-            tools=[],
-        )
-
-        # Verify summarizer was called
-        mock_summarizer.assert_called()
-        self.assertIn("Summary of content", result)
-        self.assertIn("(Summarized)", result)
+    docs = list_docs_tool()
+    assert docs == ["doc1.md", "doc2.md"]
+    m.mock_parser.list_documents.assert_called()
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_read_document_short(requirements_agent_mocks):
+    m = requirements_agent_mocks
+    create_requirements_agent("docs_dir", "test-model")
+    tools = m.mock_agent_cls.call_args[1]["tools"]
+    read_doc_tool = next(t for t in tools if t.__name__ == "read_document")
+
+    m.mock_parser.read_markdown_file.return_value = {
+        "content": "Short content",
+        "metadata": {},
+    }
+
+    result = read_doc_tool("test.md")
+    assert "Short content" in result
+    assert "Summarized" not in result
+
+
+def test_read_document_long_needs_summary(requirements_agent_mocks):
+    m = requirements_agent_mocks
+    m.mock_agent_cls.reset_mock()
+
+    create_requirements_agent("docs_dir", "test-model")
+    tools = m.mock_agent_cls.call_args[1]["tools"]
+    read_doc_tool = next(t for t in tools if t.__name__ == "read_document")
+
+    m.mock_agent_cls.reset_mock()
+
+    long_content = "A" * 30000
+    m.mock_parser.read_markdown_file.return_value = {"content": long_content, "metadata": {}}
+
+    mock_summarizer = MagicMock()
+    mock_summarizer.return_value = "Summary of content"
+    m.mock_agent_cls.return_value = mock_summarizer
+
+    result = read_doc_tool("long.md")
+
+    m.mock_agent_cls.assert_called_with(
+        name="DocSummarizer",
+        model="test-model",
+        callback_handler=None,
+        system_prompt=ANY,
+        tools=[],
+    )
+
+    mock_summarizer.assert_called()
+    assert "Summary of content" in result
+    assert "(Summarized)" in result
