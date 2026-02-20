@@ -67,6 +67,9 @@ def verification_integration_mocks():
         lambda c, p, m: c
     )
 
+    mock_run_arch = patch("arch_sparring_agent.orchestrator.run_architecture").start()
+    mock_run_arch.return_value = "arch summary"
+
     patch("arch_sparring_agent.orchestrator.run_questions").start().return_value = "q"
     patch("arch_sparring_agent.orchestrator.run_sparring").start().return_value = "s"
     patch("arch_sparring_agent.orchestrator.run_review").start().return_value = "review"
@@ -81,14 +84,9 @@ def verification_integration_mocks():
 def test_verify_called_during_run_review(mock_verify, verification_integration_mocks):
     mock_verify.side_effect = lambda x: x.replace("Not Found", "Verified (via service default)")
 
-    mock_req = MagicMock()
-    mock_req.return_value = "req summary"
-    mock_arch = MagicMock()
-    mock_arch.return_value = "arch summary"
-
     orch = ReviewOrchestrator(
-        requirements_agent=mock_req,
-        architecture_agent=mock_arch,
+        requirements_agent=MagicMock(return_value="req summary"),
+        architecture_agent=MagicMock(),
         question_agent=MagicMock(),
         sparring_agent=MagicMock(),
         review_agent=MagicMock(),

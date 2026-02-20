@@ -64,6 +64,25 @@ def test_create_builds_all_agents(create_mocks):
     create_mocks.mock_create_rev.assert_called()
 
     assert orch.standard_model is not None
+    assert orch._has_kb is False
+
+
+def test_create_sets_has_kb_when_knowledge_base_configured(create_mocks):
+    config_with_kb = SharedConfig(
+        gateway_id="gw-123",
+        gateway_arn="arn:aws:bedrock-agentcore:eu-central-1:111111111111:gateway/gw-123",
+        policy_engine_id="pe-456",
+        region="eu-central-1",
+        knowledge_base_id="kb-789",
+    )
+    orch = ReviewOrchestrator.create(
+        documents_dir="docs",
+        templates_dir="tmpl",
+        diagrams_dir="diag",
+        shared_config=config_with_kb,
+    )
+
+    assert orch._has_kb is True
 
 
 def test_reasoning_level_off_uses_standard_model_for_all(create_mocks):
@@ -102,8 +121,6 @@ def run_review_mocks():
     mock_req_agent.return_value = "Requirements Summary"
 
     mock_arch_agent = MagicMock()
-    mock_arch_agent.return_value = "Architecture Summary"
-
     mock_quest_agent = MagicMock()
     mock_spar_agent = MagicMock()
     mock_rev_agent = MagicMock()
@@ -118,6 +135,9 @@ def run_review_mocks():
 
     mock_extract_phase = patch("arch_sparring_agent.orchestrator.extract_phase_findings").start()
     mock_extract_phase.side_effect = lambda content, phase, model: f"[extracted:{phase}] {content}"
+
+    mock_run_arch = patch("arch_sparring_agent.orchestrator.run_architecture").start()
+    mock_run_arch.return_value = "Architecture Summary"
 
     mock_run_questions = patch("arch_sparring_agent.orchestrator.run_questions").start()
     mock_run_sparring = patch("arch_sparring_agent.orchestrator.run_sparring").start()
@@ -137,6 +157,7 @@ def run_review_mocks():
                 "mock_extract_req": mock_extract_req,
                 "mock_extract_arch": mock_extract_arch,
                 "mock_extract_phase": mock_extract_phase,
+                "mock_run_arch": mock_run_arch,
                 "mock_run_questions": mock_run_questions,
                 "mock_run_sparring": mock_run_sparring,
                 "mock_gen_review": mock_gen_review,
@@ -169,7 +190,11 @@ def test_run_review(run_review_mocks):
     result = orch.run_review()
 
     run_review_mocks.mock_req_agent.assert_called()
-    run_review_mocks.mock_arch_agent.assert_called()
+    run_review_mocks.mock_run_arch.assert_called_once_with(
+        orch.architecture_agent,
+        "[extracted] Requirements Summary",
+        has_kb=False,
+    )
 
     run_review_mocks.mock_extract_req.assert_called_once_with(
         "Requirements Summary", orch.standard_model
@@ -199,6 +224,22 @@ def test_run_review(run_review_mocks):
     assert result.qa_findings == "[extracted:Q&A] Questions Context"
     assert result.sparring_context == "Sparring Context"
     assert result.sparring_findings == "[extracted:Sparring] Sparring Context"
+
+
+def test_run_review_passes_has_kb_flag(run_review_mocks):
+    orch = _make_orchestrator(run_review_mocks, has_kb=True)
+
+    run_review_mocks.mock_run_questions.return_value = "Q"
+    run_review_mocks.mock_run_sparring.return_value = "S"
+    run_review_mocks.mock_gen_review.return_value = "Review"
+
+    orch.run_review()
+
+    run_review_mocks.mock_run_arch.assert_called_once_with(
+        orch.architecture_agent,
+        "[extracted] Requirements Summary",
+        has_kb=True,
+    )
 
 
 def test_output_fn_callback(run_review_mocks):

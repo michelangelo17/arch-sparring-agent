@@ -37,38 +37,6 @@ _SOURCE_TASK_TEMPLATE = """
 {next_task}. If source includes IaC definitions (CDK/Terraform), note them but use
    CloudFormation for actual deployed config since that's what's deployed"""
 
-_KB_TASK_TEMPLATE = """
-{task_num}. Identify which WAF lenses apply to this architecture based on the services
-   and patterns you found (e.g. Lambda/API Gateway → serverless-applications-lens,
-   multi-tenant → saas-lens, Bedrock/SageMaker → generative-ai-lens).
-   Then query_waf for EACH relevant pillar:
-   - Security: encryption, IAM least privilege, network controls
-   - Reliability: failure handling, recovery, scaling limits
-   - Performance: right-sizing, caching, timeout alignment
-   - Cost Optimization: provisioning mode, unused resources
-   - Operational Excellence: monitoring, alerting, observability
-   Use the sources parameter to scope queries:
-   - "well-architected-framework" = core WAF (always include)
-   - Technology lenses: "serverless-applications-lens", "saas-lens",
-     "analytics-lens", "machine-learning-lens", "generative-ai-lens",
-     "iot-lens", "container-build-lens", "devops-guidance",
-     "high-performance-computing-lens", "streaming-media-lens",
-     "amazon-opensearch-service-lens", "migration-lens"
-   - Industry lenses: "games-industry-lens",
-     "financial-services-industry-lens", "healthcare-industry-lens",
-     "government-lens", "sap-lens", "supply-chain-lens",
-     "connected-mobility-lens",
-     "modern-industrial-data-technology-lens",
-     "mergers-and-acquisitions-lens"
-   Pass sources=["well-architected-framework", "<lens>"] to get both
-   core and lens-specific results.
-   CRITICAL: Only include recommendations that apply to the ACTUAL
-   services and compute model in use. If the architecture is serverless
-   (Lambda, Step Functions, DynamoDB), do NOT recommend EC2-specific
-   practices like Spot Instances, Reserved Instances, or instance
-   right-sizing. Contextualize every recommendation against what you
-   actually found in the templates and source code. Flag real gaps only."""
-
 _OUTPUT_FORMAT = """
 
 Output format:
@@ -82,8 +50,47 @@ List from CloudFormation + SDK calls observed in source code
 ### Features Not Found
 - Feature: [only if searched AND not covered by service defaults]"""
 
-_WAF_OUTPUT_ADDENDUM = """
+_WAF_QUERY_PROMPT = """Based on the architecture you just analyzed, use the query_waf tool to
+assess this architecture against the AWS Well-Architected Framework.
 
+1. Identify which WAF lenses apply based on the services and patterns you found
+   (e.g. Lambda/API Gateway → serverless-applications-lens,
+   multi-tenant → saas-lens, Bedrock/SageMaker → generative-ai-lens).
+
+2. Call query_waf for EACH relevant pillar:
+   - Security: encryption, IAM least privilege, network controls
+   - Reliability: failure handling, recovery, scaling limits
+   - Performance: right-sizing, caching, timeout alignment
+   - Cost Optimization: provisioning mode, unused resources
+   - Operational Excellence: monitoring, alerting, observability
+
+Use the sources parameter to scope queries:
+- "well-architected-framework" = core WAF (always include)
+- Technology lenses: "serverless-applications-lens", "saas-lens",
+  "analytics-lens", "machine-learning-lens", "generative-ai-lens",
+  "iot-lens", "container-build-lens", "devops-guidance",
+  "high-performance-computing-lens", "streaming-media-lens",
+  "amazon-opensearch-service-lens", "migration-lens"
+- Industry lenses: "games-industry-lens",
+  "financial-services-industry-lens", "healthcare-industry-lens",
+  "government-lens", "sap-lens", "supply-chain-lens",
+  "connected-mobility-lens",
+  "modern-industrial-data-technology-lens",
+  "mergers-and-acquisitions-lens"
+
+Pass sources=["well-architected-framework", "<lens>"] to get both
+core and lens-specific results.
+
+CRITICAL: Only include recommendations that apply to the ACTUAL services and
+compute model in use. If the architecture is serverless (Lambda, Step Functions,
+DynamoDB), do NOT recommend EC2-specific practices like Spot Instances, Reserved
+Instances, or instance right-sizing. Contextualize every recommendation against
+what you actually found in the templates and source code. Flag real gaps only.
+
+MANDATORY: You MUST call query_waf for each pillar. Do NOT write WAF findings
+from your own knowledge.
+
+Output format:
 ### WAF Assessment
 - Pillar — Finding: [WAF recommendation vs actual implementation]
   Include the [source: ...] tag from the query_waf results so the reader knows
@@ -194,14 +201,7 @@ def create_architecture_agent(
         base_prompt += _SOURCE_TASK_TEMPLATE.format(task_num=task_num, next_task=task_num + 1)
         task_num += 2
 
-    if knowledge_base_id and region:
-        base_prompt += _KB_TASK_TEMPLATE.format(task_num=task_num)
-        task_num += 1
-
     base_prompt += _OUTPUT_FORMAT
-
-    if knowledge_base_id and region:
-        base_prompt += _WAF_OUTPUT_ADDENDUM
 
     directive = get_directive(profile, "architecture")
     if directive:
@@ -214,3 +214,32 @@ def create_architecture_agent(
         system_prompt=base_prompt,
         tools=tools,
     )
+
+
+def run_architecture(agent: Agent, requirements: str, *, has_kb: bool = False) -> str:
+    """Execute architecture analysis, optionally followed by WAF KB assessment.
+
+    Args:
+        agent: The architecture agent (created via ``create_architecture_agent``).
+        requirements: Extracted requirements from Phase 1.
+        has_kb: If True, runs a second pass querying the WAF Knowledge Base.
+
+    The agent is stateful -- conversation history from the first pass is
+    available during the second pass, so the KB queries can reference
+    specific components and patterns found in the infrastructure analysis.
+    """
+    result = agent(
+        f"""Analyze all templates, diagrams, and source code.
+
+REQUIREMENTS:
+{requirements}
+
+Summarize architecture, patterns, and verify which requirements have implementations."""
+    )
+    arch_output = str(result)
+
+    if has_kb:
+        waf_result = agent(_WAF_QUERY_PROMPT)
+        arch_output += "\n" + str(waf_result)
+
+    return arch_output

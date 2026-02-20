@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from strands import Agent
 from strands.models import BedrockModel
 
-from .agents.architecture_agent import create_architecture_agent
+from .agents.architecture_agent import create_architecture_agent, run_architecture
 from .agents.question_agent import create_question_agent, run_questions
 from .agents.requirements_agent import create_requirements_agent
 from .agents.review_agent import create_review_agent, run_review
@@ -85,6 +85,8 @@ class ReviewOrchestrator:
         review_agent: Agent,
         standard_model: BedrockModel,
         output_fn: Callable[[str], None] | None = None,
+        *,
+        has_kb: bool = False,
     ):
         self.requirements_agent = requirements_agent
         self.architecture_agent = architecture_agent
@@ -93,6 +95,7 @@ class ReviewOrchestrator:
         self.review_agent = review_agent
         self.standard_model = standard_model
         self.output_fn = output_fn
+        self._has_kb = has_kb
         self.captured_output: list[str] = []
 
     @classmethod
@@ -153,6 +156,7 @@ class ReviewOrchestrator:
             review_agent=review_agent,
             standard_model=standard_model,
             output_fn=output_fn,
+            has_kb=bool(kb_id and kb_region),
         )
 
     @staticmethod
@@ -225,15 +229,7 @@ class ReviewOrchestrator:
 
         # Phase 2: Architecture
         self._capture("\n## Phase 2: Architecture Analysis\n")
-        arch_result = self.architecture_agent(
-            f"""Analyze all templates, diagrams, and source code.
-
-REQUIREMENTS:
-{req_findings}
-
-Summarize architecture, patterns, and verify which requirements have implementations."""
-        )
-        arch_summary = str(arch_result)
+        arch_summary = run_architecture(self.architecture_agent, req_findings, has_kb=self._has_kb)
         self._capture(arch_summary)
 
         arch_findings = extract_architecture_findings(arch_summary, self.standard_model)
