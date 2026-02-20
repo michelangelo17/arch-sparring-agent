@@ -58,7 +58,7 @@ def create_review_agent(
 
     system_prompt = _SYSTEM_PROMPT
 
-    if knowledge_base_id:
+    if knowledge_base_id and region:
         system_prompt += _KB_ADDENDUM
 
     directive = get_directive(profile, "review")

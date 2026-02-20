@@ -158,13 +158,13 @@ def create_architecture_agent(
         base_prompt += _SOURCE_TASK_TEMPLATE.format(task_num=task_num, next_task=task_num + 1)
         task_num += 2
 
-    if knowledge_base_id:
+    if knowledge_base_id and region:
         base_prompt += _KB_TASK_TEMPLATE.format(task_num=task_num)
         task_num += 1
 
     base_prompt += _OUTPUT_FORMAT
 
-    if knowledge_base_id:
+    if knowledge_base_id and region:
         base_prompt += _WAF_OUTPUT_ADDENDUM
 
     directive = get_directive(profile, "architecture")

@@ -5,7 +5,7 @@ import sys
 import click
 import yaml
 
-from ..profiles import get_profile_path, list_profiles
+from ..profiles import BUILTIN_DIR, USER_DIR, get_profile_path, list_profiles
 from . import EXIT_ERROR, cli
 
 
@@ -17,16 +17,20 @@ def profiles():
 @profiles.command("list")
 def profiles_list():
     """List available review profiles."""
+    from ..profiles import _project_dir
+
     all_profiles = list_profiles()
+    dirs = {"builtin": BUILTIN_DIR, "user": USER_DIR, "project": _project_dir()}
 
     for label in ("builtin", "user", "project"):
         names = all_profiles[label]
         if not names:
             continue
         click.echo(f"\n{label.capitalize()} profiles:")
+        directory = dirs[label]
         for name in names:
-            path = get_profile_path(name)
-            if path:
+            path = directory / f"{name}.yaml"
+            if path.is_file():
                 with open(path) as f:
                     data = yaml.safe_load(f) or {}
                 desc = data.get("description", "")

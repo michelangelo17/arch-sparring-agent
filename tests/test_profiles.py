@@ -77,22 +77,21 @@ def test_project_profile_overrides_builtin(tmp_project_profiles_dir):
 
 
 @pytest.fixture
-def tmp_user_profile_file():
-    tmp_user_dir = Path.home() / ".config" / "arch-review" / "profiles"
-    created_file = tmp_user_dir / "_test_user_profile.yaml"
-    tmp_user_dir.mkdir(parents=True, exist_ok=True)
-    yield created_file
-    if created_file.exists():
-        created_file.unlink()
+def tmp_user_dir(tmp_path, monkeypatch):
+    user_profiles = tmp_path / "user_profiles"
+    user_profiles.mkdir()
+    monkeypatch.setattr("arch_sparring_agent.profiles.USER_DIR", user_profiles)
+    return user_profiles
 
 
-def test_user_profile_found(tmp_user_profile_file):
+def test_user_profile_found(tmp_user_dir):
     custom = {
         "name": "test",
         "description": "User test profile",
         "directives": {"sparring": "User sparring directive"},
     }
-    with open(tmp_user_profile_file, "w") as f:
+    profile_file = tmp_user_dir / "_test_user_profile.yaml"
+    with open(profile_file, "w") as f:
         yaml.dump(custom, f)
 
     profile = load_profile("_test_user_profile")
@@ -202,20 +201,11 @@ def test_remediate_help_shows_profile_option():
     assert "--profile" in result.output
 
 
-@pytest.fixture
-def profile_create_teardown():
-    user_dir = Path.home() / ".config" / "arch-review" / "profiles"
-    created_file = user_dir / "_test_create_profile.yaml"
-    yield created_file
-    if created_file.exists():
-        created_file.unlink()
-
-
-def test_create_from_default(profile_create_teardown):
+def test_create_from_default(tmp_user_dir):
     runner = CliRunner()
-    created_file = profile_create_teardown
     result = runner.invoke(cli, ["profiles", "create", "_test_create_profile", "--from", "default"])
     assert result.exit_code == 0
+    created_file = tmp_user_dir / "_test_create_profile.yaml"
     assert created_file.exists()
     with open(created_file) as f:
         data = yaml.safe_load(f)
@@ -223,11 +213,9 @@ def test_create_from_default(profile_create_teardown):
     assert "sparring" in data["directives"]
 
 
-def test_create_already_exists_fails(profile_create_teardown):
-    user_dir = Path.home() / ".config" / "arch-review" / "profiles"
-    created_file = profile_create_teardown
-    user_dir.mkdir(parents=True, exist_ok=True)
-    created_file.write_text("existing")
+def test_create_already_exists_fails(tmp_user_dir):
+    existing = tmp_user_dir / "_test_create_profile.yaml"
+    existing.write_text("existing")
     runner = CliRunner()
     result = runner.invoke(cli, ["profiles", "create", "_test_create_profile", "--from", "default"])
     assert result.exit_code != 0
