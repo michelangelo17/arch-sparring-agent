@@ -101,6 +101,10 @@ def setup_policy_engine(
                 name=policy_engine_name, description="Policy engine for architecture review agents"
             )
             engine_id = response.get("policyEngineId")
+            if not engine_id:
+                raise PolicySetupError(
+                    f"Policy Engine created but no ID in response: {list(response.keys())}"
+                )
             logger.info("Created Policy Engine: %s (ID: %s)", policy_engine_name, engine_id)
 
         return engine_id

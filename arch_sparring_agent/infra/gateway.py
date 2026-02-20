@@ -171,6 +171,9 @@ def _create_gateway(gateway_name: str, region: str) -> tuple[str, str]:
             enable_semantic_search=False,
         )
 
+        if isinstance(gateway, str):
+            gateway = {"gatewayId": gateway}
+
         observability = gateway.get("observability", {})
         if observability.get("status") == "error":
             logger.warning(
@@ -187,9 +190,6 @@ def _create_gateway(gateway_name: str, region: str) -> tuple[str, str]:
                 logger.info("Using existing Gateway: %s", gateway_name)
                 return gateway_arn, gateway_id
         raise
-
-    if isinstance(gateway, str):
-        gateway = {"gatewayId": gateway}
 
     logger.info("Gateway created")
     logger.info("Configuring IAM permissions...")
