@@ -46,6 +46,8 @@ class KnowledgeBaseClient:
                     "orAll": [{"equals": {"key": "source", "value": s}} for s in sources]
                 }
 
+        logger.debug("KB query: %r | filter: %s", query, sources or "none (all sources)")
+
         try:
             response = self.client.retrieve(
                 knowledgeBaseId=self.kb_id,
@@ -63,15 +65,24 @@ class KnowledgeBaseClient:
         parts: list[str] = []
         for i, result in enumerate(results, 1):
             content = result.get("content", {}).get("text", "")
+
+            metadata = result.get("metadata", {})
+            source_tag = metadata.get("source", "")
+
             location = result.get("location", {})
-            source = ""
+            s3_uri = ""
             if location.get("type") == "S3":
-                uri = location.get("s3Location", {}).get("uri", "")
-                source = f" (source: {uri})" if uri else ""
+                s3_uri = location.get("s3Location", {}).get("uri", "")
+
+            attribution = ""
+            if source_tag:
+                attribution = f" [source: {source_tag}]"
+            elif s3_uri:
+                attribution = f" (s3: {s3_uri})"
 
             score = result.get("score")
             score_str = f" [relevance: {score:.2f}]" if score is not None else ""
 
-            parts.append(f"### Result {i}{score_str}{source}\n{content}")
+            parts.append(f"### Result {i}{score_str}{attribution}\n{content}")
 
         return "\n\n".join(parts)
