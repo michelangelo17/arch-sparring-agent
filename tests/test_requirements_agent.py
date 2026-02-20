@@ -7,15 +7,11 @@ from arch_sparring_agent.agents.requirements_agent import create_requirements_ag
 
 @pytest.fixture
 def requirements_agent_mocks():
-    mock_parser_cls = patch(
-        "arch_sparring_agent.tools.document_parser.DocumentParser"
-    ).start()
+    mock_parser_cls = patch("arch_sparring_agent.tools.document_parser.DocumentParser").start()
     mock_parser = mock_parser_cls.return_value
 
     mock_agent_cls = patch("arch_sparring_agent.agents.requirements_agent.Agent").start()
-    patch(
-        "arch_sparring_agent.agents.requirements_agent.tool", side_effect=lambda x: x
-    ).start()
+    patch("arch_sparring_agent.agents.requirements_agent.tool", side_effect=lambda x: x).start()
 
     try:
         yield type(

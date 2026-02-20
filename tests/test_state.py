@@ -69,10 +69,7 @@ def test_strips_underscores():
 
 
 def test_strips_mixed():
-    assert (
-        _strip_markdown("**Risk**: `some_func` is *broken*")
-        == "Risk: some_func is broken"
-    )
+    assert _strip_markdown("**Risk**: `some_func` is *broken*") == "Risk: some_func is broken"
 
 
 def test_plain_text_unchanged():
@@ -98,10 +95,7 @@ def test_is_duplicate():
 def test_extract_verdict():
     assert extract_verdict("Overall Verdict: PASS") == "PASS"
     assert extract_verdict("Verdict: FAIL because of security") == "FAIL"
-    assert (
-        extract_verdict("Verdict: PASS WITH CONCERNS due to latency")
-        == "PASS WITH CONCERNS"
-    )
+    assert extract_verdict("Verdict: PASS WITH CONCERNS due to latency") == "PASS WITH CONCERNS"
     assert extract_verdict("No clear result") == "PASS"
     assert extract_verdict("Critical security flaw found") == "FAIL"
     assert extract_verdict("Risk Impact: High severity") == "PASS WITH CONCERNS"

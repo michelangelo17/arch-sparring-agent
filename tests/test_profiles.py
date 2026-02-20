@@ -214,9 +214,7 @@ def profile_create_teardown():
 def test_create_from_default(profile_create_teardown):
     runner = CliRunner()
     created_file = profile_create_teardown
-    result = runner.invoke(
-        cli, ["profiles", "create", "_test_create_profile", "--from", "default"]
-    )
+    result = runner.invoke(cli, ["profiles", "create", "_test_create_profile", "--from", "default"])
     assert result.exit_code == 0
     assert created_file.exists()
     with open(created_file) as f:
@@ -231,8 +229,6 @@ def test_create_already_exists_fails(profile_create_teardown):
     user_dir.mkdir(parents=True, exist_ok=True)
     created_file.write_text("existing")
     runner = CliRunner()
-    result = runner.invoke(
-        cli, ["profiles", "create", "_test_create_profile", "--from", "default"]
-    )
+    result = runner.invoke(cli, ["profiles", "create", "_test_create_profile", "--from", "default"])
     assert result.exit_code != 0
     assert "already exists" in result.output

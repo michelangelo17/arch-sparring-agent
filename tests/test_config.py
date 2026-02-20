@@ -39,17 +39,11 @@ def test_all_models_have_required_fields():
 
 
 def test_nova_model_id():
-    assert (
-        config.SUPPORTED_MODELS["nova-2-lite"]["model_id"]
-        == "eu.amazon.nova-2-lite-v1:0"
-    )
+    assert config.SUPPORTED_MODELS["nova-2-lite"]["model_id"] == "eu.amazon.nova-2-lite-v1:0"
 
 
 def test_opus_model_id():
-    assert (
-        config.SUPPORTED_MODELS["opus-4.6"]["model_id"]
-        == "eu.anthropic.claude-opus-4-6-v1"
-    )
+    assert config.SUPPORTED_MODELS["opus-4.6"]["model_id"] == "eu.anthropic.claude-opus-4-6-v1"
 
 
 def test_nova_no_reasoning():

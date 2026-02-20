@@ -25,18 +25,10 @@ def create_mocks():
         "arch_sparring_agent.orchestrator.create_model", side_effect=fake_create_model
     ).start()
 
-    mock_create_req = patch(
-        "arch_sparring_agent.orchestrator.create_requirements_agent"
-    ).start()
-    mock_create_arch = patch(
-        "arch_sparring_agent.orchestrator.create_architecture_agent"
-    ).start()
-    mock_create_quest = patch(
-        "arch_sparring_agent.orchestrator.create_question_agent"
-    ).start()
-    mock_create_spar = patch(
-        "arch_sparring_agent.orchestrator.create_sparring_agent"
-    ).start()
+    mock_create_req = patch("arch_sparring_agent.orchestrator.create_requirements_agent").start()
+    mock_create_arch = patch("arch_sparring_agent.orchestrator.create_architecture_agent").start()
+    mock_create_quest = patch("arch_sparring_agent.orchestrator.create_question_agent").start()
+    mock_create_spar = patch("arch_sparring_agent.orchestrator.create_sparring_agent").start()
     mock_create_rev = patch("arch_sparring_agent.orchestrator.create_review_agent").start()
 
     try:
@@ -116,9 +108,7 @@ def run_review_mocks():
     mock_spar_agent = MagicMock()
     mock_rev_agent = MagicMock()
 
-    mock_extract_req = patch(
-        "arch_sparring_agent.orchestrator.extract_requirements"
-    ).start()
+    mock_extract_req = patch("arch_sparring_agent.orchestrator.extract_requirements").start()
     mock_extract_req.side_effect = lambda content, model: f"[extracted] {content}"
 
     mock_extract_arch = patch(
@@ -126,12 +116,8 @@ def run_review_mocks():
     ).start()
     mock_extract_arch.side_effect = lambda content, model: f"[extracted] {content}"
 
-    mock_extract_phase = patch(
-        "arch_sparring_agent.orchestrator.extract_phase_findings"
-    ).start()
-    mock_extract_phase.side_effect = (
-        lambda content, phase, model: f"[extracted:{phase}] {content}"
-    )
+    mock_extract_phase = patch("arch_sparring_agent.orchestrator.extract_phase_findings").start()
+    mock_extract_phase.side_effect = lambda content, phase, model: f"[extracted:{phase}] {content}"
 
     mock_run_questions = patch("arch_sparring_agent.orchestrator.run_questions").start()
     mock_run_sparring = patch("arch_sparring_agent.orchestrator.run_sparring").start()
