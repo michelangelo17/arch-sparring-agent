@@ -101,14 +101,29 @@ Tasks:
 1. Read ALL CloudFormation templates for deployed infrastructure
 2. Analyze architecture diagrams"""
 
+    task_num = 3
     if source_analyzer:
-        base_prompt += """
-3. Search source code to understand:
+        base_prompt += f"""
+{task_num}. Search source code to understand:
    - Business logic implementation
    - SDK calls (dynamodb, s3, sns, etc.) - what services are used at runtime
    - Environment variables - what resources are referenced
-4. If source includes IaC definitions (CDK/Terraform), note them but use CloudFormation for
-   actual deployed config since that's what's synthesized and deployed"""
+{task_num + 1}. If source includes IaC definitions (CDK/Terraform), note them but use
+   CloudFormation for actual deployed config since that's what's deployed"""
+        task_num += 2
+
+    if knowledge_base_id:
+        base_prompt += f"""
+{task_num}. Query the WAF knowledge base (query_waf) for EACH pillar relevant to this architecture:
+   - Security: encryption, IAM least privilege, network controls
+   - Reliability: failure handling, recovery, scaling limits
+   - Performance: right-sizing, caching, timeout alignment
+   - Cost Optimization: provisioning mode, unused resources
+   - Operational Excellence: monitoring, alerting, observability
+   For each query result, compare the WAF recommendation against what you found in
+   the templates and source code. Flag any gap where the architecture does not meet
+   the WAF best practice."""
+        task_num += 1
 
     base_prompt += """
 
@@ -126,11 +141,8 @@ List from CloudFormation + SDK calls observed in source code
     if knowledge_base_id:
         base_prompt += """
 
-WAF KNOWLEDGE BASE:
-You have access to the AWS Well-Architected Framework via the query_waf tool.
-Use it to look up best practices when evaluating security controls, reliability
-patterns, performance strategies, and cost optimization. Cite specific WAF
-recommendations in your analysis."""
+### WAF Assessment
+- Pillar — Finding: [WAF recommendation vs actual implementation, cite the WAF source]"""
 
     directive = get_directive("architecture")
     if directive:
