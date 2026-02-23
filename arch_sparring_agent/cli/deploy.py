@@ -55,6 +55,8 @@ def deploy(region, gateway_name, policy_engine_name, with_kb, verbose):
 
     gateway_arn, gateway_id, engine_id = _deploy_infra(region, gateway_name, policy_engine_name)
 
+    guardrail_id, guardrail_version = _deploy_guardrails(region)
+
     kb_id = None
     kb_bucket = None
 
@@ -73,15 +75,36 @@ def deploy(region, gateway_name, policy_engine_name, with_kb, verbose):
         region=region,
         knowledge_base_id=kb_id,
         kb_bucket_name=kb_bucket,
+        guardrail_id=guardrail_id,
+        guardrail_version=guardrail_version,
     )
     save_to_ssm(config)
 
     click.echo("\nDeployment complete.")
     click.echo(f"  Gateway ID:       {gateway_id}")
     click.echo(f"  Policy Engine ID: {engine_id}")
+    click.echo(f"  Guardrail ID:     {guardrail_id}")
     if kb_id:
         click.echo(f"  Knowledge Base:   {kb_id}")
     click.echo(f"  Config stored in: SSM {SSM_PARAMETER_NAME}")
+
+
+def _deploy_guardrails(region: str) -> tuple[str, str]:
+    """Set up contextual grounding guardrail.
+
+    Raises click.ClickException on failure so the CLI exits cleanly.
+    """
+    from ..exceptions import GuardrailSetupError
+    from ..infra.guardrails import setup_guardrails
+
+    click.echo("\nSetting up contextual grounding guardrail...")
+    try:
+        guardrail_id, guardrail_version = setup_guardrails(region=region)
+    except GuardrailSetupError as e:
+        raise click.ClickException(f"Guardrail setup failed: {e}") from e
+
+    click.echo(f"  Guardrail ID:      {guardrail_id}")
+    return guardrail_id, guardrail_version
 
 
 def _deploy_infra(region: str, gateway_name: str, policy_engine_name: str) -> tuple[str, str, str]:
@@ -149,6 +172,12 @@ def destroy(region, confirm, verbose):
         from ..kb.infra import destroy_knowledge_base
 
         destroy_knowledge_base(config.knowledge_base_id, config.kb_bucket_name, region=region)
+
+    if config.guardrail_id:
+        click.echo("Tearing down Guardrail...")
+        from ..infra.guardrails import destroy_guardrails
+
+        destroy_guardrails(config.guardrail_id, region=region)
 
     destroy_policy_engine(config.policy_engine_id, region=region)
     destroy_gateway(config.gateway_id, region=region)

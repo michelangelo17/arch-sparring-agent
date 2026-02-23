@@ -27,6 +27,8 @@ class SharedConfig:
     region: str
     knowledge_base_id: str | None = None
     kb_bucket_name: str | None = None
+    guardrail_id: str | None = None
+    guardrail_version: str | None = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self))

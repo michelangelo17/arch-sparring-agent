@@ -15,3 +15,7 @@ class PolicySetupError(ArchReviewError):
 
 class ToolError(ArchReviewError):
     """Tool execution failures (file reading, diagram analysis, etc)."""
+
+
+class GuardrailSetupError(ArchReviewError):
+    """Bedrock Guardrail creation, update, or deletion failures."""

@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from arch_sparring_agent.guardrails import GroundingResult
 from arch_sparring_agent.infra import SharedConfig
 from arch_sparring_agent.orchestrator import ReviewOrchestrator
 
@@ -10,6 +11,15 @@ FAKE_CONFIG = SharedConfig(
     gateway_arn="arn:aws:bedrock-agentcore:eu-central-1:111111111111:gateway/gw-123",
     policy_engine_id="pe-456",
     region="eu-central-1",
+)
+
+FAKE_CONFIG_WITH_GUARDRAILS = SharedConfig(
+    gateway_id="gw-123",
+    gateway_arn="arn:aws:bedrock-agentcore:eu-central-1:111111111111:gateway/gw-123",
+    policy_engine_id="pe-456",
+    region="eu-central-1",
+    guardrail_id="gr-test123",
+    guardrail_version="DRAFT",
 )
 
 
@@ -30,6 +40,10 @@ def create_mocks():
     mock_create_quest = patch("arch_sparring_agent.orchestrator.create_question_agent").start()
     mock_create_spar = patch("arch_sparring_agent.orchestrator.create_sparring_agent").start()
     mock_create_rev = patch("arch_sparring_agent.orchestrator.create_review_agent").start()
+    mock_create_guardrails = patch(
+        "arch_sparring_agent.orchestrator.create_guardrails_checker"
+    ).start()
+    mock_create_guardrails.return_value = None
 
     try:
         yield type(
@@ -43,6 +57,7 @@ def create_mocks():
                 "mock_create_spar": mock_create_spar,
                 "mock_create_rev": mock_create_rev,
                 "mock_standard_model": mock_standard_model,
+                "mock_create_guardrails": mock_create_guardrails,
             },
         )()
     finally:
@@ -254,3 +269,67 @@ def test_output_fn_callback(run_review_mocks):
 
     assert len(captured) > 0
     assert captured[0] == "=" * 60
+
+
+def test_create_no_guardrails_by_default(create_mocks):
+    orch = ReviewOrchestrator.create(
+        documents_dir="docs",
+        templates_dir="tmpl",
+        diagrams_dir="diag",
+        shared_config=FAKE_CONFIG,
+    )
+
+    create_mocks.mock_create_guardrails.assert_called_once_with(None, None)
+    assert orch._guardrails is None
+
+
+def test_create_sets_guardrails_when_configured(create_mocks):
+    mock_checker = MagicMock()
+    mock_checker.guardrail_id = "gr-test123"
+    create_mocks.mock_create_guardrails.return_value = mock_checker
+
+    orch = ReviewOrchestrator.create(
+        documents_dir="docs",
+        templates_dir="tmpl",
+        diagrams_dir="diag",
+        shared_config=FAKE_CONFIG_WITH_GUARDRAILS,
+    )
+
+    create_mocks.mock_create_guardrails.assert_called_once_with("gr-test123", "DRAFT")
+    assert orch._guardrails is mock_checker
+
+
+def test_run_review_calls_grounding_checks(run_review_mocks):
+    mock_guardrails = MagicMock()
+    mock_guardrails.check_grounding.return_value = GroundingResult(
+        passed=True, grounding_score=0.9, action="NONE", details="ok"
+    )
+    orch = _make_orchestrator(run_review_mocks, guardrails=mock_guardrails)
+
+    run_review_mocks.mock_run_questions.return_value = "Q Context"
+    run_review_mocks.mock_run_sparring.return_value = "S Context"
+    run_review_mocks.mock_gen_review.return_value = "Final Review"
+
+    orch.run_review()
+
+    assert mock_guardrails.check_grounding.call_count == 4
+
+    call_args_list = mock_guardrails.check_grounding.call_args_list
+    phases = [call[0][1] for call in call_args_list]
+    assert any("Extract requirements" in q for q in phases)
+    assert any("Extract architecture" in q for q in phases)
+    assert any("Extract Q&A" in q for q in phases)
+    assert any("Extract sparring" in q for q in phases)
+
+
+def test_run_review_no_grounding_checks_without_guardrails(run_review_mocks):
+    orch = _make_orchestrator(run_review_mocks)
+
+    run_review_mocks.mock_run_questions.return_value = "Q"
+    run_review_mocks.mock_run_sparring.return_value = "S"
+    run_review_mocks.mock_gen_review.return_value = "R"
+
+    result = orch.run_review()
+
+    assert result.review == "R"
+    assert orch._guardrails is None

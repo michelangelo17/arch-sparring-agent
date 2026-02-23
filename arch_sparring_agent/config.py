@@ -110,6 +110,18 @@ def _int_env(var: str, default: int) -> int:
         return default
 
 
+def _float_env(var: str, default: float) -> float:
+    """Read a float from an environment variable with validation."""
+    raw = os.getenv(var)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("Invalid float for %s='%s', using default %.2f", var, raw, default)
+        return default
+
+
 # --- Tuning constants (override via environment variables) ---
 
 # Context condenser: skip extraction for content shorter than this (chars)
@@ -140,3 +152,9 @@ IAM_PROPAGATION_TIMEOUT = _int_env("ARCH_REVIEW_IAM_WAIT_TIMEOUT", 60)
 CFN_MAX_CHARS = _int_env("ARCH_REVIEW_CFN_MAX_CHARS", 500_000)
 DOC_MAX_CHARS = _int_env("ARCH_REVIEW_DOC_MAX_CHARS", 500_000)
 DIAGRAM_MAX_BYTES = _int_env("ARCH_REVIEW_DIAGRAM_MAX_BYTES", 10_000_000)
+
+# Guardrails: contextual grounding check
+GROUNDING_THRESHOLD = _float_env("ARCH_REVIEW_GROUNDING_THRESHOLD", 0.7)
+GROUNDING_CONTENT_CHUNK_SIZE = _int_env("ARCH_REVIEW_GROUNDING_CHUNK_SIZE", 4500)
+GROUNDING_SOURCE_MAX_CHARS = _int_env("ARCH_REVIEW_GROUNDING_SOURCE_MAX_CHARS", 100_000)
+GUARDRAIL_NAME = "ArchReviewGroundingGuardrail"

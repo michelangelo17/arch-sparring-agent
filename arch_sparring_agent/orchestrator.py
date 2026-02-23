@@ -30,6 +30,7 @@ from .context_condenser import (
     extract_phase_findings,
     extract_requirements,
 )
+from .guardrails import GuardrailsChecker, create_guardrails_checker
 from .infra import SharedConfig
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,7 @@ class ReviewOrchestrator:
         output_fn: Callable[[str], None] | None = None,
         *,
         has_kb: bool = False,
+        guardrails: GuardrailsChecker | None = None,
     ):
         self.requirements_agent = requirements_agent
         self.architecture_agent = architecture_agent
@@ -96,6 +98,7 @@ class ReviewOrchestrator:
         self.standard_model = standard_model
         self.output_fn = output_fn
         self._has_kb = has_kb
+        self._guardrails = guardrails
         self.captured_output: list[str] = []
 
     @classmethod
@@ -148,6 +151,16 @@ class ReviewOrchestrator:
             profile=profile,
         )
 
+        guardrails = create_guardrails_checker(
+            shared_config.guardrail_id,
+            shared_config.guardrail_version,
+        )
+        if guardrails:
+            logger.info(
+                "Contextual grounding checks enabled (guardrail: %s)",
+                guardrails.guardrail_id,
+            )
+
         return cls(
             requirements_agent=requirements_agent,
             architecture_agent=architecture_agent,
@@ -157,6 +170,7 @@ class ReviewOrchestrator:
             standard_model=standard_model,
             output_fn=output_fn,
             has_kb=bool(kb_id and kb_region),
+            guardrails=guardrails,
         )
 
     @staticmethod
@@ -176,6 +190,28 @@ class ReviewOrchestrator:
         self.captured_output.append(content)
         if self.output_fn:
             self.output_fn(content)
+
+    def _check_grounding(self, phase_name: str, source: str, content: str) -> None:
+        """Run contextual grounding check on condenser output if guardrails are enabled."""
+        if not self._guardrails:
+            return
+
+        query = f"Extract {phase_name} findings from architecture review analysis"
+        result = self._guardrails.check_grounding(source, query, content)
+
+        if result.passed:
+            logger.info(
+                "Grounding check passed for %s (score=%.2f)",
+                phase_name,
+                result.grounding_score,
+            )
+        else:
+            logger.warning(
+                "Grounding check FAILED for %s (score=%.2f): %s",
+                phase_name,
+                result.grounding_score,
+                result.details,
+            )
 
     def _verify_against_defaults(self, arch_findings: str) -> str:
         """Filter false positives by verifying 'Features Not Found' against AWS service defaults.
@@ -226,6 +262,7 @@ class ReviewOrchestrator:
         self._capture(req_summary)
 
         req_findings = extract_requirements(req_summary, self.standard_model)
+        self._check_grounding("requirements", req_summary, req_findings)
 
         # Phase 2: Architecture
         self._capture("\n## Phase 2: Architecture Analysis\n")
@@ -233,6 +270,7 @@ class ReviewOrchestrator:
         self._capture(arch_summary)
 
         arch_findings = extract_architecture_findings(arch_summary, self.standard_model)
+        self._check_grounding("architecture", arch_summary, arch_findings)
         arch_findings = self._verify_against_defaults(arch_findings)
 
         # Phase 3: Clarifying Questions
@@ -241,6 +279,7 @@ class ReviewOrchestrator:
         self._capture(f"\n{qa_context}")
 
         qa_findings = extract_phase_findings(qa_context, "Q&A", self.standard_model)
+        self._check_grounding("Q&A", qa_context, qa_findings)
 
         # Phase 4: Architecture Sparring
         self._capture("\n## Phase 4: Architecture Sparring\n")
@@ -250,6 +289,7 @@ class ReviewOrchestrator:
         sparring_findings = extract_phase_findings(
             sparring_context, "Sparring", self.standard_model
         )
+        self._check_grounding("sparring", sparring_context, sparring_findings)
 
         # Phase 5: Final Review
         self._capture("\n## Phase 5: Final Review\n")
