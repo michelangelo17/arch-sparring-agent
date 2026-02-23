@@ -1,10 +1,13 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from arch_sparring_agent.guardrails import GroundingResult
 from arch_sparring_agent.infra import SharedConfig
-from arch_sparring_agent.orchestrator import ReviewOrchestrator
+from arch_sparring_agent.review.grounding import GroundingResult
+from arch_sparring_agent.review.orchestrator import ReviewOrchestrator
+
+_ORCH = "arch_sparring_agent.review.orchestrator"
 
 FAKE_CONFIG = SharedConfig(
     gateway_id="gw-123",
@@ -31,35 +34,27 @@ def create_mocks():
     def fake_create_model(model_name, reasoning=False, reasoning_level="low"):
         return mock_reasoning_model if reasoning else mock_standard_model
 
-    mock_create_model = patch(
-        "arch_sparring_agent.orchestrator.create_model", side_effect=fake_create_model
-    ).start()
+    mock_create_model = patch(f"{_ORCH}.create_model", side_effect=fake_create_model).start()
 
-    mock_create_req = patch("arch_sparring_agent.orchestrator.create_requirements_agent").start()
-    mock_create_arch = patch("arch_sparring_agent.orchestrator.create_architecture_agent").start()
-    mock_create_quest = patch("arch_sparring_agent.orchestrator.create_question_agent").start()
-    mock_create_spar = patch("arch_sparring_agent.orchestrator.create_sparring_agent").start()
-    mock_create_rev = patch("arch_sparring_agent.orchestrator.create_review_agent").start()
-    mock_create_guardrails = patch(
-        "arch_sparring_agent.orchestrator.create_guardrails_checker"
-    ).start()
+    mock_create_req = patch(f"{_ORCH}.create_requirements_agent").start()
+    mock_create_arch = patch(f"{_ORCH}.create_architecture_agent").start()
+    mock_create_quest = patch(f"{_ORCH}.create_question_agent").start()
+    mock_create_spar = patch(f"{_ORCH}.create_sparring_agent").start()
+    mock_create_rev = patch(f"{_ORCH}.create_review_agent").start()
+    mock_create_guardrails = patch(f"{_ORCH}.create_guardrails_checker").start()
     mock_create_guardrails.return_value = None
 
     try:
-        yield type(
-            "Mocks",
-            (),
-            {
-                "mock_create_model": mock_create_model,
-                "mock_create_req": mock_create_req,
-                "mock_create_arch": mock_create_arch,
-                "mock_create_quest": mock_create_quest,
-                "mock_create_spar": mock_create_spar,
-                "mock_create_rev": mock_create_rev,
-                "mock_standard_model": mock_standard_model,
-                "mock_create_guardrails": mock_create_guardrails,
-            },
-        )()
+        yield SimpleNamespace(
+            mock_create_model=mock_create_model,
+            mock_create_req=mock_create_req,
+            mock_create_arch=mock_create_arch,
+            mock_create_quest=mock_create_quest,
+            mock_create_spar=mock_create_spar,
+            mock_create_rev=mock_create_rev,
+            mock_standard_model=mock_standard_model,
+            mock_create_guardrails=mock_create_guardrails,
+        )
     finally:
         patch.stopall()
 
@@ -140,44 +135,38 @@ def run_review_mocks():
     mock_spar_agent = MagicMock()
     mock_rev_agent = MagicMock()
 
-    mock_extract_req = patch("arch_sparring_agent.orchestrator.extract_requirements").start()
+    mock_extract_req = patch(f"{_ORCH}.extract_requirements").start()
     mock_extract_req.side_effect = lambda content, model: f"[extracted] {content}"
 
-    mock_extract_arch = patch(
-        "arch_sparring_agent.orchestrator.extract_architecture_findings"
-    ).start()
+    mock_extract_arch = patch(f"{_ORCH}.extract_architecture_findings").start()
     mock_extract_arch.side_effect = lambda content, model: f"[extracted] {content}"
 
-    mock_extract_phase = patch("arch_sparring_agent.orchestrator.extract_phase_findings").start()
+    mock_extract_phase = patch(f"{_ORCH}.extract_phase_findings").start()
     mock_extract_phase.side_effect = lambda content, phase, model: f"[extracted:{phase}] {content}"
 
-    mock_run_arch = patch("arch_sparring_agent.orchestrator.run_architecture").start()
+    mock_run_arch = patch(f"{_ORCH}.run_architecture").start()
     mock_run_arch.return_value = "Architecture Summary"
 
-    mock_run_questions = patch("arch_sparring_agent.orchestrator.run_questions").start()
-    mock_run_sparring = patch("arch_sparring_agent.orchestrator.run_sparring").start()
-    mock_gen_review = patch("arch_sparring_agent.orchestrator.run_review").start()
+    mock_run_questions = patch(f"{_ORCH}.run_questions").start()
+    mock_run_sparring = patch(f"{_ORCH}.run_sparring").start()
+    mock_gen_review = patch(f"{_ORCH}.run_review").start()
 
     try:
-        yield type(
-            "RunReviewMocks",
-            (),
-            {
-                "mock_standard_model": mock_standard_model,
-                "mock_req_agent": mock_req_agent,
-                "mock_arch_agent": mock_arch_agent,
-                "mock_quest_agent": mock_quest_agent,
-                "mock_spar_agent": mock_spar_agent,
-                "mock_rev_agent": mock_rev_agent,
-                "mock_extract_req": mock_extract_req,
-                "mock_extract_arch": mock_extract_arch,
-                "mock_extract_phase": mock_extract_phase,
-                "mock_run_arch": mock_run_arch,
-                "mock_run_questions": mock_run_questions,
-                "mock_run_sparring": mock_run_sparring,
-                "mock_gen_review": mock_gen_review,
-            },
-        )()
+        yield SimpleNamespace(
+            mock_standard_model=mock_standard_model,
+            mock_req_agent=mock_req_agent,
+            mock_arch_agent=mock_arch_agent,
+            mock_quest_agent=mock_quest_agent,
+            mock_spar_agent=mock_spar_agent,
+            mock_rev_agent=mock_rev_agent,
+            mock_extract_req=mock_extract_req,
+            mock_extract_arch=mock_extract_arch,
+            mock_extract_phase=mock_extract_phase,
+            mock_run_arch=mock_run_arch,
+            mock_run_questions=mock_run_questions,
+            mock_run_sparring=mock_run_sparring,
+            mock_gen_review=mock_gen_review,
+        )
     finally:
         patch.stopall()
 
@@ -279,7 +268,7 @@ def test_create_no_guardrails_by_default(create_mocks):
         shared_config=FAKE_CONFIG,
     )
 
-    create_mocks.mock_create_guardrails.assert_called_once_with(None, None)
+    create_mocks.mock_create_guardrails.assert_called_once_with(None, None, region="eu-central-1")
     assert orch._guardrails is None
 
 
@@ -295,7 +284,9 @@ def test_create_sets_guardrails_when_configured(create_mocks):
         shared_config=FAKE_CONFIG_WITH_GUARDRAILS,
     )
 
-    create_mocks.mock_create_guardrails.assert_called_once_with("gr-test123", "DRAFT")
+    create_mocks.mock_create_guardrails.assert_called_once_with(
+        "gr-test123", "DRAFT", region="eu-central-1"
+    )
     assert orch._guardrails is mock_checker
 
 

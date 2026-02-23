@@ -11,7 +11,7 @@ from arch_sparring_agent.config import (
 from arch_sparring_agent.config import (
     CONDENSER_PASSTHROUGH_THRESHOLD as PASSTHROUGH_THRESHOLD,
 )
-from arch_sparring_agent.context_condenser import (
+from arch_sparring_agent.review.context_condenser import (
     _extract,
     chunked_extract,
     extract_architecture_findings,
@@ -21,7 +21,7 @@ from arch_sparring_agent.context_condenser import (
 from tests.conftest import FakeClientError, FakeContextWindowOverflow, FakeMaxTokensReached
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_short_content_passes_through(mock_agent_cls):
     short = "- Requirement 1\n- Requirement 2"
     assert len(short) <= PASSTHROUGH_THRESHOLD
@@ -31,7 +31,7 @@ def test_short_content_passes_through(mock_agent_cls):
     mock_agent_cls.assert_not_called()
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_exact_threshold_passes_through(mock_agent_cls):
     content = "x" * PASSTHROUGH_THRESHOLD
     result = _extract(content, "prompt", "test-model")
@@ -39,7 +39,7 @@ def test_exact_threshold_passes_through(mock_agent_cls):
     mock_agent_cls.assert_not_called()
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_one_over_threshold_triggers_extraction(mock_agent_cls):
     content = "x" * (PASSTHROUGH_THRESHOLD + 1)
     mock_agent = MagicMock()
@@ -51,7 +51,7 @@ def test_one_over_threshold_triggers_extraction(mock_agent_cls):
     mock_agent_cls.assert_called_once()
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_extract_requirements_calls_agent(mock_agent_cls):
     content = "A" * (PASSTHROUGH_THRESHOLD + 100)
     mock_agent = MagicMock()
@@ -68,7 +68,7 @@ def test_extract_requirements_calls_agent(mock_agent_cls):
     assert result == "### Functional Requirements\n- Req 1"
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_extract_architecture_findings_calls_agent(mock_agent_cls):
     content = "B" * (PASSTHROUGH_THRESHOLD + 100)
     mock_agent = MagicMock()
@@ -83,7 +83,7 @@ def test_extract_architecture_findings_calls_agent(mock_agent_cls):
     assert result == "### Components\n- API Gateway"
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_extract_phase_findings_includes_phase_name(mock_agent_cls):
     content = "C" * (PASSTHROUGH_THRESHOLD + 100)
     mock_agent = MagicMock()
@@ -97,7 +97,7 @@ def test_extract_phase_findings_includes_phase_name(mock_agent_cls):
     assert result == "### Confirmed Gaps\n- Gap 1"
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_context_overflow_triggers_chunked_fallback(mock_agent_cls):
     content = "D" * (PASSTHROUGH_THRESHOLD + 100)
 
@@ -119,7 +119,7 @@ def test_context_overflow_triggers_chunked_fallback(mock_agent_cls):
     assert "chunk" in result
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_max_tokens_triggers_chunked_fallback(mock_agent_cls):
     content = "E" * (PASSTHROUGH_THRESHOLD + 100)
 
@@ -141,7 +141,7 @@ def test_max_tokens_triggers_chunked_fallback(mock_agent_cls):
     assert "chunk" in result
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_client_error_validation_triggers_fallback(mock_agent_cls):
     content = "F" * (PASSTHROUGH_THRESHOLD + 100)
 
@@ -163,7 +163,7 @@ def test_client_error_validation_triggers_fallback(mock_agent_cls):
     assert "chunk" in result
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_client_error_non_token_reraises(mock_agent_cls):
     content = "G" * (PASSTHROUGH_THRESHOLD + 100)
 
@@ -175,7 +175,7 @@ def test_client_error_non_token_reraises(mock_agent_cls):
         _extract(content, "prompt", "test-model")
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_unrelated_exception_reraises(mock_agent_cls):
     content = "H" * (PASSTHROUGH_THRESHOLD + 100)
 
@@ -187,7 +187,7 @@ def test_unrelated_exception_reraises(mock_agent_cls):
         _extract(content, "prompt", "test-model")
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_chunks_large_content(mock_agent_cls):
     content = "I" * (CHUNK_SIZE * 3)
     mock_agent = MagicMock()
@@ -200,7 +200,7 @@ def test_chunks_large_content(mock_agent_cls):
     assert mock_agent.call_count == 3
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_max_chunks_limit(mock_agent_cls):
     content = "J" * (CHUNK_SIZE * (MAX_CHUNKS + 5))
     mock_agent = MagicMock()
@@ -212,7 +212,7 @@ def test_max_chunks_limit(mock_agent_cls):
     assert mock_agent_cls.call_count <= 2
 
 
-@patch("arch_sparring_agent.context_condenser.Agent")
+@patch("arch_sparring_agent.review.context_condenser.Agent")
 def test_failed_chunk_produces_placeholder(mock_agent_cls):
     content = "K" * (CHUNK_SIZE + 100)
 

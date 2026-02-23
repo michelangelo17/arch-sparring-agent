@@ -11,6 +11,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from ..config import DEFAULT_REGION, IAM_PROPAGATION_TIMEOUT
 from ..exceptions import AWS_ERRORS, PolicySetupError
+from . import build_gateway_arn, get_account_id
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +45,7 @@ def _find_gateway_by_name(
         if gw_name.lower() != gateway_name_lower:
             continue
 
-        # ListGateways (GatewaySummary) doesn't include ARN or URL — construct the ARN
-        sts = boto3.client("sts", region_name=region)
-        account_id = sts.get_caller_identity()["Account"]
-        gateway_arn = f"arn:aws:bedrock-agentcore:{region}:{account_id}:gateway/{gw_id}"
+        gateway_arn = build_gateway_arn(region, get_account_id(region), gw_id)
 
         return gateway_arn, gw_id, None
 
@@ -103,8 +101,7 @@ def associate_gateway_with_policy_engine(
     """Associate a Gateway with a Policy Engine. Mode: ENFORCE or LOG_ONLY."""
     try:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
-        sts = boto3.client("sts", region_name=region)
-        account_id = sts.get_caller_identity()["Account"]
+        account_id = get_account_id(region)
 
         gateway = client.get_gateway(gatewayIdentifier=gateway_id)
         policy_engine_arn = (
@@ -188,7 +185,7 @@ def _create_gateway(gateway_name: str, region: str) -> tuple[str, str]:
     except AWS_ERRORS as create_error:
         if "already exists" in str(create_error).lower():
             gateway_arn, gateway_id, _ = _find_gateway_by_name(gateway_name, region)
-            if gateway_id:
+            if gateway_id and gateway_arn:
                 logger.info("Using existing Gateway: %s", gateway_name)
                 return gateway_arn, gateway_id
         raise
@@ -204,9 +201,7 @@ def _create_gateway(gateway_name: str, region: str) -> tuple[str, str]:
 
     gateway_arn = gateway.get("gatewayArn")
     if not gateway_arn and gateway_id:
-        sts = boto3.client("sts", region_name=region)
-        account_id = sts.get_caller_identity()["Account"]
-        gateway_arn = f"arn:aws:bedrock-agentcore:{region}:{account_id}:gateway/{gateway_id}"
+        gateway_arn = build_gateway_arn(region, get_account_id(region), gateway_id)
 
     logger.info("Gateway setup complete: %s", gateway_name)
     logger.debug("Gateway ID: %s", gateway_id)
@@ -238,7 +233,7 @@ def setup_gateway(
 
     try:
         gateway_arn, gateway_id, _ = _find_gateway_by_name(gateway_name, region)
-        if gateway_id:
+        if gateway_id and gateway_arn:
             logger.info("Using existing Gateway: %s", gateway_name)
             logger.debug("Gateway ID: %s", gateway_id)
             return gateway_arn, gateway_id

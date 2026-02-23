@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 
 import click
@@ -32,7 +31,6 @@ def kb():
 def kb_sync(region, content_dir, verbose):
     """Scrape WAF docs, upload to S3, and trigger KB ingestion."""
     configure_logging(verbose)
-    os.environ["AWS_REGION"] = region
 
     config = load_shared_config(region)
     if not config.knowledge_base_id or not config.kb_bucket_name:

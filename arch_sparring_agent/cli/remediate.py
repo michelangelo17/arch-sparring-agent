@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 
 import click
@@ -56,7 +55,6 @@ def remediate(output_dir, no_output, model, region, verbose):
     to work through gaps, risks, and recommendations.
     """
     configure_logging(verbose)
-    os.environ["AWS_REGION"] = region
 
     out_path = get_output_dir(output_dir)
     state_path = out_path / DEFAULT_STATE_FILE

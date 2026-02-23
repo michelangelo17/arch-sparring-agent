@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .state import ReviewState
+from ..state import ReviewState
 
 if TYPE_CHECKING:
     from .orchestrator import ReviewResult

@@ -17,6 +17,7 @@ from ..config import (
     AGENT_REVIEW,
     AGENT_SPARRING,
     DEFAULT_REGION,
+    POLICY_ACTIVE_MAX_POLLS,
 )
 from ..exceptions import AWS_ERRORS, PolicySetupError
 from .gateway import associate_gateway_with_policy_engine, setup_gateway
@@ -130,7 +131,7 @@ def _wait_for_policy_active(
         True if policy became ACTIVE, False otherwise.
     """
     logger.info("Verifying policy '%s' status...", policy_name)
-    for _ in range(120):  # 120 * 0.5s = 60s max
+    for _ in range(POLICY_ACTIVE_MAX_POLLS):
         try:
             response = client.get_policy(policyEngineId=policy_engine_id, policyId=policy_id)
             status = response.get("status", "").upper()

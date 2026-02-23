@@ -11,7 +11,8 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from ..config import DEFAULT_REGION, IAM_KB_PROPAGATION_WAIT
-from ..exceptions import AWS_ERRORS
+from ..exceptions import AWS_ERRORS, ConfigurationError
+from ..infra import get_account_id
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +22,6 @@ KB_NAME = "arch-review-waf-kb"
 VECTOR_INDEX_NAME = "waf-index"
 EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0"
 EMBEDDING_DIMENSION = 1024
-
-
-def _get_account_id(region: str) -> str:
-    sts = boto3.client("sts", region_name=region)
-    return sts.get_caller_identity()["Account"]
 
 
 def _data_bucket_name(account_id: str, region: str) -> str:
@@ -153,8 +149,8 @@ def _delete_vector_bucket(vector_bucket_name: str, region: str) -> None:
                 logger.info("Deleted vector index: %s", idx["indexName"])
             except AWS_ERRORS as e:
                 logger.warning("Could not delete index %s: %s", idx["indexName"], e)
-    except AWS_ERRORS:
-        pass
+    except AWS_ERRORS as e:
+        logger.debug("Could not list vector indexes for cleanup: %s", e)
 
     try:
         s3v.delete_vector_bucket(vectorBucketName=vector_bucket_name)
@@ -256,8 +252,8 @@ def _delete_kb_role(region: str) -> None:
     role_name = "arch-review-kb-role"
     try:
         iam.delete_role_policy(RoleName=role_name, PolicyName="arch-review-kb-access")
-    except AWS_ERRORS:
-        pass
+    except AWS_ERRORS as e:
+        logger.debug("Could not delete role policy for %s: %s", role_name, e)
     try:
         iam.delete_role(RoleName=role_name)
         logger.info("Deleted IAM role: %s", role_name)
@@ -333,7 +329,9 @@ def _create_bedrock_kb(
                 continue
             raise
 
-    raise ClientError(f"KB creation failed after {max_attempts} attempts (IAM not propagated)")
+    raise ConfigurationError(
+        f"KB creation failed after {max_attempts} attempts (IAM not propagated)"
+    )
 
 
 def _find_kb_by_name(bedrock: Any) -> str | None:
@@ -391,8 +389,8 @@ def _delete_bedrock_kb(kb_id: str, region: str) -> None:
                     knowledgeBaseId=kb_id,
                     dataSourceId=ds["dataSourceId"],
                 )
-            except AWS_ERRORS:
-                pass
+            except AWS_ERRORS as e:
+                logger.debug("Could not delete data source %s: %s", ds["dataSourceId"], e)
         bedrock.delete_knowledge_base(knowledgeBaseId=kb_id)
         logger.info("Deleted Bedrock Knowledge Base: %s", kb_id)
     except AWS_ERRORS as e:
@@ -410,7 +408,7 @@ def setup_knowledge_base(region: str = DEFAULT_REGION) -> tuple[str, str]:
     Returns:
         Tuple of (knowledge_base_id, data_bucket_name).
     """
-    account_id = _get_account_id(region)
+    account_id = get_account_id(region)
     data_bucket = _data_bucket_name(account_id, region)
     vector_bucket = _vector_bucket_name(account_id, region)
 
@@ -441,7 +439,7 @@ def destroy_knowledge_base(
     if kb_id:
         _delete_bedrock_kb(kb_id, region)
 
-    account_id = _get_account_id(region)
+    account_id = get_account_id(region)
     vector_bucket = _vector_bucket_name(account_id, region)
     _delete_vector_bucket(vector_bucket, region)
 

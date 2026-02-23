@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import sys
 import traceback
@@ -21,10 +20,10 @@ from ..config import (
     SUPPORTED_MODELS,
 )
 from ..exceptions import ArchReviewError
-from ..extraction import extract_state_from_review
 from ..infra import SharedConfig
-from ..orchestrator import ReviewOrchestrator
 from ..profiles import load_profile
+from ..review.extraction import extract_state_from_review
+from ..review.orchestrator import ReviewOrchestrator
 from ..state import ReviewState
 from . import (
     DEFAULT_OUTPUT_DIR,
@@ -163,7 +162,6 @@ def run(
       arch-review run --profile strict --reasoning-level medium
     """
     configure_logging(verbose)
-    os.environ["AWS_REGION"] = region
 
     profile_data = load_profile(profile_name)
 

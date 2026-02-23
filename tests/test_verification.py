@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from arch_sparring_agent.orchestrator import ReviewOrchestrator
+from arch_sparring_agent.review.orchestrator import ReviewOrchestrator
 
 
 def _make_orchestrator():
@@ -26,7 +26,7 @@ def test_passthrough_when_no_features_not_found():
     assert result == findings
 
 
-@patch("arch_sparring_agent.orchestrator.Agent")
+@patch("arch_sparring_agent.review.orchestrator.Agent")
 def test_calls_verifier_when_features_not_found_present(mock_agent_cls):
     orch = _make_orchestrator()
     mock_agent = MagicMock()
@@ -40,7 +40,7 @@ def test_calls_verifier_when_features_not_found_present(mock_agent_cls):
     assert result == "verified findings"
 
 
-@patch("arch_sparring_agent.orchestrator.Agent")
+@patch("arch_sparring_agent.review.orchestrator.Agent")
 def test_returns_original_on_verifier_failure(mock_agent_cls):
     orch = _make_orchestrator()
     mock_agent = MagicMock()
@@ -55,25 +55,25 @@ def test_returns_original_on_verifier_failure(mock_agent_cls):
 
 @pytest.fixture
 def verification_integration_mocks():
-    patch("arch_sparring_agent.orchestrator.extract_requirements").start().side_effect = (
+    patch("arch_sparring_agent.review.orchestrator.extract_requirements").start().side_effect = (
         lambda c, m: c
     )
 
     mock_extract_arch = patch(
-        "arch_sparring_agent.orchestrator.extract_architecture_findings"
+        "arch_sparring_agent.review.orchestrator.extract_architecture_findings"
     ).start()
     mock_extract_arch.side_effect = lambda c, m: f"### Features Not Found\n- item from {c}"
 
-    patch("arch_sparring_agent.orchestrator.extract_phase_findings").start().side_effect = (
+    patch("arch_sparring_agent.review.orchestrator.extract_phase_findings").start().side_effect = (
         lambda c, p, m: c
     )
 
-    mock_run_arch = patch("arch_sparring_agent.orchestrator.run_architecture").start()
+    mock_run_arch = patch("arch_sparring_agent.review.orchestrator.run_architecture").start()
     mock_run_arch.return_value = "arch summary"
 
-    patch("arch_sparring_agent.orchestrator.run_questions").start().return_value = "q"
-    patch("arch_sparring_agent.orchestrator.run_sparring").start().return_value = "s"
-    patch("arch_sparring_agent.orchestrator.run_review").start().return_value = "review"
+    patch("arch_sparring_agent.review.orchestrator.run_questions").start().return_value = "q"
+    patch("arch_sparring_agent.review.orchestrator.run_sparring").start().return_value = "s"
+    patch("arch_sparring_agent.review.orchestrator.run_review").start().return_value = "review"
 
     try:
         yield

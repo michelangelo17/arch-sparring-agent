@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from strands import tool
 
@@ -11,7 +12,7 @@ from ..tools.kb_client import KnowledgeBaseClient
 logger = logging.getLogger(__name__)
 
 
-def create_kb_tool(knowledge_base_id: str, region: str):
+def create_kb_tool(knowledge_base_id: str, region: str) -> Callable[..., str]:
     """Create a ``query_waf`` tool backed by a KnowledgeBaseClient.
 
     Args:

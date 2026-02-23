@@ -13,12 +13,12 @@ from dataclasses import dataclass
 
 import boto3
 
-from .config import (
+from ..config import (
     DEFAULT_REGION,
     GROUNDING_CONTENT_CHUNK_SIZE,
     GROUNDING_SOURCE_MAX_CHARS,
 )
-from .exceptions import AWS_ERRORS
+from ..exceptions import AWS_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -167,13 +167,14 @@ class GuardrailsChecker:
 def create_guardrails_checker(
     guardrail_id: str | None,
     guardrail_version: str | None,
+    region: str | None = None,
 ) -> GuardrailsChecker | None:
     """Create a GuardrailsChecker if guardrail config is present, else None."""
     if not guardrail_id or not guardrail_version:
         return None
-    region = os.getenv("AWS_REGION", DEFAULT_REGION)
+    resolved_region = region or os.environ.get("AWS_REGION", DEFAULT_REGION)
     return GuardrailsChecker(
         guardrail_id=guardrail_id,
         guardrail_version=guardrail_version,
-        region=region,
+        region=resolved_region,
     )

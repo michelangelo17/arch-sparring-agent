@@ -10,9 +10,10 @@ from __future__ import annotations
 from botocore.exceptions import ClientError
 from strands import Agent
 from strands.models import BedrockModel
+from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
-from .config import CONDENSER_CHUNK_SIZE, CONDENSER_MAX_CHUNKS, CONDENSER_PASSTHROUGH_THRESHOLD
-from .exceptions import MODEL_ERRORS
+from ..config import CONDENSER_CHUNK_SIZE, CONDENSER_MAX_CHUNKS, CONDENSER_PASSTHROUGH_THRESHOLD
+from ..exceptions import MODEL_ERRORS
 
 
 def chunked_extract(content: str, system_prompt: str, model: str | BedrockModel) -> str:
@@ -36,7 +37,6 @@ def chunked_extract(content: str, system_prompt: str, model: str | BedrockModel)
         except MODEL_ERRORS:
             chunk_results.append(f"[Chunk {i + 1} could not be processed]")
 
-    # Merge: deduplicate by running one final extraction over the combined chunk results
     combined = "\n\n".join(chunk_results)
     if len(combined) <= CONDENSER_PASSTHROUGH_THRESHOLD:
         return combined
@@ -54,7 +54,6 @@ def chunked_extract(content: str, system_prompt: str, model: str | BedrockModel)
     try:
         return str(merger(combined))
     except MODEL_ERRORS:
-        # If merge fails, return raw combined (better than nothing)
         return combined
 
 
@@ -73,10 +72,9 @@ def _extract(content: str, system_prompt: str, model: str | BedrockModel) -> str
 
     try:
         return str(extractor(content))
-    except MODEL_ERRORS[:2]:
+    except (ContextWindowOverflowException, MaxTokensReachedException):
         return chunked_extract(content, system_prompt, model)
     except ClientError as e:
-        # Bedrock token limit errors surface as ClientError with specific error codes
         error_code = e.response.get("Error", {}).get("Code", "")
         if error_code in ("ValidationException", "ModelErrorException"):
             return chunked_extract(content, system_prompt, model)

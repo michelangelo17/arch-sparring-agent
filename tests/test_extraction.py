@@ -1,4 +1,4 @@
-from arch_sparring_agent.extraction import (
+from arch_sparring_agent.review.extraction import (
     extract_gaps,
     extract_recommendations,
     extract_risks,
@@ -8,7 +8,7 @@ from arch_sparring_agent.extraction import (
     is_duplicate,
     strip_markdown,
 )
-from arch_sparring_agent.orchestrator import ReviewResult
+from arch_sparring_agent.review.orchestrator import ReviewResult
 
 
 def test_strips_bold():

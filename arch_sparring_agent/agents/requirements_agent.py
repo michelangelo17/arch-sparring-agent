@@ -6,8 +6,8 @@ from strands import Agent, tool
 from strands.models import BedrockModel
 
 from ..config import AGENT_REQUIREMENTS, DOC_CHUNK_SUMMARY_THRESHOLD, DOC_SUMMARY_THRESHOLD
-from ..context_condenser import chunked_extract
 from ..exceptions import MODEL_ERRORS
+from ..review.context_condenser import chunked_extract
 
 _SYSTEM_PROMPT = """Analyze requirements documents.
 

@@ -17,11 +17,11 @@ from . import validate_file_size, validate_path
 class DiagramAnalyzer:
     """Analyzes architecture diagrams via Bedrock Converse API."""
 
-    def __init__(self, diagrams_dir: str, model_id: str):
+    def __init__(self, diagrams_dir: str, model_id: str, region: str | None = None):
         self.diagrams_dir = Path(diagrams_dir)
         self.model_id = model_id
-        region = os.getenv("AWS_REGION", DEFAULT_REGION)
-        self.bedrock_client = boto3.client("bedrock-runtime", region_name=region)
+        resolved_region = region or os.getenv("AWS_REGION", DEFAULT_REGION)
+        self.bedrock_client = boto3.client("bedrock-runtime", region_name=resolved_region)
 
     def read_diagram(self, filename: str) -> str:
         """Analyze diagram and return text description."""
@@ -81,6 +81,10 @@ class DiagramAnalyzer:
             raise ToolError(f"Bedrock API error: {e}") from e
 
     def list_diagrams(self) -> list[str]:
-        """List diagram files (PNG, JPEG)."""
-        extensions = [".png", ".jpg", ".jpeg"]
-        return [f.name for f in self.diagrams_dir.iterdir() if f.suffix.lower() in extensions]
+        """List diagram files (PNG, JPEG), returning paths relative to diagrams_dir."""
+        extensions = {".png", ".jpg", ".jpeg"}
+        return sorted(
+            str(f.relative_to(self.diagrams_dir))
+            for f in self.diagrams_dir.rglob("*")
+            if f.suffix.lower() in extensions
+        )

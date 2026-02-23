@@ -12,12 +12,12 @@ from botocore.exceptions import BotoCoreError
 from strands import Agent
 from strands.models import BedrockModel
 
-from .agents.architecture_agent import create_architecture_agent, run_architecture
-from .agents.question_agent import create_question_agent, run_questions
-from .agents.requirements_agent import create_requirements_agent
-from .agents.review_agent import create_review_agent, run_review
-from .agents.sparring_agent import create_sparring_agent, run_sparring
-from .config import (
+from ..agents.architecture_agent import create_architecture_agent, run_architecture
+from ..agents.question_agent import create_question_agent, run_questions
+from ..agents.requirements_agent import create_requirements_agent
+from ..agents.review_agent import create_review_agent, run_review
+from ..agents.sparring_agent import create_sparring_agent, run_sparring
+from ..config import (
     AGENT_ARCHITECTURE,
     AGENT_QUESTION,
     AGENT_REQUIREMENTS,
@@ -27,14 +27,14 @@ from .config import (
     DEFAULT_REASONING_LEVEL,
     create_model,
 )
+from ..exceptions import MODEL_ERRORS
+from ..infra import SharedConfig
 from .context_condenser import (
     extract_architecture_findings,
     extract_phase_findings,
     extract_requirements,
 )
-from .exceptions import MODEL_ERRORS
-from .guardrails import GuardrailsChecker, create_guardrails_checker
-from .infra import SharedConfig
+from .grounding import GuardrailsChecker, create_guardrails_checker
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +157,7 @@ class ReviewOrchestrator:
         guardrails = create_guardrails_checker(
             shared_config.guardrail_id,
             shared_config.guardrail_version,
+            region=shared_config.region,
         )
         if guardrails:
             logger.info(

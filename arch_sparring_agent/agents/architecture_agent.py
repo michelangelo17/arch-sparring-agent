@@ -118,7 +118,7 @@ def create_architecture_agent(
     diagram_model_id = model.config["model_id"] if isinstance(model, BedrockModel) else model
 
     cfn_analyzer = CloudFormationAnalyzer(templates_dir)
-    diagram_analyzer = DiagramAnalyzer(diagrams_dir, model_id=diagram_model_id)
+    diagram_analyzer = DiagramAnalyzer(diagrams_dir, model_id=diagram_model_id, region=region)
     source_analyzer = SourceAnalyzer(source_dir) if source_dir else None
 
     @tool

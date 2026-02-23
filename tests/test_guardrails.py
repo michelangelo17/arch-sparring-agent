@@ -1,10 +1,10 @@
-"""Tests for arch_sparring_agent.guardrails runtime checks."""
+"""Tests for arch_sparring_agent.review.grounding runtime checks."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from arch_sparring_agent.guardrails import (
+from arch_sparring_agent.review.grounding import (
     GuardrailsChecker,
     create_guardrails_checker,
 )
@@ -34,7 +34,7 @@ def _make_apply_response(action="NONE", grounding_score=0.95):
 
 @pytest.fixture
 def checker():
-    with patch("arch_sparring_agent.guardrails.boto3") as mock_boto3:
+    with patch("arch_sparring_agent.review.grounding.boto3") as mock_boto3:
         mock_client = MagicMock()
         mock_boto3.client.return_value = mock_client
         c = GuardrailsChecker(
@@ -164,7 +164,7 @@ def test_create_guardrails_checker_returns_none_without_config():
     assert create_guardrails_checker(None, "DRAFT") is None
 
 
-@patch("arch_sparring_agent.guardrails.boto3")
+@patch("arch_sparring_agent.review.grounding.boto3")
 def test_create_guardrails_checker_returns_instance(mock_boto3):
     result = create_guardrails_checker("gr-123", "DRAFT")
     assert result is not None

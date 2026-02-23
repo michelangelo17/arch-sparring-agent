@@ -18,14 +18,17 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install ruff
-        run: pip install 'ruff>=0.14.8,<0.15'
+      - name: Install lint tools
+        run: pip install 'ruff>=0.14.8,<0.15' 'mypy>=1.0'
 
       - name: Lint
         run: ruff check .
 
       - name: Format check
         run: ruff format --check .
+
+      - name: Type check
+        run: mypy arch_sparring_agent/ --ignore-missing-imports
 
   test:
     runs-on: ubuntu-latest

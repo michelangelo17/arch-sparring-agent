@@ -126,7 +126,7 @@ def _extract_html_links(html: str, base_url: str, scope: str) -> list[str]:
     links: list[str] = []
 
     for a_tag in soup.find_all("a", href=True):
-        href = a_tag["href"]
+        href = str(a_tag["href"])
         if href.startswith("#"):
             continue
         full_url = urljoin(base_url, href)
@@ -250,7 +250,7 @@ def _is_redirect_page(html: str) -> str | None:
     soup = BeautifulSoup(html, "html.parser")
     meta = soup.find("meta", attrs={"http-equiv": re.compile(r"refresh", re.I)})
     if meta:
-        content = meta.get("content", "")
+        content = str(meta.get("content", ""))
         match = re.search(r"URL=([^\s\"']+)", content, re.I)
         if match:
             return match.group(1)

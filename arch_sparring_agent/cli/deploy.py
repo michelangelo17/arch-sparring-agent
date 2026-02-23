@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 import click
 
 from ..config import DEFAULT_REGION
@@ -51,7 +49,6 @@ def deploy(region, gateway_name, policy_engine_name, with_kb, verbose):
     Idempotent — safe to run repeatedly.
     """
     configure_logging(verbose)
-    os.environ["AWS_REGION"] = region
 
     click.echo(f"Deploying arch-review infrastructure in {region}...")
 
@@ -156,7 +153,6 @@ def destroy(region, confirm, verbose):
     Requires --confirm as a safety guard.
     """
     configure_logging(verbose)
-    os.environ["AWS_REGION"] = region
 
     if not confirm:
         click.echo(

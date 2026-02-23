@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, TypedDict
 
 import frontmatter
 
@@ -11,13 +12,21 @@ from ..exceptions import ToolError
 from . import validate_file_size, validate_path
 
 
+class ParsedDocument(TypedDict):
+    """Structured return type for ``read_markdown_file``."""
+
+    filename: str
+    content: str
+    metadata: dict[str, Any]
+
+
 class DocumentParser:
     """Reads markdown documents with frontmatter support."""
 
     def __init__(self, document_dir: str):
         self.document_dir = Path(document_dir)
 
-    def read_markdown_file(self, filename: str) -> dict:
+    def read_markdown_file(self, filename: str) -> ParsedDocument:
         """Read markdown file, returning content and metadata."""
         file_path = validate_path(self.document_dir, filename)
         if not file_path.exists():

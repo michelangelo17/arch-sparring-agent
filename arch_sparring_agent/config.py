@@ -165,6 +165,9 @@ DIAGRAM_MAX_BYTES = _int_env("ARCH_REVIEW_DIAGRAM_MAX_BYTES", 10_000_000)
 # Knowledge Base: seconds to wait for IAM role propagation during KB setup
 IAM_KB_PROPAGATION_WAIT = _int_env("ARCH_REVIEW_KB_IAM_WAIT", 15)
 
+# Policy Engine: max poll iterations waiting for policy to become ACTIVE (0.5s each)
+POLICY_ACTIVE_MAX_POLLS = _int_env("ARCH_REVIEW_POLICY_ACTIVE_MAX_POLLS", 120)
+
 # Guardrails: contextual grounding check
 GROUNDING_THRESHOLD = _float_env("ARCH_REVIEW_GROUNDING_THRESHOLD", 0.7)
 GROUNDING_CONTENT_CHUNK_SIZE = _int_env("ARCH_REVIEW_GROUNDING_CHUNK_SIZE", 4500)

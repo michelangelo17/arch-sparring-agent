@@ -88,7 +88,7 @@ def test_kb_group_help():
     assert "sync" in result.output
 
 
-@patch("arch_sparring_agent.cli.load_from_ssm")
+@patch("arch_sparring_agent.cli.common.load_from_ssm")
 def test_sync_fails_without_kb_in_config(mock_load):
     mock_load.return_value = SharedConfig(
         gateway_id="gw-1",
@@ -134,7 +134,7 @@ def test_deploy_with_kb_populates_fields(mock_deploy_infra, mock_save):
 @patch("arch_sparring_agent.cli.deploy.delete_from_ssm")
 @patch("arch_sparring_agent.cli.deploy.destroy_gateway")
 @patch("arch_sparring_agent.cli.deploy.destroy_policy_engine")
-@patch("arch_sparring_agent.cli.load_from_ssm")
+@patch("arch_sparring_agent.cli.common.load_from_ssm")
 def test_destroy_tears_down_kb_when_present(
     mock_load, mock_destroy_pe, mock_destroy_gw, mock_del_ssm
 ):

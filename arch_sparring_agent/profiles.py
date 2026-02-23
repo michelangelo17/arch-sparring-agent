@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -9,8 +10,12 @@ import yaml
 
 from .exceptions import ConfigurationError
 
+logger = logging.getLogger(__name__)
+
 BUILTIN_DIR = Path(__file__).parent / "profiles"
 USER_DIR = Path.home() / ".config" / "arch-review" / "profiles"
+
+_EXPECTED_KEYS = {"name", "description", "directives"}
 
 
 def project_dir() -> Path:
@@ -21,6 +26,18 @@ def project_dir() -> Path:
 def _search_order() -> list[Path]:
     """Return profile search directories: project -> user -> built-in."""
     return [project_dir(), USER_DIR, BUILTIN_DIR]
+
+
+def _validate_profile(data: dict[str, Any], path: Path) -> None:
+    """Warn about unexpected keys in a loaded profile."""
+    unknown = set(data.keys()) - _EXPECTED_KEYS
+    if unknown:
+        logger.warning(
+            "Profile %s contains unknown keys: %s (expected: %s)",
+            path.name,
+            ", ".join(sorted(unknown)),
+            ", ".join(sorted(_EXPECTED_KEYS)),
+        )
 
 
 def load_profile(name: str = "default") -> dict[str, Any]:
@@ -34,7 +51,9 @@ def load_profile(name: str = "default") -> dict[str, Any]:
     for directory in _search_order():
         path = directory / f"{name}.yaml"
         if path.is_file():
-            return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            _validate_profile(data, path)
+            return data
 
     available = [p.stem for p in BUILTIN_DIR.glob("*.yaml")]
     raise ConfigurationError(

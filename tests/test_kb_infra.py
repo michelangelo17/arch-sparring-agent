@@ -15,14 +15,14 @@ from arch_sparring_agent.kb.infra import (
 from tests.conftest import FakeClientError
 
 
+@patch("arch_sparring_agent.kb.infra.get_account_id", return_value="123456789012")
 @patch("arch_sparring_agent.kb.infra.time")
 @patch("arch_sparring_agent.kb.infra.boto3")
-def test_setup_knowledge_base_creates_all_resources(mock_boto3, mock_time):
+def test_setup_knowledge_base_creates_all_resources(mock_boto3, mock_time, _mock_account):
     mock_s3 = MagicMock()
     mock_s3_vectors = MagicMock()
     mock_iam = MagicMock()
     mock_bedrock = MagicMock()
-    mock_sts = MagicMock()
 
     def make_client(service, **kwargs):
         return {
@@ -30,12 +30,9 @@ def test_setup_knowledge_base_creates_all_resources(mock_boto3, mock_time):
             "s3vectors": mock_s3_vectors,
             "iam": mock_iam,
             "bedrock-agent": mock_bedrock,
-            "sts": mock_sts,
         }.get(service, MagicMock())
 
     mock_boto3.client.side_effect = make_client
-
-    mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
     mock_s3_vectors.create_vector_bucket.return_value = {
         "vectorBucketArn": "arn:aws:s3vectors:us-east-1:123:bucket/test"
     }
@@ -148,7 +145,7 @@ def test_create_data_source_handles_conflict(mock_boto3):
     assert result == "ds-existing"
 
 
-@patch("arch_sparring_agent.kb.infra._get_account_id", return_value="123456789012")
+@patch("arch_sparring_agent.kb.infra.get_account_id", return_value="123456789012")
 @patch("arch_sparring_agent.kb.infra._delete_kb_role")
 @patch("arch_sparring_agent.kb.infra._delete_vector_bucket")
 @patch("arch_sparring_agent.kb.infra._delete_data_bucket")
