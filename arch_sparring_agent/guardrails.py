@@ -12,13 +12,13 @@ import os
 from dataclasses import dataclass
 
 import boto3
-from botocore.exceptions import BotoCoreError, ClientError
 
 from .config import (
     DEFAULT_REGION,
     GROUNDING_CONTENT_CHUNK_SIZE,
     GROUNDING_SOURCE_MAX_CHARS,
 )
+from .exceptions import AWS_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +125,7 @@ class GuardrailsChecker:
                     },
                 ],
             )
-        except (ClientError, BotoCoreError) as e:
+        except AWS_ERRORS as e:
             logger.warning("Guardrail API call failed, skipping grounding check: %s", e)
             return None
 

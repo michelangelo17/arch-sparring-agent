@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 
 import boto3
-from botocore.exceptions import BotoCoreError, ClientError
+
+from ..exceptions import AWS_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ class KnowledgeBaseClient:
                 retrievalQuery={"text": query},
                 retrievalConfiguration={"vectorSearchConfiguration": vector_cfg},
             )
-        except (ClientError, BotoCoreError) as e:
+        except AWS_ERRORS as e:
             logger.warning("KB query failed: %s", e)
             return f"[Knowledge Base query failed: {e}]"
 

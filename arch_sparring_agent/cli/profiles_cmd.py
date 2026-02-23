@@ -19,10 +19,10 @@ def profiles():
 @profiles.command("list")
 def profiles_list():
     """List available review profiles."""
-    from ..profiles import _project_dir
+    from ..profiles import project_dir
 
     all_profiles = list_profiles()
-    dirs = {"builtin": BUILTIN_DIR, "user": USER_DIR, "project": _project_dir()}
+    dirs = {"builtin": BUILTIN_DIR, "user": USER_DIR, "project": project_dir()}
 
     for label in ("builtin", "user", "project"):
         names = all_profiles[label]

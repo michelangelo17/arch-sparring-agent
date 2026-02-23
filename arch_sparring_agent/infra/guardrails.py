@@ -9,7 +9,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from ..config import DEFAULT_REGION, GROUNDING_THRESHOLD, GUARDRAIL_NAME
-from ..exceptions import GuardrailSetupError
+from ..exceptions import AWS_ERRORS, GuardrailSetupError
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def _find_guardrail_by_name(client: Any) -> str | None:
         for guardrail in response.get("guardrails", []):
             if guardrail.get("name") == GUARDRAIL_NAME:
                 return guardrail["id"]
-    except (ClientError, BotoCoreError) as e:
+    except AWS_ERRORS as e:
         logger.warning("Could not list guardrails: %s", e)
     return None
 

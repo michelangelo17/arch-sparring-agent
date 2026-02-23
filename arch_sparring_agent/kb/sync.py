@@ -9,9 +9,9 @@ from pathlib import Path
 
 import boto3
 import yaml
-from botocore.exceptions import BotoCoreError, ClientError
 
 from ..config import DEFAULT_REGION
+from ..exceptions import AWS_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +135,7 @@ def wait_for_ingestion(
                 logger.error("Ingestion failed: %s", reasons)
                 return False
             logger.debug("Ingestion status: %s", status)
-        except (ClientError, BotoCoreError) as e:
+        except AWS_ERRORS as e:
             logger.warning("Error polling ingestion status: %s", e)
 
         time.sleep(15)

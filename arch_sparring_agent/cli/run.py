@@ -9,6 +9,7 @@ import sys
 import traceback
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -20,10 +21,11 @@ from ..config import (
     SUPPORTED_MODELS,
 )
 from ..exceptions import ArchReviewError
+from ..extraction import extract_state_from_review
 from ..infra import SharedConfig
 from ..orchestrator import ReviewOrchestrator
 from ..profiles import load_profile
-from ..state import ReviewState, extract_state_from_review
+from ..state import ReviewState
 from . import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_REMEDIATION_FILE,
@@ -176,18 +178,20 @@ def run(
 
     shared_config = load_shared_config(region)
 
-    _run_review(
-        documents_dir=documents_dir,
-        templates_dir=templates_dir,
-        diagrams_dir=diagrams_dir,
-        source_dir=source_dir,
-        output_dir=output_dir,
-        no_state=no_state,
-        should_archive=not no_history,
-        model=model,
-        shared_config=shared_config,
-        reasoning_level=reasoning_level,
-        profile=profile_data,
+    sys.exit(
+        _run_review(
+            documents_dir=documents_dir,
+            templates_dir=templates_dir,
+            diagrams_dir=diagrams_dir,
+            source_dir=source_dir,
+            output_dir=output_dir,
+            no_state=no_state,
+            should_archive=not no_history,
+            model=model,
+            shared_config=shared_config,
+            reasoning_level=reasoning_level,
+            profile=profile_data,
+        )
     )
 
 
@@ -202,9 +206,9 @@ def _run_review(
     model: str,
     shared_config: SharedConfig,
     reasoning_level: str = DEFAULT_REASONING_LEVEL,
-    profile: dict | None = None,
-):
-    """Execute the review and handle output."""
+    profile: dict[str, Any] | None = None,
+) -> int:
+    """Execute the review and handle output. Returns an exit code."""
     out_path = get_output_dir(output_dir)
 
     if should_archive:
@@ -237,14 +241,14 @@ def _run_review(
             click.echo(f"State saved to: {state_path}")
 
         click.echo(f"\nVerdict: {verdict}")
-        sys.exit(exit_code)
+        return exit_code
 
     except click.UsageError:
         raise
     except ArchReviewError as e:
         click.echo(f"Error: {e}", err=True)
-        sys.exit(EXIT_ERROR)
+        return EXIT_ERROR
     except Exception as e:
         click.echo(f"Unexpected error: {e}", err=True)
         click.echo(traceback.format_exc(), err=True)
-        sys.exit(EXIT_ERROR)
+        return EXIT_ERROR

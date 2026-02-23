@@ -6,11 +6,11 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import BotoCoreError
 from strands import Agent
 from strands.models import BedrockModel
-from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
 from .agents.architecture_agent import create_architecture_agent, run_architecture
 from .agents.question_agent import create_question_agent, run_questions
@@ -32,6 +32,7 @@ from .context_condenser import (
     extract_phase_findings,
     extract_requirements,
 )
+from .exceptions import MODEL_ERRORS
 from .guardrails import GuardrailsChecker, create_guardrails_checker
 from .infra import SharedConfig
 
@@ -114,7 +115,7 @@ class ReviewOrchestrator:
         source_dir: str | None = None,
         output_fn: Callable[[str], None] | None = None,
         reasoning_level: str = DEFAULT_REASONING_LEVEL,
-        profile: dict | None = None,
+        profile: dict[str, Any] | None = None,
     ) -> ReviewOrchestrator:
         """Build all agents and return a configured orchestrator."""
         logger.info("Using Policy Engine: %s", shared_config.policy_engine_id)
@@ -242,12 +243,7 @@ class ReviewOrchestrator:
             result = str(verifier(arch_findings))
             logger.info("Service-defaults verification complete")
             return result
-        except (
-            ContextWindowOverflowException,
-            MaxTokensReachedException,
-            ClientError,
-            BotoCoreError,
-        ):
+        except (*MODEL_ERRORS, BotoCoreError):
             logger.warning("Service-defaults verification failed, using unverified findings")
             return arch_findings
 

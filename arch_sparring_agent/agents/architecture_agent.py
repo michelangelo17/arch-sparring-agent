@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from strands import Agent, tool
 from strands.models import BedrockModel
@@ -109,7 +110,7 @@ def create_architecture_agent(
     source_dir: str | None = None,
     knowledge_base_id: str | None = None,
     region: str | None = None,
-    profile: dict | None = None,
+    profile: dict[str, Any] | None = None,
 ) -> Agent:
     """Create agent for analyzing CloudFormation templates, diagrams, and source code."""
 
@@ -188,7 +189,7 @@ def create_architecture_agent(
         logger.info("[%s] Source tools enabled (dir: %s)", AGENT_ARCHITECTURE, source_dir)
 
     if knowledge_base_id and region:
-        tools.append(create_kb_tool(knowledge_base_id, region, with_sources_filter=True))
+        tools.append(create_kb_tool(knowledge_base_id, region))
         logger.info(
             "[%s] KB tool enabled (kb: %s, region: %s)",
             AGENT_ARCHITECTURE,

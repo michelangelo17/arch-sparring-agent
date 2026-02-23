@@ -11,8 +11,8 @@ from pathlib import Path
 import click
 
 from ..exceptions import ConfigurationError
+from ..extraction import extract_verdict
 from ..infra import SharedConfig, load_from_ssm
-from ..state import extract_verdict
 
 # Exit codes
 EXIT_SUCCESS = 0

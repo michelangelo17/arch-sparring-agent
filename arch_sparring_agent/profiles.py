@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -12,17 +13,17 @@ BUILTIN_DIR = Path(__file__).parent / "profiles"
 USER_DIR = Path.home() / ".config" / "arch-review" / "profiles"
 
 
-def _project_dir() -> Path:
+def project_dir() -> Path:
     """Return the project-level profiles directory (evaluated at call time)."""
     return Path.cwd() / ".arch-review" / "profiles"
 
 
 def _search_order() -> list[Path]:
     """Return profile search directories: project -> user -> built-in."""
-    return [_project_dir(), USER_DIR, BUILTIN_DIR]
+    return [project_dir(), USER_DIR, BUILTIN_DIR]
 
 
-def load_profile(name: str = "default") -> dict:
+def load_profile(name: str = "default") -> dict[str, Any]:
     """Load a profile by name from the first matching directory.
 
     Resolution order: project (.arch-review/profiles/) -> user (~/.config/arch-review/profiles/)
@@ -41,7 +42,7 @@ def load_profile(name: str = "default") -> dict:
     )
 
 
-def get_directive(profile: dict | None, agent_name: str) -> str:
+def get_directive(profile: dict[str, Any] | None, agent_name: str) -> str:
     """Return the directive for an agent from a loaded profile.
 
     Returns empty string if profile is None or the profile has no
@@ -59,7 +60,7 @@ def list_profiles() -> dict[str, list[str]]:
     for label, directory in [
         ("builtin", BUILTIN_DIR),
         ("user", USER_DIR),
-        ("project", _project_dir()),
+        ("project", project_dir()),
     ]:
         if directory.is_dir():
             result[label] = sorted(p.stem for p in directory.glob("*.yaml"))

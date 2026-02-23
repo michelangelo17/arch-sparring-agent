@@ -10,7 +10,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from ..config import DEFAULT_REGION, IAM_PROPAGATION_TIMEOUT
-from ..exceptions import PolicySetupError
+from ..exceptions import AWS_ERRORS, PolicySetupError
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ def list_gateways(region: str = DEFAULT_REGION) -> list[dict[str, Any]]:
         client = boto3.client("bedrock-agentcore-control", region_name=region)
         response = client.list_gateways()
         return response.get("items", [])
-    except (ClientError, BotoCoreError) as e:
+    except AWS_ERRORS as e:
         logger.warning("Could not list Gateways: %s", e)
         return []
 
@@ -133,7 +133,7 @@ def associate_gateway_with_policy_engine(
         logger.debug("Policy Engine ARN: %s", policy_engine_arn)
         logger.debug("Enforcement mode: %s", enforcement_mode)
         return True
-    except (ClientError, BotoCoreError) as e:
+    except AWS_ERRORS as e:
         logger.warning("Could not associate Gateway with Policy Engine: %s", e)
         logger.warning("You may need to associate them manually via the AWS Console.")
         return False
@@ -185,7 +185,7 @@ def _create_gateway(gateway_name: str, region: str) -> tuple[str, str]:
                 region,
             )
 
-    except (ClientError, BotoCoreError) as create_error:
+    except AWS_ERRORS as create_error:
         if "already exists" in str(create_error).lower():
             gateway_arn, gateway_id, _ = _find_gateway_by_name(gateway_name, region)
             if gateway_id:
@@ -248,7 +248,7 @@ def setup_gateway(
 
     except PolicySetupError:
         raise
-    except (ClientError, BotoCoreError) as e:
+    except AWS_ERRORS as e:
         raise PolicySetupError(f"Could not set up Gateway: {e}") from e
 
 
@@ -268,6 +268,6 @@ def destroy_gateway(gateway_id: str, region: str = DEFAULT_REGION) -> bool:
     except ImportError:
         logger.warning("bedrock-agentcore-starter-toolkit not installed — cannot destroy gateway.")
         return False
-    except (ClientError, BotoCoreError) as e:
+    except AWS_ERRORS as e:
         logger.warning("Could not destroy Gateway %s: %s", gateway_id, e)
         return False

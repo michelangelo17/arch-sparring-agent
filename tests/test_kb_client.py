@@ -57,11 +57,11 @@ def test_query_returns_message_on_empty_results(mock_boto3):
 
 @patch("arch_sparring_agent.tools.kb_client.boto3")
 def test_query_handles_api_error(mock_boto3):
-    from arch_sparring_agent.tools.kb_client import ClientError as ModuleClientError
+    from botocore.exceptions import ClientError
 
     mock_client = MagicMock()
     mock_boto3.client.return_value = mock_client
-    mock_client.retrieve.side_effect = ModuleClientError("ResourceNotFoundException")
+    mock_client.retrieve.side_effect = ClientError("ResourceNotFoundException")
 
     client = KnowledgeBaseClient("kb-123", "eu-central-1")
     result = client.query("test query")

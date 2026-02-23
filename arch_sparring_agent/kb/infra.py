@@ -10,7 +10,8 @@ from typing import Any
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from ..config import DEFAULT_REGION
+from ..config import DEFAULT_REGION, IAM_KB_PROPAGATION_WAIT
+from ..exceptions import AWS_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -150,9 +151,9 @@ def _delete_vector_bucket(vector_bucket_name: str, region: str) -> None:
                     indexName=idx["indexName"],
                 )
                 logger.info("Deleted vector index: %s", idx["indexName"])
-            except (ClientError, BotoCoreError) as e:
+            except AWS_ERRORS as e:
                 logger.warning("Could not delete index %s: %s", idx["indexName"], e)
-    except (ClientError, BotoCoreError):
+    except AWS_ERRORS:
         pass
 
     try:
@@ -246,7 +247,7 @@ def _create_kb_role(
         PolicyDocument=inline_policy,
     )
 
-    time.sleep(15)
+    time.sleep(IAM_KB_PROPAGATION_WAIT)
     return role_arn
 
 
@@ -255,12 +256,12 @@ def _delete_kb_role(region: str) -> None:
     role_name = "arch-review-kb-role"
     try:
         iam.delete_role_policy(RoleName=role_name, PolicyName="arch-review-kb-access")
-    except (ClientError, BotoCoreError):
+    except AWS_ERRORS:
         pass
     try:
         iam.delete_role(RoleName=role_name)
         logger.info("Deleted IAM role: %s", role_name)
-    except (ClientError, BotoCoreError) as e:
+    except AWS_ERRORS as e:
         logger.warning("Could not delete IAM role %s: %s", role_name, e)
 
 
@@ -321,7 +322,7 @@ def _create_bedrock_kb(
                     logger.info("Using existing Bedrock Knowledge Base: %s", KB_NAME)
                     return kb_id
             if "not authorized" in err_msg and attempt < max_attempts:
-                wait = 15 * attempt
+                wait = IAM_KB_PROPAGATION_WAIT * attempt
                 logger.info(
                     "IAM policy not yet propagated (attempt %d/%d), retrying in %ds...",
                     attempt,
@@ -390,11 +391,11 @@ def _delete_bedrock_kb(kb_id: str, region: str) -> None:
                     knowledgeBaseId=kb_id,
                     dataSourceId=ds["dataSourceId"],
                 )
-            except (ClientError, BotoCoreError):
+            except AWS_ERRORS:
                 pass
         bedrock.delete_knowledge_base(knowledgeBaseId=kb_id)
         logger.info("Deleted Bedrock Knowledge Base: %s", kb_id)
-    except (ClientError, BotoCoreError) as e:
+    except AWS_ERRORS as e:
         logger.warning("Could not delete KB %s: %s", kb_id, e)
 
 

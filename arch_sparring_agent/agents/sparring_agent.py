@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from strands import Agent, tool
 from strands.models import BedrockModel
 
@@ -29,7 +31,9 @@ If all gaps were resolved, say "No confirmed gaps remain."
 Call done_challenging when key issues are addressed."""
 
 
-def create_sparring_agent(model: str | BedrockModel, profile: dict | None = None) -> Agent:
+def create_sparring_agent(
+    model: str | BedrockModel, profile: dict[str, Any] | None = None
+) -> Agent:
     """Create agent for challenging architectural decisions."""
 
     challenges_made = []

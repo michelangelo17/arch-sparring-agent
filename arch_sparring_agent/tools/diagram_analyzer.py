@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import io
 import os
 from pathlib import Path
 
 import boto3
-from botocore.exceptions import BotoCoreError, ClientError
 from PIL import Image, UnidentifiedImageError
 
 from ..config import DEFAULT_REGION, DIAGRAM_MAX_BYTES, DIAGRAM_MAX_TOKENS
-from ..exceptions import ToolError
+from ..exceptions import AWS_ERRORS, ToolError
 from . import validate_file_size, validate_path
 
 
@@ -23,11 +23,6 @@ class DiagramAnalyzer:
         region = os.getenv("AWS_REGION", DEFAULT_REGION)
         self.bedrock_client = boto3.client("bedrock-runtime", region_name=region)
 
-    def _read_image_bytes(self, image_path: Path) -> bytes:
-        """Read raw image bytes from file."""
-        with open(image_path, "rb") as f:
-            return f.read()
-
     def read_diagram(self, filename: str) -> str:
         """Analyze diagram and return text description."""
         image_path = validate_path(self.diagrams_dir, filename)
@@ -36,13 +31,13 @@ class DiagramAnalyzer:
 
         validate_file_size(image_path, DIAGRAM_MAX_BYTES, "ARCH_REVIEW_DIAGRAM_MAX_BYTES")
 
+        image_bytes = image_path.read_bytes()
+
         try:
-            with Image.open(image_path) as img:
+            with Image.open(io.BytesIO(image_bytes)) as img:
                 img.verify()
         except (OSError, UnidentifiedImageError) as e:
             raise ToolError(f"Invalid image: {e}") from e
-
-        image_bytes = self._read_image_bytes(image_path)
 
         suffix = Path(filename).suffix.lower()
         if suffix == ".png":
@@ -82,7 +77,7 @@ class DiagramAnalyzer:
                 return "\n".join(item.get("text", "") for item in content if "text" in item)
             return str(response)
 
-        except (ClientError, BotoCoreError) as e:
+        except AWS_ERRORS as e:
             raise ToolError(f"Bedrock API error: {e}") from e
 
     def list_diagrams(self) -> list[str]:

@@ -18,7 +18,7 @@ from ..config import (
     AGENT_SPARRING,
     DEFAULT_REGION,
 )
-from ..exceptions import PolicySetupError
+from ..exceptions import AWS_ERRORS, PolicySetupError
 from .gateway import associate_gateway_with_policy_engine, setup_gateway
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ def destroy_policy_engine(policy_engine_id: str, region: str = DEFAULT_REGION) -
                     client.delete_policy(policyEngineId=policy_engine_id, policyId=pid)
                     deleted_count += 1
                     logger.info("Deleted policy: %s", p.get("name", pid))
-                except (ClientError, BotoCoreError) as e:
+                except AWS_ERRORS as e:
                     logger.warning("Could not delete policy %s: %s", pid, e)
 
             next_token = response.get("nextToken")
@@ -67,7 +67,7 @@ def destroy_policy_engine(policy_engine_id: str, region: str = DEFAULT_REGION) -
         client.delete_policy_engine(policyEngineId=policy_engine_id)
         logger.info("Policy Engine destroyed: %s", policy_engine_id)
         return True
-    except (ClientError, BotoCoreError) as e:
+    except AWS_ERRORS as e:
         logger.warning("Could not destroy Policy Engine %s: %s", policy_engine_id, e)
         return False
 
@@ -111,7 +111,7 @@ def setup_policy_engine(
 
         return engine_id
 
-    except (ClientError, BotoCoreError) as e:
+    except AWS_ERRORS as e:
         raise PolicySetupError(f"Could not set up Policy Engine: {e}") from e
 
 
@@ -147,7 +147,7 @@ def _wait_for_policy_active(
 
             logger.debug("Policy '%s' status: %s", policy_name, status)
             time.sleep(0.5)
-        except (ClientError, BotoCoreError) as e:
+        except AWS_ERRORS as e:
             logger.debug("Error checking policy '%s' status: %s", policy_name, e)
             time.sleep(0.5)
 
@@ -283,7 +283,7 @@ def _update_existing_policy(
         else:
             logger.error("Could not find existing policy ID for '%s'", policy_name)
             return None
-    except (ClientError, BotoCoreError) as update_error:
+    except AWS_ERRORS as update_error:
         logger.error("Error updating policy '%s': %s", policy_name, update_error)
         return None
 

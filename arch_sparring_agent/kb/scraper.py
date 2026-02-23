@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -88,7 +89,7 @@ def _fetch(url: str) -> str | None:
             if "html" not in content_type:
                 return None
             return resp.read().decode()
-    except Exception:
+    except (urllib.error.URLError, OSError, TimeoutError):
         logger.warning("Failed to fetch: %s", url)
         return None
 

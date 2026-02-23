@@ -9,7 +9,7 @@ import sys
 import click
 
 from ..agents.remediation_agent import create_remediation_agent, run_remediation
-from ..config import DEFAULT_MODEL, DEFAULT_REGION, SUPPORTED_MODELS
+from ..config import DEFAULT_MODEL, DEFAULT_REGION, SUPPORTED_MODELS, create_model
 from ..exceptions import ArchReviewError
 from ..state import ReviewState
 from . import (
@@ -70,9 +70,9 @@ def remediate(output_dir, no_output, model, region, verbose):
         state = ReviewState.from_file(state_path)
         click.echo(f"Loaded state from: {state_path}")
 
-        bedrock_model_id = SUPPORTED_MODELS[model]["model_id"]
+        bedrock_model = create_model(model)
 
-        agent = create_remediation_agent(state=state, model=bedrock_model_id, region=region)
+        agent = create_remediation_agent(state=state, model=bedrock_model, region=region)
         notes = run_remediation(agent, state, output_fn=click.echo)
 
         if not no_output:

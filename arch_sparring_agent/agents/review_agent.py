@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from strands import Agent
 from strands.models import BedrockModel
 
@@ -49,7 +51,7 @@ def create_review_agent(
     model: str | BedrockModel,
     knowledge_base_id: str | None = None,
     region: str | None = None,
-    profile: dict | None = None,
+    profile: dict[str, Any] | None = None,
 ) -> Agent:
     """Create agent for generating final review."""
 

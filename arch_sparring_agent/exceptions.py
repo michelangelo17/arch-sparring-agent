@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+from botocore.exceptions import BotoCoreError, ClientError
+from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
+
+MODEL_ERRORS = (ContextWindowOverflowException, MaxTokensReachedException, ClientError)
+"""Exceptions raised by Bedrock model invocations (token limits, validation, etc.)."""
+
+AWS_ERRORS = (ClientError, BotoCoreError)
+"""Exceptions raised by boto3 / botocore AWS service calls."""
+
 
 class ArchReviewError(Exception):
     """Base exception for all arch-review errors."""

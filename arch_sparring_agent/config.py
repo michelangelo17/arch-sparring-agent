@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import Any, TypedDict
 
 from strands.models import BedrockModel
 
@@ -22,7 +22,14 @@ AGENT_REVIEW = "ReviewAgent"
 
 # --- Supported models (curated, verified EU inference profiles) ---
 
-SUPPORTED_MODELS: dict[str, dict[str, str]] = {
+
+class ModelConfig(TypedDict):
+    model_id: str
+    description: str
+    reasoning_type: str
+
+
+SUPPORTED_MODELS: dict[str, ModelConfig] = {
     "nova-2-lite": {
         "model_id": "eu.amazon.nova-2-lite-v1:0",
         "description": "Amazon Nova 2 Lite (1M context)",
@@ -154,6 +161,9 @@ IAM_PROPAGATION_TIMEOUT = _int_env("ARCH_REVIEW_IAM_WAIT_TIMEOUT", 60)
 CFN_MAX_BYTES = _int_env("ARCH_REVIEW_CFN_MAX_BYTES", 500_000)
 DOC_MAX_BYTES = _int_env("ARCH_REVIEW_DOC_MAX_BYTES", 500_000)
 DIAGRAM_MAX_BYTES = _int_env("ARCH_REVIEW_DIAGRAM_MAX_BYTES", 10_000_000)
+
+# Knowledge Base: seconds to wait for IAM role propagation during KB setup
+IAM_KB_PROPAGATION_WAIT = _int_env("ARCH_REVIEW_KB_IAM_WAIT", 15)
 
 # Guardrails: contextual grounding check
 GROUNDING_THRESHOLD = _float_env("ARCH_REVIEW_GROUNDING_THRESHOLD", 0.7)
