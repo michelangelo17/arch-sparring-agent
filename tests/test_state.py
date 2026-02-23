@@ -4,14 +4,14 @@ from pathlib import Path
 from arch_sparring_agent.orchestrator import ReviewResult
 from arch_sparring_agent.state import (
     ReviewState,
-    _extract_gaps,
-    _extract_recommendations,
-    _extract_risks,
-    _infer_severity,
-    _is_duplicate,
-    _strip_markdown,
+    extract_gaps,
+    extract_recommendations,
+    extract_risks,
     extract_state_from_review,
     extract_verdict,
+    infer_severity,
+    is_duplicate,
+    strip_markdown,
 )
 
 
@@ -53,43 +53,43 @@ def test_review_state_file_io():
 
 
 def test_strips_bold():
-    assert _strip_markdown("**bold text**") == "bold text"
+    assert strip_markdown("**bold text**") == "bold text"
 
 
 def test_strips_italic():
-    assert _strip_markdown("*italic*") == "italic"
+    assert strip_markdown("*italic*") == "italic"
 
 
 def test_strips_inline_code():
-    assert _strip_markdown("`some_code`") == "some_code"
+    assert strip_markdown("`some_code`") == "some_code"
 
 
 def test_strips_underscores():
-    assert _strip_markdown("__underline__") == "underline"
+    assert strip_markdown("__underline__") == "underline"
 
 
 def test_strips_mixed():
-    assert _strip_markdown("**Risk**: `some_func` is *broken*") == "Risk: some_func is broken"
+    assert strip_markdown("**Risk**: `some_func` is *broken*") == "Risk: some_func is broken"
 
 
 def test_plain_text_unchanged():
-    assert _strip_markdown("plain text") == "plain text"
+    assert strip_markdown("plain text") == "plain text"
 
 
-def test_infer_severity():
-    assert _infer_severity("This is a critical issue") == "high"
-    assert _infer_severity("High latency") == "high"
-    assert _infer_severity("Low priority") == "low"
-    assert _infer_severity("Minor bug") == "low"
-    assert _infer_severity("Some other issue") == "medium"
+def testinfer_severity():
+    assert infer_severity("This is a critical issue") == "high"
+    assert infer_severity("High latency") == "high"
+    assert infer_severity("Low priority") == "low"
+    assert infer_severity("Minor bug") == "low"
+    assert infer_severity("Some other issue") == "medium"
 
 
-def test_is_duplicate():
+def testis_duplicate():
     items = [{"description": "Database is unencrypted"}, {"description": "Missing unit tests"}]
 
-    assert _is_duplicate("Database", items)
-    assert _is_duplicate("Missing unit", items)
-    assert not _is_duplicate("Something completely new", items)
+    assert is_duplicate("Database", items)
+    assert is_duplicate("Missing unit", items)
+    assert not is_duplicate("Something completely new", items)
 
 
 def test_extract_verdict():
@@ -101,13 +101,13 @@ def test_extract_verdict():
     assert extract_verdict("Risk Impact: High severity") == "PASS WITH CONCERNS"
 
 
-def test_extract_gaps_flat_list():
+def testextract_gaps_flat_list():
     review_text = """
 ## Gaps
 - Missing authentication
 - No backup strategy
 """
-    gaps = _extract_gaps(review_text, "")
+    gaps = extract_gaps(review_text, "")
     assert len(gaps) == 2
     assert gaps[0]["description"] == "Missing authentication"
     assert gaps[0]["id"] == "gap-1"
@@ -115,20 +115,20 @@ def test_extract_gaps_flat_list():
     assert gaps[1]["id"] == "gap-2"
 
 
-def test_extract_gaps_confirmed_gaps_header():
+def testextract_gaps_confirmed_gaps_header():
     """Test '#### Confirmed Gaps' header style."""
     review_text = """
 #### Confirmed Gaps
 1. Feature: Cost optimization through time-based cooldown
 2. Feature: Monitoring via CloudWatch Logs and X-Ray tracing
 """
-    gaps = _extract_gaps(review_text, "")
+    gaps = extract_gaps(review_text, "")
     assert len(gaps) == 2
     assert "Cost optimization" in gaps[0]["description"]
     assert "Monitoring" in gaps[1]["description"]
 
 
-def test_extract_gaps_ignores_numbered_gap_subheaders():
+def testextract_gaps_ignores_numbered_gap_subheaders():
     """Ensure '##### Gap 1: ...' sub-headers inside Risks don't create spurious gaps."""
     review_text = """
 #### Confirmed Gaps
@@ -146,7 +146,7 @@ def test_extract_gaps_ignores_numbered_gap_subheaders():
 - **Impact**: **Medium**
 - **Mitigation**: Integrate logging
 """
-    gaps = _extract_gaps(review_text, "")
+    gaps = extract_gaps(review_text, "")
     assert len(gaps) == 2
     descriptions = [g["description"] for g in gaps]
     for desc in descriptions:
@@ -155,34 +155,34 @@ def test_extract_gaps_ignores_numbered_gap_subheaders():
         assert "Mitigation" not in desc
 
 
-def test_extract_gaps_features_not_found():
+def testextract_gaps_features_not_found():
     review_text = """
 ## Features Not Found
 - Rate limiting
 """
-    gaps = _extract_gaps(review_text, "")
+    gaps = extract_gaps(review_text, "")
     assert len(gaps) == 1
     assert gaps[0]["description"] == "Rate limiting"
     assert gaps[0]["severity"] == "medium"
 
 
-def test_extract_gaps_strips_markdown():
+def testextract_gaps_strips_markdown():
     review_text = """
 ## Gaps
 - **Missing** `encryption` at rest
 """
-    gaps = _extract_gaps(review_text, "")
+    gaps = extract_gaps(review_text, "")
     assert len(gaps) == 1
     assert gaps[0]["description"] == "Missing encryption at rest"
 
 
-def test_extract_risks_flat_list():
+def testextract_risks_flat_list():
     review_text = """
 ## Top Risks
 1. Data loss potential
 2. Security breach
 """
-    risks = _extract_risks(review_text, "")
+    risks = extract_risks(review_text, "")
     assert len(risks) == 2
     assert risks[0]["description"] == "Data loss potential"
     assert risks[0]["id"] == "risk-1"
@@ -190,7 +190,7 @@ def test_extract_risks_flat_list():
     assert risks[1]["id"] == "risk-2"
 
 
-def test_extract_risks_nested_with_gap_subheaders():
+def testextract_risks_nested_with_gap_subheaders():
     """Test the nested format: #### Risks & Mitigations with ##### Gap N: sub-headers."""
     review_text = """
 #### Risks & Mitigations
@@ -204,13 +204,13 @@ def test_extract_risks_nested_with_gap_subheaders():
 - **Impact**: **Medium**
 - **Mitigation**: Integrate comprehensive logging
 """
-    risks = _extract_risks(review_text, "")
+    risks = extract_risks(review_text, "")
     assert len(risks) == 2
     assert "Inefficient resource utilization" in risks[0]["description"]
     assert "Insufficient visibility" in risks[1]["description"]
 
 
-def test_extract_risks_skips_impact_and_mitigation():
+def testextract_risks_skips_impact_and_mitigation():
     """Impact and Mitigation bullets should not appear as risks."""
     review_text = """
 #### Risks & Mitigations
@@ -219,35 +219,35 @@ def test_extract_risks_skips_impact_and_mitigation():
 - **Impact**: **High**
 - **Mitigation**: Do something about it
 """
-    risks = _extract_risks(review_text, "")
+    risks = extract_risks(review_text, "")
     assert len(risks) == 1
     assert risks[0]["description"] == "Actual risk description here"
 
 
-def test_extract_risks_strips_risk_prefix():
+def testextract_risks_strips_risk_prefix():
     """Risk: prefix should be removed from risk description."""
     review_text = """
 #### Risks
 - Risk: Something bad might happen
 """
-    risks = _extract_risks(review_text, "")
+    risks = extract_risks(review_text, "")
     assert len(risks) == 1
     assert risks[0]["description"] == "Something bad might happen"
 
 
-def test_extract_recommendations_direct_section():
+def testextract_recommendations_direct_section():
     review_text = """
 ## Recommendations
 1. Implement caching
 - Use Multi-Factor Authentication
 """
-    recs = _extract_recommendations(review_text)
+    recs = extract_recommendations(review_text)
     assert len(recs) == 2
     assert recs[0] == "Implement caching"
     assert recs[1] == "Use Multi-Factor Authentication"
 
 
-def test_extract_recommendations_falls_back_to_mitigations():
+def testextract_recommendations_falls_back_to_mitigations():
     """When there's no Recommendations section, extract mitigations from Risks."""
     review_text = """
 #### Risks & Mitigations
@@ -261,13 +261,13 @@ def test_extract_recommendations_falls_back_to_mitigations():
 - **Impact**: **Medium**
 - **Mitigation**: Integrate comprehensive logging using CloudWatch
 """
-    recs = _extract_recommendations(review_text)
+    recs = extract_recommendations(review_text)
     assert len(recs) == 2
     assert "cooldown periods" in recs[0]
     assert "comprehensive logging" in recs[1]
 
 
-def test_extract_recommendations_prefers_direct_section():
+def testextract_recommendations_prefers_direct_section():
     """If both Recommendations and Mitigations exist, use Recommendations."""
     review_text = """
 #### Risks & Mitigations
@@ -278,7 +278,7 @@ def test_extract_recommendations_prefers_direct_section():
 ## Recommendations
 - Do Y instead
 """
-    recs = _extract_recommendations(review_text)
+    recs = extract_recommendations(review_text)
     assert len(recs) == 1
     assert recs[0] == "Do Y instead"
 

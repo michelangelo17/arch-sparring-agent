@@ -1,5 +1,7 @@
 """Deploy and destroy CLI commands."""
 
+from __future__ import annotations
+
 import os
 
 import click

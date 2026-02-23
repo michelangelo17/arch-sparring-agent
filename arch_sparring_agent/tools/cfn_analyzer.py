@@ -1,8 +1,10 @@
 """CloudFormation template reader."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
-from ..config import CFN_MAX_CHARS
+from ..config import CFN_MAX_BYTES
 from ..exceptions import ToolError
 from . import validate_file_size, validate_path
 
@@ -28,5 +30,5 @@ class CloudFormationAnalyzer:
         if not file_path.exists():
             raise ToolError(f"Template not found: {filename}")
 
-        validate_file_size(file_path, CFN_MAX_CHARS, "ARCH_REVIEW_CFN_MAX_CHARS")
+        validate_file_size(file_path, CFN_MAX_BYTES, "ARCH_REVIEW_CFN_MAX_BYTES")
         return file_path.read_text(encoding="utf-8")

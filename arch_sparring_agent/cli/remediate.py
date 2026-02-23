@@ -1,5 +1,7 @@
 """Remediate CLI command."""
 
+from __future__ import annotations
+
 import json
 import os
 import sys
@@ -9,7 +11,6 @@ import click
 from ..agents.remediation_agent import create_remediation_agent, run_remediation
 from ..config import DEFAULT_MODEL, DEFAULT_REGION, SUPPORTED_MODELS
 from ..exceptions import ArchReviewError
-from ..profiles import load_profile
 from ..state import ReviewState
 from . import (
     DEFAULT_OUTPUT_DIR,
@@ -47,14 +48,8 @@ from . import (
     default=lambda: get_env_or_default("AWS_REGION", DEFAULT_REGION),
     help=f"AWS region (default: {DEFAULT_REGION})",
 )
-@click.option(
-    "--profile",
-    "profile_name",
-    default="default",
-    help="Review profile (e.g. strict, lightweight, or custom name)",
-)
 @click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
-def remediate(output_dir, no_output, model, region, profile_name, verbose):
+def remediate(output_dir, no_output, model, region, verbose):
     """Discuss and resolve previous review findings.
 
     Loads state from a previous review and starts an interactive session
@@ -62,8 +57,6 @@ def remediate(output_dir, no_output, model, region, profile_name, verbose):
     """
     configure_logging(verbose)
     os.environ["AWS_REGION"] = region
-
-    load_profile(profile_name)  # validate profile exists
 
     out_path = get_output_dir(output_dir)
     state_path = out_path / DEFAULT_STATE_FILE

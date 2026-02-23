@@ -54,7 +54,7 @@ def test_read_template_file_too_large():
         p = Path(tmp) / "large.yaml"
         p.write_text("x" * 20)
         analyzer = CloudFormationAnalyzer(tmp)
-        with patch("arch_sparring_agent.tools.cfn_analyzer.CFN_MAX_CHARS", 10):
+        with patch("arch_sparring_agent.tools.cfn_analyzer.CFN_MAX_BYTES", 10):
             with pytest.raises(ToolError) as exc_info:
                 analyzer.read_template("large.yaml")
             assert "exceeds the" in str(exc_info.value)
@@ -107,7 +107,7 @@ def test_read_markdown_file_too_large():
         p = Path(tmp) / "large.md"
         p.write_text("x" * 20)
         parser = DocumentParser(tmp)
-        with patch("arch_sparring_agent.tools.document_parser.DOC_MAX_CHARS", 10):
+        with patch("arch_sparring_agent.tools.document_parser.DOC_MAX_BYTES", 10):
             with pytest.raises(ToolError) as exc_info:
                 parser.read_markdown_file("large.md")
             assert "exceeds the" in str(exc_info.value)
@@ -167,7 +167,7 @@ def test_read_source_file_too_large():
         p = Path(tmp) / "large.py"
         p.write_text("x" * 20)
         analyzer = SourceAnalyzer(tmp)
-        with patch("arch_sparring_agent.tools.source_analyzer.SOURCE_FILE_MAX_CHARS", 10):
+        with patch("arch_sparring_agent.tools.source_analyzer.SOURCE_MAX_BYTES", 10):
             with pytest.raises(ToolError) as exc_info:
                 analyzer.read_source_file("large.py")
             assert "exceeds the" in str(exc_info.value)

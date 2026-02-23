@@ -1,5 +1,7 @@
 """Profiles CLI subgroup."""
 
+from __future__ import annotations
+
 import sys
 
 import click
@@ -31,8 +33,7 @@ def profiles_list():
         for name in names:
             path = directory / f"{name}.yaml"
             if path.is_file():
-                with open(path) as f:
-                    data = yaml.safe_load(f) or {}
+                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
                 desc = data.get("description", "")
                 click.echo(f"  {name:20s} {desc}")
             else:
@@ -60,8 +61,6 @@ def profiles_show(name):
 )
 def profiles_create(name, from_profile):
     """Create a custom profile by copying an existing one."""
-    from ..profiles import USER_DIR
-
     source = get_profile_path(from_profile)
     if not source:
         click.echo(f"Source profile '{from_profile}' not found.", err=True)
@@ -74,14 +73,15 @@ def profiles_create(name, from_profile):
         click.echo(f"Profile '{name}' already exists at {dest}", err=True)
         sys.exit(EXIT_ERROR)
 
-    with open(source) as f:
-        data = yaml.safe_load(f) or {}
+    data = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
 
     data["name"] = name.replace("-", " ").replace("_", " ").title()
     data["description"] = f"Custom profile based on {from_profile}"
 
-    with open(dest, "w") as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    dest.write_text(
+        yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
 
     click.echo(f"Created profile: {dest}")
     click.echo("Edit this file to customize behavior.")

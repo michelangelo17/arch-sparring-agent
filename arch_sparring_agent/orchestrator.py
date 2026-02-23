@@ -7,8 +7,10 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from botocore.exceptions import BotoCoreError, ClientError
 from strands import Agent
 from strands.models import BedrockModel
+from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException
 
 from .agents.architecture_agent import create_architecture_agent, run_architecture
 from .agents.question_agent import create_question_agent, run_questions
@@ -240,7 +242,12 @@ class ReviewOrchestrator:
             result = str(verifier(arch_findings))
             logger.info("Service-defaults verification complete")
             return result
-        except Exception:
+        except (
+            ContextWindowOverflowException,
+            MaxTokensReachedException,
+            ClientError,
+            BotoCoreError,
+        ):
             logger.warning("Service-defaults verification failed, using unverified findings")
             return arch_findings
 

@@ -56,7 +56,7 @@ class ReviewState:
 # ---------------------------------------------------------------------------
 
 
-def _infer_severity(text: str) -> str:
+def infer_severity(text: str) -> str:
     """Infer severity from keywords in text."""
     text_lower = text.lower()
     if "critical" in text_lower or "high" in text_lower:
@@ -66,7 +66,7 @@ def _infer_severity(text: str) -> str:
     return "medium"
 
 
-def _is_duplicate(text: str, items: list, key: str | None = "description") -> bool:
+def is_duplicate(text: str, items: list, key: str | None = "description") -> bool:
     """Check if *text* is a prefix-duplicate of any existing item.
 
     Works with both ``list[dict]`` (default, uses *key*) and
@@ -78,7 +78,7 @@ def _is_duplicate(text: str, items: list, key: str | None = "description") -> bo
     return any(prefix in item for item in items)
 
 
-def _strip_markdown(text: str) -> str:
+def strip_markdown(text: str) -> str:
     """Remove common markdown inline formatting."""
     text = text.strip()
     text = re.sub(r"\*{1,2}(.*?)\*{1,2}", r"\1", text)
@@ -194,7 +194,7 @@ def _extract_section_items(
             in_section = False
             continue
         if in_section and _is_list_item(line):
-            item_text = _strip_markdown(_extract_list_text(line))
+            item_text = strip_markdown(_extract_list_text(line))
             if not item_text:
                 continue
             if item_filter:
@@ -216,9 +216,9 @@ def extract_state_from_review(review_result: ReviewResult) -> ReviewState:
     """Extract structured state from review result."""
     project_name = Path.cwd().name
 
-    gaps = _extract_gaps(review_result.review, review_result.qa_context)
-    risks = _extract_risks(review_result.review, review_result.sparring_context)
-    recommendations = _extract_recommendations(review_result.review)
+    gaps = extract_gaps(review_result.review, review_result.qa_context)
+    risks = extract_risks(review_result.review, review_result.sparring_context)
+    recommendations = extract_recommendations(review_result.review)
     verdict = extract_verdict(review_result.review)
 
     return ReviewState(
@@ -233,14 +233,14 @@ def extract_state_from_review(review_result: ReviewResult) -> ReviewState:
     )
 
 
-def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
+def extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
     """Extract gaps from review text and context."""
     gaps: list[dict] = []
     gap_id = 1
 
-    def _collect_gap(text: str, severity_fn: Callable[[str], str] = _infer_severity) -> None:
+    def _collect_gap(text: str, severity_fn: Callable[[str], str] = infer_severity) -> None:
         nonlocal gap_id
-        if len(text) > 5 and not _is_duplicate(text, gaps):
+        if len(text) > 5 and not is_duplicate(text, gaps):
             gaps.append(
                 {"id": f"gap-{gap_id}", "description": text[:200], "severity": severity_fn(text)}
             )
@@ -259,7 +259,7 @@ def _extract_gaps(review_text: str, gaps_context: str) -> list[dict]:
     return gaps[:20]
 
 
-def _extract_risks(review_text: str, risks_context: str) -> list[dict]:
+def extract_risks(review_text: str, risks_context: str) -> list[dict]:
     """Extract risks from review text and context.
 
     Handles flat lists ("## Risks" with bullet points) and nested formats
@@ -280,12 +280,12 @@ def _extract_risks(review_text: str, risks_context: str) -> list[dict]:
         for item in _extract_section_items(
             source, lambda line: _is_section_header(line, "risk"), item_filter=_risk_filter
         ):
-            if not _is_duplicate(item, risks):
+            if not is_duplicate(item, risks):
                 risks.append(
                     {
                         "id": f"risk-{risk_id}",
                         "description": item[:200],
-                        "impact": _infer_severity(item),
+                        "impact": infer_severity(item),
                     }
                 )
                 risk_id += 1
@@ -293,7 +293,7 @@ def _extract_risks(review_text: str, risks_context: str) -> list[dict]:
     return risks[:10]
 
 
-def _extract_recommendations(review_text: str) -> list[str]:
+def extract_recommendations(review_text: str) -> list[str]:
     """Extract recommendations, falling back to mitigation entries from risk sections."""
     recommendations: list[str] = []
 
@@ -304,19 +304,19 @@ def _extract_recommendations(review_text: str) -> list[str]:
             recommendations.append(item[:300])
 
     if not recommendations:
-        recommendations = _extract_mitigations_as_recommendations(review_text)
+        recommendations = extract_mitigations_as_recommendations(review_text)
 
     return recommendations[:10]
 
 
-def _extract_mitigations_as_recommendations(review_text: str) -> list[str]:
+def extract_mitigations_as_recommendations(review_text: str) -> list[str]:
     """Extract "Mitigation:" entries from risk/mitigation sections."""
     recommendations: list[str] = []
 
     def _mitigation_filter(text: str) -> str | None:
         if text.lower().startswith("mitigation:"):
             rec = text[11:].strip()
-            if len(rec) > 10 and not _is_duplicate(rec, recommendations, key=None):
+            if len(rec) > 10 and not is_duplicate(rec, recommendations, key=None):
                 return rec[:300]
         return None
 

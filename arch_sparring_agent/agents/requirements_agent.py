@@ -1,5 +1,7 @@
 """Requirements analysis agent for Phase 1."""
 
+from __future__ import annotations
+
 from botocore.exceptions import ClientError
 from strands import Agent, tool
 from strands.models import BedrockModel

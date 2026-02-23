@@ -40,9 +40,7 @@ def test_setup_reuses_existing_guardrail(mock_boto3):
     mock_boto3.client.return_value = mock_client
 
     mock_client.list_guardrails.return_value = {
-        "guardrails": [
-            {"name": "ArchReviewGroundingGuardrail", "id": "gr-existing456"}
-        ]
+        "guardrails": [{"name": "ArchReviewGroundingGuardrail", "id": "gr-existing456"}]
     }
 
     guardrail_id, version = setup_guardrails(region="eu-central-1")

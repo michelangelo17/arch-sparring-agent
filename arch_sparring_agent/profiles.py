@@ -1,5 +1,7 @@
 """Profile loading and directive resolution for customizable review behavior."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import yaml
@@ -31,8 +33,7 @@ def load_profile(name: str = "default") -> dict:
     for directory in _search_order():
         path = directory / f"{name}.yaml"
         if path.is_file():
-            with open(path) as f:
-                return yaml.safe_load(f) or {}
+            return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
     available = [p.stem for p in BUILTIN_DIR.glob("*.yaml")]
     raise ConfigurationError(

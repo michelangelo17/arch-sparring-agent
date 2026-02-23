@@ -1,10 +1,12 @@
 """Markdown document parser for requirements files."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import frontmatter
 
-from ..config import DOC_MAX_CHARS
+from ..config import DOC_MAX_BYTES
 from ..exceptions import ToolError
 from . import validate_file_size, validate_path
 
@@ -21,7 +23,7 @@ class DocumentParser:
         if not file_path.exists():
             raise ToolError(f"File not found: {file_path}")
 
-        validate_file_size(file_path, DOC_MAX_CHARS, "ARCH_REVIEW_DOC_MAX_CHARS")
+        validate_file_size(file_path, DOC_MAX_BYTES, "ARCH_REVIEW_DOC_MAX_BYTES")
 
         doc = frontmatter.loads(file_path.read_text(encoding="utf-8"))
         return {"filename": filename, "content": doc.content, "metadata": doc.metadata}

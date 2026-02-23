@@ -1,5 +1,7 @@
 """Custom exception hierarchy for arch-sparring-agent."""
 
+from __future__ import annotations
+
 
 class ArchReviewError(Exception):
     """Base exception for all arch-review errors."""

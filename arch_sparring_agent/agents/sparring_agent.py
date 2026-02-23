@@ -1,5 +1,7 @@
 """Sparring agent for Phase 4 - challenging architectural decisions."""
 
+from __future__ import annotations
+
 from strands import Agent, tool
 from strands.models import BedrockModel
 

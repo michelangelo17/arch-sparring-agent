@@ -153,9 +153,7 @@ def test_extract_grounding_score_no_assessments():
 
 
 def test_extract_grounding_score_no_grounding_filters():
-    response = {
-        "assessments": [{"contextualGroundingPolicy": {"filters": []}}]
-    }
+    response = {"assessments": [{"contextualGroundingPolicy": {"filters": []}}]}
     score = GuardrailsChecker._extract_grounding_score(response)
     assert score == 1.0
 

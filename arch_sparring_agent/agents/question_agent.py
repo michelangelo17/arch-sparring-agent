@@ -1,5 +1,7 @@
 """Question agent for Phase 3 - clarifying questions."""
 
+from __future__ import annotations
+
 import logging
 
 from strands import Agent, tool

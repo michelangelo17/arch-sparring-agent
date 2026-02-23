@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -34,7 +35,7 @@ def setup_guardrails(region: str = DEFAULT_REGION) -> tuple[str, str]:
     return _create_guardrail(client)
 
 
-def _find_guardrail_by_name(client) -> str | None:  # type: ignore[type-arg]
+def _find_guardrail_by_name(client: Any) -> str | None:
     """Find an existing guardrail by name. Returns guardrail_id or None."""
     try:
         response = client.list_guardrails()
@@ -46,7 +47,7 @@ def _find_guardrail_by_name(client) -> str | None:  # type: ignore[type-arg]
     return None
 
 
-def _create_guardrail(client) -> tuple[str, str]:  # type: ignore[type-arg]
+def _create_guardrail(client: Any) -> tuple[str, str]:
     """Create a Bedrock Guardrail with contextual grounding enabled.
 
     Returns:

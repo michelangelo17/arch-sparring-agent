@@ -1,5 +1,7 @@
 """Remediation agent for discussing and resolving review findings."""
 
+from __future__ import annotations
+
 import logging
 import re
 from collections.abc import Callable

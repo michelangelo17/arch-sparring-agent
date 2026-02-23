@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from botocore.exceptions import ClientError
 
 from arch_sparring_agent.orchestrator import ReviewOrchestrator
 
@@ -44,7 +45,7 @@ def test_returns_original_on_verifier_failure(mock_agent_cls):
     orch = _make_orchestrator()
     mock_agent = MagicMock()
     mock_agent_cls.return_value = mock_agent
-    mock_agent.side_effect = RuntimeError("model error")
+    mock_agent.side_effect = ClientError("ModelError")
 
     findings = "### Features Not Found\n- Something"
     result = orch._verify_against_defaults(findings)

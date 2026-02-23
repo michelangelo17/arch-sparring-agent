@@ -1,5 +1,7 @@
 """Knowledge Base infrastructure — S3 data bucket, S3 Vectors, IAM role, Bedrock KB."""
 
+from __future__ import annotations
+
 import json
 import logging
 import time
@@ -329,6 +331,8 @@ def _create_bedrock_kb(
                 time.sleep(wait)
                 continue
             raise
+
+    raise ClientError(f"KB creation failed after {max_attempts} attempts (IAM not propagated)")
 
 
 def _find_kb_by_name(bedrock: Any) -> str | None:

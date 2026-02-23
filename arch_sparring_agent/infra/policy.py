@@ -1,5 +1,7 @@
 """Policy engine and Cedar policy management."""
 
+from __future__ import annotations
+
 import logging
 import time
 from dataclasses import dataclass

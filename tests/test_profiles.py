@@ -81,6 +81,7 @@ def tmp_user_dir(tmp_path, monkeypatch):
     user_profiles = tmp_path / "user_profiles"
     user_profiles.mkdir()
     monkeypatch.setattr("arch_sparring_agent.profiles.USER_DIR", user_profiles)
+    monkeypatch.setattr("arch_sparring_agent.cli.profiles_cmd.USER_DIR", user_profiles)
     return user_profiles
 
 
@@ -190,13 +191,6 @@ def test_profiles_help():
 def test_run_help_shows_profile_option():
     runner = CliRunner()
     result = runner.invoke(cli, ["run", "--help"])
-    assert result.exit_code == 0
-    assert "--profile" in result.output
-
-
-def test_remediate_help_shows_profile_option():
-    runner = CliRunner()
-    result = runner.invoke(cli, ["remediate", "--help"])
     assert result.exit_code == 0
     assert "--profile" in result.output
 

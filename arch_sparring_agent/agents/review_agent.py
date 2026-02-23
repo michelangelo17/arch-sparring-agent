@@ -1,11 +1,13 @@
 """Review agent for Phase 5 - final review generation."""
 
+from __future__ import annotations
+
 from strands import Agent
 from strands.models import BedrockModel
 
 from ..config import AGENT_REVIEW
 from ..profiles import get_directive
-from . import create_kb_tool
+from .kb_tool import create_kb_tool
 
 _SYSTEM_PROMPT = """Write architecture review based on CONFIRMED gaps only.
 

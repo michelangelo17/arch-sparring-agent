@@ -98,9 +98,7 @@ class GuardrailsChecker:
             details=details,
         )
 
-    def _apply_guardrail(
-        self, source: str, query: str, content: str
-    ) -> dict | None:
+    def _apply_guardrail(self, source: str, query: str, content: str) -> dict | None:
         """Call ApplyGuardrail for a single content chunk. Returns None on error."""
         try:
             return self._client.apply_guardrail(

@@ -1,5 +1,7 @@
 """Architecture analysis agent for Phase 2."""
 
+from __future__ import annotations
+
 import logging
 
 from strands import Agent, tool
@@ -10,7 +12,7 @@ from ..profiles import get_directive
 from ..tools.cfn_analyzer import CloudFormationAnalyzer
 from ..tools.diagram_analyzer import DiagramAnalyzer
 from ..tools.source_analyzer import SourceAnalyzer
-from . import create_kb_tool
+from .kb_tool import create_kb_tool
 
 logger = logging.getLogger(__name__)
 

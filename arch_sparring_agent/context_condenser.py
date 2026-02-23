@@ -5,6 +5,8 @@ structured findings from each phase's raw output. Every item is preserved as a c
 bullet point — no mid-sentence cuts, no lost findings.
 """
 
+from __future__ import annotations
+
 from botocore.exceptions import ClientError
 from strands import Agent
 from strands.models import BedrockModel

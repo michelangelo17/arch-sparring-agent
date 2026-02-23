@@ -1,5 +1,7 @@
 """Configuration constants and model registry."""
 
+from __future__ import annotations
+
 import logging
 import os
 from typing import Any
@@ -139,8 +141,8 @@ DOC_SUMMARY_THRESHOLD = _int_env("ARCH_REVIEW_DOC_SUMMARY_THRESHOLD", 25000)
 # Requirements agent: use chunked summarization for documents longer than this (chars)
 DOC_CHUNK_SUMMARY_THRESHOLD = _int_env("ARCH_REVIEW_DOC_CHUNK_THRESHOLD", 100000)
 
-# Source analyzer: max source file size (chars)
-SOURCE_FILE_MAX_CHARS = _int_env("ARCH_REVIEW_SOURCE_MAX_CHARS", 50000)
+# Source analyzer: max source file size (bytes)
+SOURCE_MAX_BYTES = _int_env("ARCH_REVIEW_SOURCE_MAX_BYTES", 50000)
 
 # Diagram analyzer: max tokens for diagram analysis response
 DIAGRAM_MAX_TOKENS = _int_env("ARCH_REVIEW_DIAGRAM_MAX_TOKENS", 4000)
@@ -148,9 +150,9 @@ DIAGRAM_MAX_TOKENS = _int_env("ARCH_REVIEW_DIAGRAM_MAX_TOKENS", 4000)
 # Gateway: max seconds to wait for IAM propagation after gateway creation
 IAM_PROPAGATION_TIMEOUT = _int_env("ARCH_REVIEW_IAM_WAIT_TIMEOUT", 60)
 
-# File size limits for tools
-CFN_MAX_CHARS = _int_env("ARCH_REVIEW_CFN_MAX_CHARS", 500_000)
-DOC_MAX_CHARS = _int_env("ARCH_REVIEW_DOC_MAX_CHARS", 500_000)
+# File size limits for tools (bytes)
+CFN_MAX_BYTES = _int_env("ARCH_REVIEW_CFN_MAX_BYTES", 500_000)
+DOC_MAX_BYTES = _int_env("ARCH_REVIEW_DOC_MAX_BYTES", 500_000)
 DIAGRAM_MAX_BYTES = _int_env("ARCH_REVIEW_DIAGRAM_MAX_BYTES", 10_000_000)
 
 # Guardrails: contextual grounding check

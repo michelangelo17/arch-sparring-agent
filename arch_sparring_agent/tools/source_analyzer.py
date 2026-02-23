@@ -1,8 +1,10 @@
 """Source code analyzer for Lambda handlers and application logic."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
-from ..config import SOURCE_FILE_MAX_CHARS
+from ..config import SOURCE_MAX_BYTES
 from ..exceptions import ToolError
 from . import search_content, validate_file_size, validate_path
 
@@ -44,7 +46,7 @@ class SourceAnalyzer:
         if path.suffix not in self.SUPPORTED_EXTENSIONS:
             raise ToolError(f"Unsupported file type: {path.suffix}")
 
-        validate_file_size(path, SOURCE_FILE_MAX_CHARS, "ARCH_REVIEW_SOURCE_MAX_CHARS")
+        validate_file_size(path, SOURCE_MAX_BYTES, "ARCH_REVIEW_SOURCE_MAX_BYTES")
         return path.read_text(encoding="utf-8")
 
     def search_source(self, pattern: str) -> str:

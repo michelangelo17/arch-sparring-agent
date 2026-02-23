@@ -1,5 +1,7 @@
 """AWS infrastructure lifecycle: Gateway, Policy Engine, Memory, and shared config."""
 
+from __future__ import annotations
+
 from .shared_config import (
     SSM_PARAMETER_NAME,
     SharedConfig,

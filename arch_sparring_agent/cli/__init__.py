@@ -1,5 +1,7 @@
 """CLI entry point for architecture review tool."""
 
+from __future__ import annotations
+
 import logging
 import os
 import sys

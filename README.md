@@ -95,7 +95,6 @@ Discuss and resolve findings from a previous review:
 
 ```bash
 arch-review remediate
-arch-review remediate --profile lightweight
 ```
 
 - Loads gaps/risks from `.arch-review/state.json`
