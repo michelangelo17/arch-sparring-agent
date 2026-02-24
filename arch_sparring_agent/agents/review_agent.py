@@ -102,4 +102,6 @@ def run_review(
         "Verified features are NOT gaps."
     )
 
-    return str(agent(prompt))
+    from . import safe_invoke
+
+    return safe_invoke(agent, prompt)

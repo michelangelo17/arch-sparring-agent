@@ -65,7 +65,10 @@ def create_sparring_agent(model: BedrockModel, profile: dict[str, Any] | None = 
 
 def run_sparring(agent: Agent, arch_findings: str, qa_findings: str) -> str:
     """Execute sparring phase with extracted findings."""
-    result = agent(
+    from . import safe_invoke
+
+    return safe_invoke(
+        agent,
         f"""Review the architecture findings and challenge any gaps. Be BRIEF — no code examples.
 
 ARCHITECTURE FINDINGS:
@@ -76,6 +79,5 @@ CLARIFYING QUESTIONS & ANSWERS:
 
 Challenge items from "Features Not Found" and any weaknesses identified
 in the Q&A. Keep each challenge to 2-3 sentences.
-Call done_challenging when done."""
+Call done_challenging when done.""",
     )
-    return str(result)

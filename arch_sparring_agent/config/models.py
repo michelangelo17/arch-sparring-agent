@@ -27,6 +27,7 @@ class ModelConfig(TypedDict):
     model_id: str
     description: str
     reasoning_type: str
+    max_output_tokens: int
 
 
 SUPPORTED_MODELS: dict[str, ModelConfig] = {
@@ -34,11 +35,13 @@ SUPPORTED_MODELS: dict[str, ModelConfig] = {
         "model_id": "eu.amazon.nova-2-lite-v1:0",
         "description": "Amazon Nova 2 Lite (1M context)",
         "reasoning_type": "nova",
+        "max_output_tokens": 5000,
     },
     "opus-4.6": {
         "model_id": "eu.anthropic.claude-opus-4-6-v1",
         "description": "Claude Opus 4.6 (1M context)",
         "reasoning_type": "adaptive",
+        "max_output_tokens": 16384,
     },
 }
 DEFAULT_MODEL = "nova-2-lite"
@@ -93,6 +96,18 @@ def create_model(
 
     model_config = SUPPORTED_MODELS[model_name]
     kwargs: dict[str, Any] = {"model_id": model_config["model_id"]}
+
+    env_override = os.getenv("ARCH_REVIEW_MAX_OUTPUT_TOKENS")
+    if env_override is not None:
+        try:
+            kwargs["max_tokens"] = int(env_override)
+        except ValueError:
+            logger.warning(
+                "Invalid ARCH_REVIEW_MAX_OUTPUT_TOKENS='%s', using model default", env_override
+            )
+            kwargs["max_tokens"] = model_config["max_output_tokens"]
+    else:
+        kwargs["max_tokens"] = model_config["max_output_tokens"]
 
     if reasoning and reasoning_level != "off":
         level = (

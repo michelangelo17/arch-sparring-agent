@@ -12,6 +12,7 @@ from botocore.exceptions import BotoCoreError
 from strands import Agent
 from strands.models import BedrockModel
 
+from ..agents import safe_invoke
 from ..agents.architecture_agent import create_architecture_agent, run_architecture
 from ..agents.question_agent import create_question_agent, run_questions
 from ..agents.requirements_agent import create_requirements_agent
@@ -258,10 +259,10 @@ class ReviewOrchestrator:
 
         # Phase 1: Requirements
         self._capture("## Phase 1: Requirements Analysis\n")
-        req_result = self.requirements_agent(
-            "Analyze all documents. Summarize requirements and constraints."
+        req_summary = safe_invoke(
+            self.requirements_agent,
+            "Analyze all documents. Summarize requirements and constraints.",
         )
-        req_summary = str(req_result)
         self._capture(req_summary)
 
         req_findings = extract_requirements(req_summary, self.standard_model)

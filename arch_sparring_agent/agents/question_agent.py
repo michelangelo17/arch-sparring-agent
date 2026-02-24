@@ -151,7 +151,10 @@ def create_question_agent(
 
 def run_questions(agent: Agent, arch_findings: str) -> str:
     """Execute question phase with extracted findings."""
-    result = agent(
+    from . import safe_invoke
+
+    return safe_invoke(
+        agent,
         f"""Review the "Features Not Found" section below.
 
 BEFORE asking the user:
@@ -162,6 +165,5 @@ BEFORE asking the user:
 ARCHITECTURE FINDINGS:
 {arch_findings}
 
-Verify gaps via search first, then ask about remaining unknowns. Call done_asking when ready."""
+Verify gaps via search first, then ask about remaining unknowns. Call done_asking when ready.""",
     )
-    return str(result)

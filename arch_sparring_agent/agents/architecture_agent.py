@@ -230,18 +230,19 @@ def run_architecture(agent: Agent, requirements: str, *, has_kb: bool = False) -
     available during the second pass, so the KB queries can reference
     specific components and patterns found in the infrastructure analysis.
     """
-    result = agent(
+    from . import safe_invoke
+
+    arch_output = safe_invoke(
+        agent,
         f"""Analyze all templates, diagrams, and source code.
 
 REQUIREMENTS:
 {requirements}
 
-Summarize architecture, patterns, and verify which requirements have implementations."""
+Summarize architecture, patterns, and verify which requirements have implementations.""",
     )
-    arch_output = str(result)
 
     if has_kb:
-        waf_result = agent(_WAF_QUERY_PROMPT)
-        arch_output += "\n" + str(waf_result)
+        arch_output += "\n" + safe_invoke(agent, _WAF_QUERY_PROMPT)
 
     return arch_output

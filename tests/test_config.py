@@ -36,6 +36,8 @@ def test_all_models_have_required_fields():
         assert "model_id" in model, f"{name} missing model_id"
         assert "description" in model, f"{name} missing description"
         assert "reasoning_type" in model, f"{name} missing reasoning_type"
+        assert "max_output_tokens" in model, f"{name} missing max_output_tokens"
+        assert model["max_output_tokens"] > 0, f"{name} max_output_tokens must be positive"
 
 
 def test_nova_model_id():
@@ -50,6 +52,7 @@ def test_nova_no_reasoning():
     model = config.create_model("nova-2-lite", reasoning=False)
     assert model.config["model_id"] == "eu.amazon.nova-2-lite-v1:0"
     assert model.config.get("additional_request_fields") is None
+    assert model.config["max_tokens"] == 5000
 
 
 def test_nova_reasoning_low():
@@ -68,6 +71,7 @@ def test_opus_no_reasoning():
     model = config.create_model("opus-4.6", reasoning=False)
     assert model.config["model_id"] == "eu.anthropic.claude-opus-4-6-v1"
     assert model.config.get("additional_request_fields") is None
+    assert model.config["max_tokens"] == 16384
 
 
 def test_opus_reasoning_medium():
@@ -114,3 +118,18 @@ def test_unknown_model_raises_value_error():
 def test_default_model_name():
     model = config.create_model()
     assert model.config["model_id"] == "eu.amazon.nova-2-lite-v1:0"
+    assert model.config["max_tokens"] == 5000
+
+
+def test_max_output_tokens_env_override():
+    with patch.dict(os.environ, {"ARCH_REVIEW_MAX_OUTPUT_TOKENS": "8192"}, clear=False):
+        model = config.create_model("nova-2-lite")
+    assert model.config["max_tokens"] == 8192
+
+
+def test_max_output_tokens_invalid_env_falls_back(caplog):
+    with patch.dict(os.environ, {"ARCH_REVIEW_MAX_OUTPUT_TOKENS": "abc"}, clear=False):
+        with caplog.at_level("WARNING"):
+            model = config.create_model("nova-2-lite")
+    assert model.config["max_tokens"] == 5000
+    assert any("Invalid ARCH_REVIEW_MAX_OUTPUT_TOKENS" in m for m in caplog.messages)
