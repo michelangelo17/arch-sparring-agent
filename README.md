@@ -8,11 +8,14 @@ Multi-agent system for architecture reviews. Analyzes requirements documents, Cl
 - **Interactive sparring**: Challenges architectural gaps and pushes back on weak justifications
 - **Remediation mode**: Discuss and resolve findings from previous reviews with session memory
 - **CDK support**: Works with CloudFormation templates and CDK synthesized output (`cdk.out/`)
-- **Multimodal analysis**: Analyzes architecture diagrams (PNG, JPEG) via Bedrock
+- **Multimodal analysis**: Analyzes architecture diagrams (PNG, JPEG) via Bedrock Converse API
+- **Contextual grounding**: Post-hoc validation of extracted findings via Bedrock Guardrails to catch hallucinations
+- **Service defaults verification**: Filters false positives by checking flagged gaps against AWS service defaults
 - **Full session export**: Saves complete review session to markdown
 - **Review profiles**: Customizable behavioral profiles (strict, lightweight, or your own)
 - **WAF Knowledge Base**: Optional RAG-powered retrieval of AWS Well-Architected Framework best practices
 - **Shared infrastructure**: Deploy once per AWS account, shared across team members
+- **OpenTelemetry tracing**: Optional `otel` extra for Strands SDK's built-in agent/tool tracing
 
 ## Prerequisites
 
@@ -24,7 +27,12 @@ Multi-agent system for architecture reviews. Analyzes requirements documents, Cl
 
 ```bash
 pip install arch-sparring-agent
+
+# With Strands SDK OpenTelemetry tracing (optional)
+pip install arch-sparring-agent[otel]
 ```
+
+The package also supports `python -m arch_sparring_agent`.
 
 ## Quick Start
 
@@ -46,7 +54,7 @@ arch-review remediate
 
 ### `arch-review deploy`
 
-Deploy shared infrastructure to an AWS account. Creates the Gateway, Policy Engine, and Cedar policies. Stores resource IDs in SSM Parameter Store so `arch-review run` discovers them automatically.
+Deploy shared infrastructure to an AWS account. Creates the Gateway, Policy Engine, Cedar policies, and a contextual grounding Guardrail. Stores resource IDs in SSM Parameter Store so `arch-review run` discovers them automatically.
 
 ```bash
 arch-review deploy
@@ -58,7 +66,7 @@ Idempotent — safe to run repeatedly.
 
 ### `arch-review destroy`
 
-Tear down all shared infrastructure including Gateway, Policy Engine, Knowledge Base (if present), and SSM parameter.
+Tear down all shared infrastructure including Gateway, Policy Engine, Guardrail, Knowledge Base (if present), and SSM parameter.
 
 ```bash
 arch-review destroy --confirm
@@ -95,10 +103,12 @@ Discuss and resolve findings from a previous review:
 
 ```bash
 arch-review remediate
+arch-review remediate --model opus-4.6
+arch-review remediate --no-output       # Don't save notes to file
 ```
 
 - Loads gaps/risks from `.arch-review/state.json`
-- Continues conversations across sessions via memory
+- Continues conversations across sessions via AgentCore Memory
 - Saves notes to `.arch-review/remediation-notes.md`
 
 ### `arch-review profiles`
@@ -203,6 +213,24 @@ The KB uses **S3 Vectors** as the vector store (cost-effective, no OpenSearch Se
 | `--region`            | AWS region (default: eu-central-1)                 |
 | `--confirm`           | Required to actually destroy resources             |
 | `-v`, `--verbose`     | Verbose output                                     |
+
+### `remediate` Options
+
+| Option                | Description                                        |
+| --------------------- | -------------------------------------------------- |
+| `--output-dir`        | Output directory (default: `.arch-review`)         |
+| `--no-output`         | Don't save remediation notes to file               |
+| `--model`             | Model to use (default: nova-2-lite)                |
+| `--region`            | AWS region (default: eu-central-1)                 |
+| `-v`, `--verbose`     | Verbose output                                     |
+
+### `profiles` Subcommands
+
+| Subcommand            | Description                                        |
+| --------------------- | -------------------------------------------------- |
+| `list`                | List all available profiles (built-in, user, project) |
+| `show <name>`         | Display a profile's YAML contents                  |
+| `create <name>`       | Create a new profile (copies from `--from`, default: `default`) |
 
 ## Supported Models
 
@@ -316,16 +344,31 @@ export AWS_PROFILE=my-profile
       "Resource": "*"
     },
     {
+      "Sid": "BedrockGuardrails",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:CreateGuardrail",
+        "bedrock:ListGuardrails",
+        "bedrock:GetGuardrail",
+        "bedrock:DeleteGuardrail",
+        "bedrock-runtime:ApplyGuardrail"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "AgentCorePolicyAndGateway",
       "Effect": "Allow",
       "Action": [
         "bedrock-agentcore:CreatePolicyEngine",
+        "bedrock-agentcore:DeletePolicyEngine",
         "bedrock-agentcore:ListPolicyEngines",
         "bedrock-agentcore:CreatePolicy",
+        "bedrock-agentcore:DeletePolicy",
         "bedrock-agentcore:UpdatePolicy",
         "bedrock-agentcore:GetPolicy",
         "bedrock-agentcore:ListPolicies",
         "bedrock-agentcore:CreateGateway",
+        "bedrock-agentcore:DeleteGateway",
         "bedrock-agentcore:GetGateway",
         "bedrock-agentcore:UpdateGateway",
         "bedrock-agentcore:ListGateways"
@@ -346,7 +389,8 @@ export AWS_PROFILE=my-profile
       "Effect": "Allow",
       "Action": [
         "ssm:GetParameter",
-        "ssm:PutParameter"
+        "ssm:PutParameter",
+        "ssm:DeleteParameter"
       ],
       "Resource": "arn:aws:ssm:*:*:parameter/arch-review/*"
     },
@@ -392,16 +436,20 @@ export AWS_PROFILE=my-profile
 }
 ```
 
-The `KnowledgeBaseOptional` statement is only needed if you use `deploy --with-kb`.
+The `KnowledgeBaseOptional` statement is only needed if you use `deploy --with-kb`. The `BedrockGuardrails` statement is required for contextual grounding checks deployed by `arch-review deploy`.
+
+> **Note**: Gateway creation uses the `bedrock-agentcore-starter-toolkit` SDK, which creates a Cognito User Pool for OAuth authorization. Depending on your account setup, you may also need `cognito-idp:*` permissions for the initial `deploy` and `destroy` commands.
 
 ## Review Phases
 
 1. **Requirements Analysis**: Extracts requirements, constraints, and NFRs from documents
-2. **Architecture Analysis**: Analyzes CloudFormation templates and diagrams (queries WAF KB if available)
-3. **Service Default Verification**: Filters false positives from features that AWS provides by default
-4. **Clarifying Questions**: Gathers context by asking the user about unverified gaps
-5. **Sparring**: Challenges architectural decisions and pushes back on weak justifications
-6. **Final Review**: Produces structured review with gaps, risks, recommendations, and verdict
+2. **Architecture Analysis**: Analyzes CloudFormation templates, diagrams, and source code (queries WAF KB if available)
+   - **2b. Service defaults verification**: A focused model call checks whether flagged "Features Not Found" are actually provided by AWS service defaults, filtering false positives
+3. **Clarifying Questions**: Gathers context by asking the user about unverified gaps
+4. **Sparring**: Challenges architectural decisions and pushes back on weak justifications
+5. **Final Review**: Produces structured review with gaps, risks, recommendations, and verdict
+
+Between each phase, a **context condenser** extracts structured findings from the raw agent output using a separate model call. This prevents token overflow as context accumulates across phases. Optionally, a **contextual grounding check** validates that the condensed findings are faithful to the raw output using the Bedrock Guardrails ApplyGuardrail API.
 
 ## Input Formats
 
@@ -425,40 +473,50 @@ Markdown files with requirements, constraints, NFRs, ADRs. No specific format re
 arch_sparring_agent/
 ├── agents/
 │   ├── requirements_agent.py  # Phase 1: Document analysis
-│   ├── architecture_agent.py  # Phase 2: Template/diagram analysis
+│   ├── architecture_agent.py  # Phase 2: Template/diagram/source analysis
 │   ├── question_agent.py      # Phase 3: Interactive questions
 │   ├── sparring_agent.py      # Phase 4: Interactive sparring
 │   ├── review_agent.py        # Phase 5: Final review
-│   └── remediation_agent.py   # Remediation mode discussions
+│   ├── remediation_agent.py   # Remediation mode discussions
+│   └── kb_tool.py             # WAF Knowledge Base query tool factory
 ├── cli/
+│   ├── common.py              # Shared options, constants, and helpers
 │   ├── run.py                 # run command
 │   ├── deploy.py              # deploy/destroy commands
 │   ├── remediate.py           # remediate command
-│   ├── profiles_cmd.py        # profiles command group
+│   ├── profiles.py            # profiles command group
 │   └── kb.py                  # kb sync command
+├── config/
+│   ├── models.py              # Model registry and agent name constants
+│   └── tuning.py              # Env-var-overridable tuning constants
 ├── infra/
 │   ├── shared_config.py       # SSM-based config discovery
 │   ├── gateway.py             # Gateway setup and lifecycle
 │   ├── policy.py              # Cedar policy management
+│   ├── guardrails.py          # Bedrock Guardrail setup and teardown
+│   ├── polling.py             # Shared polling and idempotent-create utilities
 │   └── memory.py              # AgentCore memory for sessions
 ├── kb/
 │   ├── infra.py               # KB infrastructure (S3 Vectors, Bedrock KB)
 │   ├── scraper.py             # WAF documentation scraper
 │   └── sync.py                # S3 upload and ingestion trigger
+├── review/
+│   ├── orchestrator.py        # Phase orchestration + service default verification
+│   ├── context_condenser.py   # Structured extraction to prevent token overflow
+│   ├── extraction.py          # Markdown parsing and state extraction
+│   └── grounding.py           # Contextual grounding checks via Bedrock Guardrails
 ├── profiles/
 │   ├── default.yaml           # Balanced review profile
 │   ├── strict.yaml            # Strict review profile
 │   └── lightweight.yaml       # Lightweight review profile
 ├── tools/
+│   ├── common.py              # Path validation, file size checks, content search
 │   ├── document_parser.py     # Markdown file reader
 │   ├── cfn_analyzer.py        # CloudFormation template reader
 │   ├── diagram_analyzer.py    # Diagram analysis via Bedrock
 │   ├── source_analyzer.py     # Lambda/application source code reader
 │   └── kb_client.py           # Knowledge Base query client
-├── orchestrator.py            # Phase orchestration + service default verification
-├── context_condenser.py       # Structured extraction to prevent token overflow
 ├── profiles.py                # Profile loading and resolution
-├── config.py                  # Model registry and tuning constants
 ├── state.py                   # Review state persistence
 └── exceptions.py              # Custom exception hierarchy
 ```
@@ -466,11 +524,14 @@ arch_sparring_agent/
 ## Development
 
 ```bash
-uv sync                    # Install dependencies
-uv run ruff format .       # Format code
-uv run ruff check .        # Lint code
-uv run pytest tests/ -v    # Run tests
+uv sync                              # Install dependencies
+uv run ruff format .                 # Format code
+uv run ruff check .                  # Lint code
+uv run pytest tests/ -v              # Run tests
+uv run mypy arch_sparring_agent/     # Type check
 ```
+
+The project uses [Hatch](https://hatch.pypa.io/) as build backend and targets Python 3.11+.
 
 ## Policy Engine
 
@@ -479,21 +540,27 @@ The tool automatically creates and configures a full policy enforcement stack fo
 1. **Creates a Gateway** ("ArchReviewGateway") or uses an existing one
 2. **Creates a Policy Engine** ("ArchReviewPolicyEngine") or uses an existing one
 3. **Creates Cedar policies** restricting each agent to specific tools:
-   - **RequirementsAnalyst**: Only document reading tools
-   - **ArchitectureEvaluator**: Only CFN/diagram reading tools + WAF KB query
-   - **ReviewAgent**: WAF KB query
-   - **DefaultDeny**: Blocks unknown agents
-4. **Associates the Gateway with the Policy Engine** for enforcement
+   - **RequirementsAnalyst**: `read_document`, `list_available_documents`, `ask_user_question`
+   - **ArchitectureEvaluator**: CFN/diagram/source tools (`read_cloudformation_template`, `list_cloudformation_templates`, `read_architecture_diagram`, `list_architecture_diagrams`, `list_source_files`, `read_source_file`, `search_source_code`), `query_waf`, `ask_user_question`
+   - **ReviewAgent**: `query_waf`
+   - **DefaultDeny**: Forbids access unless agent name matches one of the five registered agents
+4. **Associates the Gateway with the Policy Engine** in `ENFORCE` mode
+
+The QuestionAgent and SparringAgent have no tool-specific restrictions but are whitelisted in the DefaultDeny policy.
 
 ## Technical Details
 
 - **Default Model**: Nova 2 Lite (1M context, multimodal)
 - **Multi-model**: Curated registry with Nova 2 Lite and Claude Opus 4.6 via `--model`
-- **Framework**: AWS Strands SDK
-- **Region**: eu-central-1 (configurable)
-- **Policy Engine**: AgentCore Policy Engine for tool access control
+- **Framework**: [Strands Agents SDK](https://strandsagents.com/latest/documentation/docs/)
+- **Region**: eu-central-1 (configurable via `--region` or `AWS_REGION`)
+- **Gateway**: AgentCore Gateway with Cognito OAuth authorization
+- **Policy Engine**: AgentCore Policy Engine with Cedar policies for tool access control
+- **Guardrails**: Bedrock Guardrails with contextual grounding policy for hallucination detection
+- **Memory**: AgentCore Memory for remediation session persistence
 - **Vector Store**: S3 Vectors (for KB)
 - **Embeddings**: Amazon Titan Embed Text v2 (1024 dimensions)
+- **Tracing**: Optional `[otel]` extra enables Strands SDK's built-in OpenTelemetry tracing for agent invocations and tool calls (no custom instrumentation — configure via standard OTel environment variables)
 
 ## References
 
