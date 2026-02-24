@@ -1,6 +1,6 @@
 [project]
 name = "arch-sparring-agent"
-version = "0.9.1"
+version = "0.9.2"
 description = "Multi-agent architecture review system using AWS Bedrock"
 readme = "README.md"
 license = { text = "MIT" }
@@ -82,7 +82,7 @@ ignore_missing_imports = true
 warn_unused_configs = true
 check_untyped_defs = true
 disallow_untyped_defs = false
-disable_error_code = ["no-any-return"]
+disable_error_code = ["no-any-return", "import-untyped"]
 
 [dependency-groups]
 dev = ["ruff>=0.14.8", "pytest>=8.0.0", "mypy>=1.0", "types-PyYAML>=6.0"]
