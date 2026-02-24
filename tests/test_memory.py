@@ -48,11 +48,12 @@ def test_setup_finds_existing_active_memory(mock_memory_cls):
     mock_client.create_memory.assert_not_called()
 
 
-@patch("arch_sparring_agent.infra.memory.time")
+@patch("arch_sparring_agent.infra.polling.time")
 @patch("arch_sparring_agent.infra.memory.MemoryClient")
-def test_setup_creates_new_memory_and_waits(mock_memory_cls, mock_time):
+def test_setup_creates_new_memory_and_waits(mock_memory_cls, mock_poll_time):
     mock_client = MagicMock()
     mock_memory_cls.return_value = mock_client
+    mock_poll_time.monotonic.side_effect = [0.0, 1.0, 2.0, 3.0]
 
     creating = [{"arn": _MEM_ARN, "id": "mem-new", "status": "CREATING"}]
     active = [{"arn": _MEM_ARN, "id": "mem-new", "status": "ACTIVE"}]
@@ -78,14 +79,22 @@ def test_setup_returns_none_on_failure(mock_memory_cls):
     assert mem_id is None
 
 
-@patch("arch_sparring_agent.infra.memory.time")
+@patch("arch_sparring_agent.infra.polling.time")
 @patch("arch_sparring_agent.infra.memory.MemoryClient")
-def test_setup_returns_none_when_memory_stays_non_active(mock_memory_cls, mock_time):
+def test_setup_returns_none_when_memory_stays_non_active(mock_memory_cls, mock_poll_time):
     mock_client = MagicMock()
     mock_memory_cls.return_value = mock_client
 
+    call_count = [0]
+
+    def advancing_monotonic():
+        call_count[0] += 1
+        return float(call_count[0] * 100)
+
+    mock_poll_time.monotonic.side_effect = advancing_monotonic
+
     stuck = [{"arn": _MEM_ARN, "id": "mem-stuck", "status": "CREATING"}]
-    mock_client.list_memories.side_effect = [[]] + [stuck] * 37
+    mock_client.list_memories.side_effect = [[]] + [stuck] * 10
     mock_client.create_memory.return_value = {"id": "mem-stuck"}
 
     config, mem_id = setup_agentcore_memory(region="us-east-1")

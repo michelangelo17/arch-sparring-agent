@@ -4,11 +4,13 @@ from arch_sparring_agent.review.extraction import (
     extract_risks,
     extract_state_from_review,
     extract_verdict,
+    has_duplicate_description,
+    has_duplicate_string,
     infer_severity,
-    is_duplicate,
     strip_markdown,
 )
 from arch_sparring_agent.review.orchestrator import ReviewResult
+from arch_sparring_agent.state import Gap
 
 
 def test_strips_bold():
@@ -43,12 +45,20 @@ def test_infer_severity():
     assert infer_severity("Some other issue") == "medium"
 
 
-def test_is_duplicate():
-    items = [{"description": "Database is unencrypted"}, {"description": "Missing unit tests"}]
+def test_has_duplicate_description():
+    items = [
+        Gap(id="g-1", description="Database is unencrypted", severity="high"),
+        Gap(id="g-2", description="Missing unit tests", severity="medium"),
+    ]
+    assert has_duplicate_description("Database", items)
+    assert has_duplicate_description("Missing unit", items)
+    assert not has_duplicate_description("Something completely new", items)
 
-    assert is_duplicate("Database", items)
-    assert is_duplicate("Missing unit", items)
-    assert not is_duplicate("Something completely new", items)
+
+def test_has_duplicate_string():
+    items = ["Database is unencrypted", "Missing unit tests"]
+    assert has_duplicate_string("Database", items)
+    assert not has_duplicate_string("Something completely new", items)
 
 
 def test_extract_verdict():
@@ -68,10 +78,10 @@ def test_extract_gaps_flat_list():
 """
     gaps = extract_gaps(review_text, "")
     assert len(gaps) == 2
-    assert gaps[0]["description"] == "Missing authentication"
-    assert gaps[0]["id"] == "gap-1"
-    assert gaps[1]["description"] == "No backup strategy"
-    assert gaps[1]["id"] == "gap-2"
+    assert gaps[0].description == "Missing authentication"
+    assert gaps[0].id == "gap-1"
+    assert gaps[1].description == "No backup strategy"
+    assert gaps[1].id == "gap-2"
 
 
 def test_extract_gaps_confirmed_gaps_header():
@@ -83,8 +93,8 @@ def test_extract_gaps_confirmed_gaps_header():
 """
     gaps = extract_gaps(review_text, "")
     assert len(gaps) == 2
-    assert "Cost optimization" in gaps[0]["description"]
-    assert "Monitoring" in gaps[1]["description"]
+    assert "Cost optimization" in gaps[0].description
+    assert "Monitoring" in gaps[1].description
 
 
 def test_extract_gaps_ignores_numbered_gap_subheaders():
@@ -107,7 +117,7 @@ def test_extract_gaps_ignores_numbered_gap_subheaders():
 """
     gaps = extract_gaps(review_text, "")
     assert len(gaps) == 2
-    descriptions = [g["description"] for g in gaps]
+    descriptions = [g.description for g in gaps]
     for desc in descriptions:
         assert "Risk" not in desc
         assert "Impact" not in desc
@@ -121,8 +131,8 @@ def test_extract_gaps_features_not_found():
 """
     gaps = extract_gaps(review_text, "")
     assert len(gaps) == 1
-    assert gaps[0]["description"] == "Rate limiting"
-    assert gaps[0]["severity"] == "medium"
+    assert gaps[0].description == "Rate limiting"
+    assert gaps[0].severity == "medium"
 
 
 def test_extract_gaps_strips_markdown():
@@ -132,7 +142,7 @@ def test_extract_gaps_strips_markdown():
 """
     gaps = extract_gaps(review_text, "")
     assert len(gaps) == 1
-    assert gaps[0]["description"] == "Missing encryption at rest"
+    assert gaps[0].description == "Missing encryption at rest"
 
 
 def test_extract_risks_flat_list():
@@ -143,10 +153,10 @@ def test_extract_risks_flat_list():
 """
     risks = extract_risks(review_text, "")
     assert len(risks) == 2
-    assert risks[0]["description"] == "Data loss potential"
-    assert risks[0]["id"] == "risk-1"
-    assert risks[1]["description"] == "Security breach"
-    assert risks[1]["id"] == "risk-2"
+    assert risks[0].description == "Data loss potential"
+    assert risks[0].id == "risk-1"
+    assert risks[1].description == "Security breach"
+    assert risks[1].id == "risk-2"
 
 
 def test_extract_risks_nested_with_gap_subheaders():
@@ -165,8 +175,8 @@ def test_extract_risks_nested_with_gap_subheaders():
 """
     risks = extract_risks(review_text, "")
     assert len(risks) == 2
-    assert "Inefficient resource utilization" in risks[0]["description"]
-    assert "Insufficient visibility" in risks[1]["description"]
+    assert "Inefficient resource utilization" in risks[0].description
+    assert "Insufficient visibility" in risks[1].description
 
 
 def test_extract_risks_skips_impact_and_mitigation():
@@ -180,7 +190,7 @@ def test_extract_risks_skips_impact_and_mitigation():
 """
     risks = extract_risks(review_text, "")
     assert len(risks) == 1
-    assert risks[0]["description"] == "Actual risk description here"
+    assert risks[0].description == "Actual risk description here"
 
 
 def test_extract_risks_strips_risk_prefix():
@@ -191,7 +201,7 @@ def test_extract_risks_strips_risk_prefix():
 """
     risks = extract_risks(review_text, "")
     assert len(risks) == 1
-    assert risks[0]["description"] == "Something bad might happen"
+    assert risks[0].description == "Something bad might happen"
 
 
 def test_extract_recommendations_direct_section():
@@ -318,17 +328,17 @@ Verdict: PASS WITH CONCERNS
     state = extract_state_from_review(review_result)
 
     assert len(state.gaps) == 3
-    gap_descs = [g["description"] for g in state.gaps]
+    gap_descs = [g.description for g in state.gaps]
     assert any("Cost optimization" in d for d in gap_descs)
     assert any("Monitoring" in d for d in gap_descs)
     assert any("Rate limiting" in d for d in gap_descs)
     for g in state.gaps:
-        assert "Risk" not in g["description"]
-        assert "Mitigation" not in g["description"]
+        assert "Risk" not in g.description
+        assert "Mitigation" not in g.description
 
     assert len(state.risks) == 2
-    assert "Inefficient resource" in state.risks[0]["description"]
-    assert "Insufficient visibility" in state.risks[1]["description"]
+    assert "Inefficient resource" in state.risks[0].description
+    assert "Insufficient visibility" in state.risks[1].description
 
     assert len(state.recommendations) == 2
     assert any("cooldown" in r for r in state.recommendations)

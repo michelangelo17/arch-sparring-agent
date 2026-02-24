@@ -16,7 +16,7 @@ from ..config import CONDENSER_CHUNK_SIZE, CONDENSER_MAX_CHUNKS, CONDENSER_PASST
 from ..exceptions import MODEL_ERRORS
 
 
-def chunked_extract(content: str, system_prompt: str, model: str | BedrockModel) -> str:
+def chunked_extract(content: str, system_prompt: str, model: BedrockModel) -> str:
     """Fallback: extract findings from content in chunks, then merge."""
     chunks = [
         content[i : i + CONDENSER_CHUNK_SIZE] for i in range(0, len(content), CONDENSER_CHUNK_SIZE)
@@ -57,7 +57,7 @@ def chunked_extract(content: str, system_prompt: str, model: str | BedrockModel)
         return combined
 
 
-def _extract(content: str, system_prompt: str, model: str | BedrockModel) -> str:
+def _extract(content: str, system_prompt: str, model: BedrockModel) -> str:
     """Run structured extraction, with chunked fallback for large inputs."""
     if len(content) <= CONDENSER_PASSTHROUGH_THRESHOLD:
         return content
@@ -81,7 +81,7 @@ def _extract(content: str, system_prompt: str, model: str | BedrockModel) -> str
         raise
 
 
-def extract_requirements(raw_output: str, model: str | BedrockModel) -> str:
+def extract_requirements(raw_output: str, model: BedrockModel) -> str:
     """Extract structured requirements from Phase 1 output.
 
     Returns a compact bullet list of every requirement, constraint, and NFR.
@@ -102,7 +102,7 @@ Max 800 words.""",
     )
 
 
-def extract_architecture_findings(raw_output: str, model: str | BedrockModel) -> str:
+def extract_architecture_findings(raw_output: str, model: BedrockModel) -> str:
     """Extract structured findings from Phase 2 output.
 
     Returns Components, Features Verified, and Features Not Found sections
@@ -134,7 +134,7 @@ Max 600 words.""",
     )
 
 
-def extract_phase_findings(raw_output: str, phase_name: str, model: str | BedrockModel) -> str:
+def extract_phase_findings(raw_output: str, phase_name: str, model: BedrockModel) -> str:
     """Extract structured findings from Phase 3 (Q&A) or Phase 4 (Sparring) output.
 
     Returns categorized bullet points: decisions, gaps, risks, verified items.

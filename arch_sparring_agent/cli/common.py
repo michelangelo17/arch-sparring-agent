@@ -5,10 +5,13 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import click
 
+from ..config import DEFAULT_MODEL, DEFAULT_REGION, SUPPORTED_MODELS
 from ..exceptions import ConfigurationError
 from ..infra import SharedConfig, load_from_ssm
 from ..review.extraction import extract_verdict
@@ -26,8 +29,26 @@ DEFAULT_STATE_FILE = "state.json"
 DEFAULT_REMEDIATION_FILE = "remediation-notes.md"
 
 
-def get_env_or_default(env_var: str, default: str) -> str:
-    return os.environ.get(env_var, default)
+def common_options(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Shared ``--region`` and ``-v/--verbose`` options."""
+    fn = click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")(fn)
+    fn = click.option(
+        "--region",
+        default=lambda: os.environ.get("AWS_REGION", DEFAULT_REGION),
+        help=f"AWS region (default: {DEFAULT_REGION})",
+    )(fn)
+    return fn
+
+
+def model_option(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Shared ``--model`` option."""
+    fn = click.option(
+        "--model",
+        type=click.Choice(list(SUPPORTED_MODELS.keys()), case_sensitive=False),
+        default=lambda: os.environ.get("ARCH_REVIEW_MODEL", DEFAULT_MODEL),
+        help=f"Model to use (default: {DEFAULT_MODEL})",
+    )(fn)
+    return fn
 
 
 def configure_logging(verbose: bool) -> None:

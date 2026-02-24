@@ -8,14 +8,32 @@ from pathlib import Path
 
 
 @dataclass
+class Gap:
+    """A single architecture gap identified during review."""
+
+    id: str
+    description: str
+    severity: str
+
+
+@dataclass
+class Risk:
+    """A single risk identified during review."""
+
+    id: str
+    description: str
+    impact: str
+
+
+@dataclass
 class ReviewState:
     """Structured state from a completed review."""
 
     timestamp: str
     version: str = "1.0"
     project_name: str = ""
-    gaps: list[dict[str, str]] = field(default_factory=list)
-    risks: list[dict[str, str]] = field(default_factory=list)
+    gaps: list[Gap] = field(default_factory=list)
+    risks: list[Risk] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
     verdict: str = ""
     requirements_summary: str = ""
@@ -30,6 +48,8 @@ class ReviewState:
             data = json.loads(json_str)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in review state: {e}") from e
+        data["gaps"] = [Gap(**g) for g in data.get("gaps", [])]
+        data["risks"] = [Risk(**r) for r in data.get("risks", [])]
         return cls(**data)
 
     @classmethod
@@ -40,5 +60,5 @@ class ReviewState:
         except OSError as e:
             raise ValueError(f"Could not read state file '{file_path}': {e}") from e
 
-    def save(self, path: str | Path):
+    def save(self, path: str | Path) -> None:
         Path(path).write_text(self.to_json())

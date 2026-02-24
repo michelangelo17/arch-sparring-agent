@@ -73,7 +73,20 @@ def test_list_documents_finds_md():
         (p / "other.txt").write_text("x")
         parser = DocumentParser(tmp)
         names = parser.list_documents()
-        assert names == ["req.md"]
+        assert "req.md" in names
+        assert "other.txt" not in names
+
+
+def test_list_documents_recursive_with_relative_paths():
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp)
+        (p / "top.md").write_text("# Top")
+        sub = p / "sub"
+        sub.mkdir()
+        (sub / "nested.md").write_text("# Nested")
+        parser = DocumentParser(tmp)
+        names = sorted(parser.list_documents())
+        assert names == [str(Path("sub") / "nested.md"), "top.md"]
 
 
 def test_read_markdown_file_success():
@@ -131,6 +144,18 @@ def test_list_source_files_finds_supported_extensions():
         assert "main.py" in names
         assert "src/lib.ts" in names
         assert "script.sh" not in names
+
+
+def test_list_source_files_caches_result():
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp)
+        (p / "main.py").write_text("x")
+        analyzer = SourceAnalyzer(tmp)
+        first = analyzer.list_source_files()
+        (p / "new.py").write_text("y")
+        second = analyzer.list_source_files()
+        assert first is second
+        assert "new.py" not in second
 
 
 def test_list_source_files_excludes_node_modules():

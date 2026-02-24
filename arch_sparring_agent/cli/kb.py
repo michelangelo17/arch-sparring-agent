@@ -6,28 +6,22 @@ import sys
 
 import click
 
-from ..config import DEFAULT_REGION
-from . import EXIT_ERROR, cli, configure_logging, get_env_or_default, load_shared_config
+from .common import EXIT_ERROR, common_options, configure_logging, load_shared_config
 
 
-@cli.group()
+@click.group()
 def kb():
     """Manage the WAF Knowledge Base."""
 
 
 @kb.command("sync")
 @click.option(
-    "--region",
-    default=lambda: get_env_or_default("AWS_REGION", DEFAULT_REGION),
-    help=f"AWS region (default: {DEFAULT_REGION})",
-)
-@click.option(
     "--content-dir",
     type=click.Path(file_okay=False),
     default=".arch-review/waf-content",
     help="Directory for scraped WAF content (default: .arch-review/waf-content)",
 )
-@click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
+@common_options
 def kb_sync(region, content_dir, verbose):
     """Scrape WAF docs, upload to S3, and trigger KB ingestion."""
     configure_logging(verbose)

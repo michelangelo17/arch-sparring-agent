@@ -3,13 +3,15 @@
 from unittest.mock import MagicMock, patch
 
 from arch_sparring_agent.agents.remediation_agent import (
-    _format_list,
+    _format_gaps,
     _format_recommendations,
+    _format_risks,
     _number_to_prompt,
     create_remediation_agent,
     run_remediation,
 )
-from arch_sparring_agent.state import ReviewState
+from arch_sparring_agent.state import Gap, ReviewState, Risk
+from tests.conftest import FakeClientError
 
 
 def _make_state(**overrides):
@@ -18,11 +20,11 @@ def _make_state(**overrides):
         "timestamp": "2024-01-15T10:00:00",
         "project_name": "TestProject",
         "gaps": [
-            {"id": "gap-1", "description": "Missing auth", "severity": "high"},
-            {"id": "gap-2", "description": "No logging", "severity": "medium"},
+            Gap(id="gap-1", description="Missing auth", severity="high"),
+            Gap(id="gap-2", description="No logging", severity="medium"),
         ],
         "risks": [
-            {"id": "risk-1", "description": "DDoS vulnerability", "impact": "high"},
+            Risk(id="risk-1", description="DDoS vulnerability", impact="high"),
         ],
         "recommendations": ["Add WAF", "Enable CloudTrail"],
         "verdict": "PASS WITH CONCERNS",
@@ -33,12 +35,12 @@ def _make_state(**overrides):
     return ReviewState(**defaults)
 
 
-def test_format_list_with_items():
+def test_format_gaps_with_items():
     items = [
-        {"id": "gap-1", "description": "Missing auth", "severity": "high"},
-        {"id": "gap-2", "description": "No logging", "severity": "medium"},
+        Gap(id="gap-1", description="Missing auth", severity="high"),
+        Gap(id="gap-2", description="No logging", severity="medium"),
     ]
-    result = _format_list(items, "severity")
+    result = _format_gaps(items)
 
     assert "[HIGH]" in result
     assert "[MEDIUM]" in result
@@ -46,8 +48,21 @@ def test_format_list_with_items():
     assert "No logging" in result
 
 
-def test_format_list_empty():
-    result = _format_list([], "severity")
+def test_format_gaps_empty():
+    result = _format_gaps([])
+    assert "None identified" in result
+
+
+def test_format_risks_with_items():
+    items = [Risk(id="risk-1", description="DDoS vulnerability", impact="high")]
+    result = _format_risks(items)
+
+    assert "[HIGH]" in result
+    assert "DDoS vulnerability" in result
+
+
+def test_format_risks_empty():
+    result = _format_risks([])
     assert "None identified" in result
 
 
@@ -150,3 +165,22 @@ def test_run_remediation_processes_user_input(mock_agent_cls, mock_setup_mem):
         notes = run_remediation(mock_agent, state, output_fn=output_lines.append)
 
     assert "User: How do I fix gap 1?" in notes
+
+
+@patch("arch_sparring_agent.agents.remediation_agent.setup_agentcore_memory")
+@patch("arch_sparring_agent.agents.remediation_agent.Agent")
+def test_run_remediation_continues_on_model_error(mock_agent_cls, mock_setup_mem):
+    mock_setup_mem.return_value = (None, None)
+    state = _make_state()
+
+    error = FakeClientError("ThrottlingException")
+    mock_agent = MagicMock(side_effect=[error, "Recovered response", "Summary"])
+
+    output_lines: list[str] = []
+
+    with patch("builtins.input", side_effect=["first question", "second question", "exit"]):
+        notes = run_remediation(mock_agent, state, output_fn=output_lines.append)
+
+    assert any("Error" in line for line in output_lines)
+    assert "User: second question" in notes
+    assert "Agent: Recovered response" in notes

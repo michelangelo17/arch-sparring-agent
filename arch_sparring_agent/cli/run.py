@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import traceback
@@ -12,31 +13,25 @@ from typing import Any
 
 import click
 
-from ..config import (
-    DEFAULT_MODEL,
-    DEFAULT_REASONING_LEVEL,
-    DEFAULT_REGION,
-    REASONING_LEVELS,
-    SUPPORTED_MODELS,
-)
+from ..config import DEFAULT_REASONING_LEVEL, REASONING_LEVELS
 from ..exceptions import ArchReviewError
 from ..infra import SharedConfig
 from ..profiles import load_profile
 from ..review.extraction import extract_state_from_review
 from ..review.orchestrator import ReviewOrchestrator
 from ..state import ReviewState
-from . import (
+from .common import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_REMEDIATION_FILE,
     DEFAULT_REVIEW_FILE,
     DEFAULT_STATE_FILE,
     EXIT_ERROR,
-    cli,
+    common_options,
     configure_logging,
-    get_env_or_default,
     get_output_dir,
     get_verdict_and_exit_code,
     load_shared_config,
+    model_option,
 )
 
 
@@ -72,50 +67,39 @@ def _archive_previous(output_dir: Path) -> None:
     click.echo(f"Archived previous review to: {history_dir}")
 
 
-@cli.command()
+@click.command()
 @click.option(
     "--documents-dir",
     type=click.Path(file_okay=False, dir_okay=True),
-    default=lambda: get_env_or_default("ARCH_REVIEW_DOCUMENTS_DIR", ""),
+    default=lambda: os.environ.get("ARCH_REVIEW_DOCUMENTS_DIR", ""),
     help="Directory containing markdown requirements documents",
 )
 @click.option(
     "--templates-dir",
     type=click.Path(file_okay=False, dir_okay=True),
-    default=lambda: get_env_or_default("ARCH_REVIEW_TEMPLATES_DIR", ""),
+    default=lambda: os.environ.get("ARCH_REVIEW_TEMPLATES_DIR", ""),
     help="Directory containing CloudFormation templates",
 )
 @click.option(
     "--diagrams-dir",
     type=click.Path(file_okay=False, dir_okay=True),
-    default=lambda: get_env_or_default("ARCH_REVIEW_DIAGRAMS_DIR", ""),
+    default=lambda: os.environ.get("ARCH_REVIEW_DIAGRAMS_DIR", ""),
     help="Directory containing architecture diagrams",
 )
 @click.option(
     "--source-dir",
     type=click.Path(file_okay=False, dir_okay=True),
-    default=lambda: get_env_or_default("ARCH_REVIEW_SOURCE_DIR", ""),
+    default=lambda: os.environ.get("ARCH_REVIEW_SOURCE_DIR", ""),
     help="Directory containing Lambda/application source code",
 )
 @click.option(
     "--output-dir",
     type=click.Path(file_okay=False, dir_okay=True),
-    default=lambda: get_env_or_default("ARCH_REVIEW_OUTPUT_DIR", DEFAULT_OUTPUT_DIR),
+    default=lambda: os.environ.get("ARCH_REVIEW_OUTPUT_DIR", DEFAULT_OUTPUT_DIR),
     help=f"Output directory for all files (default: {DEFAULT_OUTPUT_DIR})",
 )
 @click.option("--no-history", is_flag=True, default=False, help="Don't archive previous reviews")
 @click.option("--no-state", is_flag=True, default=False, help="Don't save state file after review")
-@click.option(
-    "--model",
-    type=click.Choice(list(SUPPORTED_MODELS.keys()), case_sensitive=False),
-    default=lambda: get_env_or_default("ARCH_REVIEW_MODEL", DEFAULT_MODEL),
-    help=f"Model to use (default: {DEFAULT_MODEL})",
-)
-@click.option(
-    "--region",
-    default=lambda: get_env_or_default("AWS_REGION", DEFAULT_REGION),
-    help=f"AWS region (default: {DEFAULT_REGION})",
-)
 @click.option(
     "--profile",
     "profile_name",
@@ -125,10 +109,11 @@ def _archive_previous(output_dir: Path) -> None:
 @click.option(
     "--reasoning-level",
     type=click.Choice(REASONING_LEVELS, case_sensitive=False),
-    default=lambda: get_env_or_default("ARCH_REVIEW_REASONING_LEVEL", DEFAULT_REASONING_LEVEL),
+    default=lambda: os.environ.get("ARCH_REVIEW_REASONING_LEVEL", DEFAULT_REASONING_LEVEL),
     help=f"Reasoning effort for analysis agents (default: {DEFAULT_REASONING_LEVEL})",
 )
-@click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
+@model_option
+@common_options
 def run(
     documents_dir,
     templates_dir,

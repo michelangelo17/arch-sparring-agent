@@ -48,14 +48,14 @@ Cite WAF question IDs (e.g. SEC01-BP01) where relevant."""
 
 
 def create_review_agent(
-    model: str | BedrockModel,
+    model: BedrockModel,
     knowledge_base_id: str | None = None,
     region: str | None = None,
     profile: dict[str, Any] | None = None,
 ) -> Agent:
     """Create agent for generating final review."""
 
-    tools: list = []
+    tools: list[Any] = []
 
     if knowledge_base_id and region:
         tools.append(create_kb_tool(knowledge_base_id, region))

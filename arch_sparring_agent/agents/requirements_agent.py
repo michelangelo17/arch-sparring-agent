@@ -38,7 +38,7 @@ _SUMMARIZE_PROMPT = (
 
 def create_requirements_agent(
     documents_dir: str,
-    model: str | BedrockModel,
+    model: BedrockModel,
 ) -> Agent:
     """Create agent for analyzing requirements documents."""
 

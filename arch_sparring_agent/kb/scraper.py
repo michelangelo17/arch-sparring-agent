@@ -170,7 +170,7 @@ def _crawl(start_url: str, scope: str, max_depth: int = 3) -> list[str]:
     if not html:
         return []
 
-    all_urls: dict[str, None] = {}
+    all_urls: dict[str, None] = {}  # insertion-ordered set (preserves discovery order)
     frontier = _extract_html_links(html, start_url, scope)
     for url in frontier:
         all_urls[url] = None

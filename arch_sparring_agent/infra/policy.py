@@ -21,6 +21,7 @@ from ..config import (
 )
 from ..exceptions import AWS_ERRORS, PolicySetupError
 from .gateway import associate_gateway_with_policy_engine, setup_gateway
+from .polling import poll_until
 
 logger = logging.getLogger(__name__)
 
@@ -121,21 +122,15 @@ def _wait_for_policy_active(
 ) -> bool:
     """Wait for policy to become ACTIVE.
 
-    Args:
-        client: boto3 bedrock-agentcore-control client.
-        policy_engine_id: The policy engine ID.
-        policy_id: The policy ID to check.
-        policy_name: Human-readable policy name for log messages.
-
     Returns:
         True if policy became ACTIVE, False otherwise.
     """
     logger.info("Verifying policy '%s' status...", policy_name)
-    for _ in range(POLICY_ACTIVE_MAX_POLLS):
+
+    def _check() -> bool | None:
         try:
             response = client.get_policy(policyEngineId=policy_engine_id, policyId=policy_id)
             status = response.get("status", "").upper()
-
             if status == "ACTIVE":
                 logger.info("Policy '%s' is ACTIVE", policy_name)
                 return True
@@ -144,16 +139,22 @@ def _wait_for_policy_active(
                 logger.error(
                     "Policy '%s' failed. Status: %s, Reasons: %s", policy_name, status, reasons
                 )
-                return False
-
+                raise StopIteration
             logger.debug("Policy '%s' status: %s", policy_name, status)
-            time.sleep(0.5)
+            return None
         except AWS_ERRORS as e:
             logger.debug("Error checking policy '%s' status: %s", policy_name, e)
-            time.sleep(0.5)
+            return None
 
-    logger.warning("Timeout waiting for policy '%s' to become ACTIVE", policy_name)
-    return False
+    return (
+        poll_until(
+            _check,
+            interval=0.5,
+            timeout=POLICY_ACTIVE_MAX_POLLS * 0.5,
+            desc=f"policy '{policy_name}'",
+        )
+        is not None
+    )
 
 
 def create_policy(

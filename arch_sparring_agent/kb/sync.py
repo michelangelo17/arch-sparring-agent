@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from pathlib import Path
 
 import boto3
@@ -12,6 +11,7 @@ import yaml
 
 from ..config import DEFAULT_REGION
 from ..exceptions import AWS_ERRORS
+from ..infra.polling import poll_until
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +111,8 @@ def wait_for_ingestion(
     Returns True on success, False on failure or timeout.
     """
     bedrock = boto3.client("bedrock-agent", region_name=region)
-    start = time.monotonic()
 
-    while (time.monotonic() - start) < timeout:
+    def _check() -> bool | None:
         try:
             resp = bedrock.get_ingestion_job(
                 knowledgeBaseId=kb_id,
@@ -133,15 +132,14 @@ def wait_for_ingestion(
             if status == "FAILED":
                 reasons = resp["ingestionJob"].get("failureReasons", [])
                 logger.error("Ingestion failed: %s", reasons)
-                return False
+                raise StopIteration
             logger.debug("Ingestion status: %s", status)
+            return None
         except AWS_ERRORS as e:
             logger.warning("Error polling ingestion status: %s", e)
+            return None
 
-        time.sleep(15)
-
-    logger.warning("Ingestion timed out after %ds", timeout)
-    return False
+    return poll_until(_check, interval=15.0, timeout=timeout, desc="KB ingestion") is not None
 
 
 def sync_kb(

@@ -71,7 +71,7 @@ def test_find_gateway_by_name_not_found(mock_boto3):
     assert url is None
 
 
-@patch("arch_sparring_agent.infra.gateway.time")
+@patch("arch_sparring_agent.infra.polling.time")
 def test_wait_for_iam_propagation_succeeds_first_try(mock_time):
     mock_client = MagicMock()
     mock_client.get_gateway.return_value = {"status": "ACTIVE"}
@@ -83,7 +83,7 @@ def test_wait_for_iam_propagation_succeeds_first_try(mock_time):
     mock_client.get_gateway.assert_called_once_with(gatewayIdentifier="gw-123")
 
 
-@patch("arch_sparring_agent.infra.gateway.time")
+@patch("arch_sparring_agent.infra.polling.time")
 def test_wait_for_iam_propagation_retries_on_access_denied(mock_time):
     mock_client = MagicMock()
     mock_client.get_gateway.side_effect = [
@@ -98,7 +98,7 @@ def test_wait_for_iam_propagation_retries_on_access_denied(mock_time):
     assert mock_client.get_gateway.call_count == 2
 
 
-@patch("arch_sparring_agent.infra.gateway.time")
+@patch("arch_sparring_agent.infra.polling.time")
 def test_wait_for_iam_propagation_times_out(mock_time):
     mock_client = MagicMock()
     mock_client.get_gateway.side_effect = FakeClientError("AccessDeniedException")

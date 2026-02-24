@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from arch_sparring_agent.infra.guardrails import (
+    _find_guardrail_by_name,
     destroy_guardrails,
     setup_guardrails,
 )
@@ -117,3 +118,23 @@ def test_destroy_handles_other_error(mock_boto3):
 def test_destroy_none_guardrail_id():
     result = destroy_guardrails(None)
     assert result is True
+
+
+def test_find_guardrail_by_name_paginates():
+    mock_client = MagicMock()
+    mock_client.list_guardrails.side_effect = [
+        {
+            "guardrails": [{"name": "OtherGuardrail", "id": "gr-other"}],
+            "nextToken": "tok1",
+        },
+        {
+            "guardrails": [{"name": "ArchReviewGroundingGuardrail", "id": "gr-page2"}],
+        },
+    ]
+
+    result = _find_guardrail_by_name(mock_client)
+
+    assert result == "gr-page2"
+    assert mock_client.list_guardrails.call_count == 2
+    second_call_kwargs = mock_client.list_guardrails.call_args_list[1][1]
+    assert second_call_kwargs["nextToken"] == "tok1"

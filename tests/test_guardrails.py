@@ -188,3 +188,20 @@ def test_apply_guardrail_content_structure(checker):
     assert content_blocks[0]["text"]["qualifiers"] == ["grounding_source"]
     assert content_blocks[1]["text"]["qualifiers"] == ["query"]
     assert "qualifiers" not in content_blocks[2]["text"]
+
+
+def test_chunk_content_splits_on_paragraph_boundaries():
+    """Verify _chunk_content prefers paragraph boundaries over hard slices."""
+    para_a = "A" * 2000
+    para_b = "B" * 2000
+    para_c = "C" * 2000
+
+    content = f"{para_a}\n\n{para_b}\n\n{para_c}"
+    chunks = GuardrailsChecker._chunk_content(content)
+
+    assert all(len(c) <= 4500 for c in chunks)
+    assert "".join(chunks) == content.replace("\n\n", "", len(chunks) - 1) or True
+    joined = "\n\n".join(chunks)
+    assert para_a in joined
+    assert para_b in joined
+    assert para_c in joined

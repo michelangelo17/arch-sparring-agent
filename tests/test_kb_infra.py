@@ -82,11 +82,12 @@ def test_create_vector_bucket_handles_conflict(mock_boto3):
     assert result == "arn:aws:s3vectors:us-east-1:123:bucket/test"
 
 
-@patch("arch_sparring_agent.kb.infra.time")
+@patch("arch_sparring_agent.infra.polling.time")
 @patch("arch_sparring_agent.kb.infra.boto3")
-def test_create_bedrock_kb_retries_on_iam_not_propagated(mock_boto3, mock_time):
+def test_create_bedrock_kb_retries_on_iam_not_propagated(mock_boto3, mock_poll_time):
     mock_bedrock = MagicMock()
     mock_boto3.client.return_value = mock_bedrock
+    mock_poll_time.monotonic.side_effect = [0.0, 1.0, 2.0, 3.0]
     mock_bedrock.create_knowledge_base.side_effect = [
         FakeClientError("not authorized"),
         {"knowledgeBase": {"knowledgeBaseId": "kb-retry"}},
@@ -103,16 +104,23 @@ def test_create_bedrock_kb_retries_on_iam_not_propagated(mock_boto3, mock_time):
     assert mock_bedrock.create_knowledge_base.call_count == 2
 
 
-@patch("arch_sparring_agent.kb.infra.time")
+@patch("arch_sparring_agent.infra.polling.time")
 @patch("arch_sparring_agent.kb.infra.boto3")
-def test_create_bedrock_kb_raises_after_max_retries(mock_boto3, mock_time):
+def test_create_bedrock_kb_raises_after_max_retries(mock_boto3, mock_poll_time):
     mock_bedrock = MagicMock()
     mock_boto3.client.return_value = mock_bedrock
 
-    error = FakeClientError("ValidationException")
+    call_count = [0]
+
+    def advancing_monotonic():
+        call_count[0] += 1
+        return float(call_count[0] * 100)
+
+    mock_poll_time.monotonic.side_effect = advancing_monotonic
+
     error_msg = "not authorized to perform this action"
 
-    class NotAuthorizedError(type(error)):
+    class NotAuthorizedError(FakeClientError):
         def __str__(self):
             return error_msg
 
@@ -120,7 +128,9 @@ def test_create_bedrock_kb_raises_after_max_retries(mock_boto3, mock_time):
 
     mock_bedrock.create_knowledge_base.side_effect = NotAuthorizedError()
 
-    with pytest.raises(FakeClientError):
+    from arch_sparring_agent.exceptions import ConfigurationError
+
+    with pytest.raises(ConfigurationError):
         _create_bedrock_kb(
             "arn:aws:iam::123:role/test",
             "arn:aws:s3vectors:us-east-1:123:bucket/test",

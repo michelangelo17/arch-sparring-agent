@@ -4,24 +4,13 @@ from __future__ import annotations
 
 import click
 
-from ..config import DEFAULT_REGION
 from ..infra import SSM_PARAMETER_NAME, SharedConfig, delete_from_ssm, save_to_ssm
 from ..infra.gateway import destroy_gateway, setup_gateway
 from ..infra.policy import destroy_policy_engine, setup_architecture_review_policies
-from . import (
-    cli,
-    configure_logging,
-    get_env_or_default,
-    load_shared_config,
-)
+from .common import common_options, configure_logging, load_shared_config
 
 
-@cli.command()
-@click.option(
-    "--region",
-    default=lambda: get_env_or_default("AWS_REGION", DEFAULT_REGION),
-    help=f"AWS region (default: {DEFAULT_REGION})",
-)
+@click.command()
 @click.option(
     "--gateway-name",
     default="ArchReviewGateway",
@@ -35,7 +24,7 @@ from . import (
 @click.option(
     "--with-kb", is_flag=True, default=False, help="Provision a Knowledge Base for WAF content"
 )
-@click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
+@common_options
 def deploy(region, gateway_name, policy_engine_name, with_kb, verbose):
     """Deploy shared infrastructure to an AWS account.
 
@@ -131,19 +120,14 @@ def _deploy_infra(region: str, gateway_name: str, policy_engine_name: str) -> tu
     return gateway_arn, gateway_id, engine_id
 
 
-@cli.command()
-@click.option(
-    "--region",
-    default=lambda: get_env_or_default("AWS_REGION", DEFAULT_REGION),
-    help=f"AWS region (default: {DEFAULT_REGION})",
-)
+@click.command()
 @click.option(
     "--confirm",
     is_flag=True,
     default=False,
     help="Required to actually destroy resources",
 )
-@click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose output")
+@common_options
 def destroy(region, confirm, verbose):
     """Tear down shared infrastructure.
 

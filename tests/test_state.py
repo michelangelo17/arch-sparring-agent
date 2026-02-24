@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 
-from arch_sparring_agent.state import ReviewState
+from arch_sparring_agent.state import Gap, ReviewState, Risk
 
 
 def test_review_state_serialization():
@@ -9,8 +9,8 @@ def test_review_state_serialization():
     state = ReviewState(
         timestamp="2023-10-27T10:00:00",
         project_name="TestProject",
-        gaps=[{"id": "gap-1", "description": "Missing auth", "severity": "high"}],
-        risks=[{"id": "risk-1", "description": "DDoS", "impact": "high"}],
+        gaps=[Gap(id="gap-1", description="Missing auth", severity="high")],
+        risks=[Risk(id="risk-1", description="DDoS", impact="high")],
         recommendations=["Add WAF"],
         verdict="PASS WITH CONCERNS",
         requirements_summary="Reqs",
@@ -23,7 +23,7 @@ def test_review_state_serialization():
     assert loaded_state == state
     assert loaded_state.project_name == "TestProject"
     assert len(loaded_state.gaps) == 1
-    assert loaded_state.gaps[0]["id"] == "gap-1"
+    assert loaded_state.gaps[0].id == "gap-1"
 
 
 def test_review_state_file_io():

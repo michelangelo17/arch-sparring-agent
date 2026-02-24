@@ -8,10 +8,10 @@ import click
 import yaml
 
 from ..profiles import BUILTIN_DIR, USER_DIR, get_profile_path, list_profiles
-from . import EXIT_ERROR, cli
+from .common import EXIT_ERROR
 
 
-@cli.group()
+@click.group()
 def profiles():
     """Manage review profiles."""
 

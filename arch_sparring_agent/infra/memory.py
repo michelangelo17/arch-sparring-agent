@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime
 
 from bedrock_agentcore.memory import MemoryClient
@@ -14,6 +13,7 @@ from bedrock_agentcore.memory.integrations.strands.session_manager import (
 
 from ..config import DEFAULT_REGION
 from ..exceptions import AWS_ERRORS
+from .polling import poll_until
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,26 @@ def _find_memory_by_name(memories: list, memory_name: str) -> tuple[str | None, 
         if memory_name.lower() in arn.lower():
             return m.get("id"), m.get("status", "")
     return None, None
+
+
+def _wait_for_memory_active(client: MemoryClient, memory_name: str, timeout: float) -> bool:
+    """Poll until the named memory reaches ACTIVE status."""
+
+    def _check() -> bool | None:
+        memories = client.list_memories()
+        _, status = _find_memory_by_name(memories, memory_name)
+        upper = (status or "").upper()
+        if upper == "ACTIVE":
+            return True
+        if upper == "FAILED":
+            logger.error("Memory creation failed.")
+            raise StopIteration
+        return None
+
+    return (
+        poll_until(_check, interval=5.0, timeout=timeout, desc=f"memory '{memory_name}'")
+        is not None
+    )
 
 
 def setup_agentcore_memory(
@@ -52,20 +72,7 @@ def setup_agentcore_memory(
         if memory_id:
             if memory_status and memory_status.upper() != "ACTIVE":
                 logger.info("Memory '%s' exists but status is %s", memory_name, memory_status)
-                for attempt in range(12):
-                    time.sleep(5)
-                    elapsed = (attempt + 1) * 5
-                    memories = client.list_memories()
-                    memory_id, memory_status = _find_memory_by_name(memories, memory_name)
-                    if memory_status and memory_status.upper() == "ACTIVE":
-                        break
-                    logger.info(
-                        "Waiting for memory to become active... (%ds elapsed, status: %s)",
-                        elapsed,
-                        memory_status,
-                    )
-
-                if memory_status and memory_status.upper() != "ACTIVE":
+                if not _wait_for_memory_active(client, memory_name, timeout=60):
                     logger.debug("Memory not active after waiting. Continuing without memory.")
                     return None, None
 
@@ -77,31 +84,10 @@ def setup_agentcore_memory(
             memory_id = memory.get("id")
             logger.info("Created memory: %s", memory_name)
 
-            # Wait for memory to become active (up to 3 minutes)
             logger.info("Waiting for memory to initialize...")
-            memory_status = "CREATING"
-            for attempt in range(36):  # 36 * 5s = 3 minutes max
-                time.sleep(5)
-                elapsed = (attempt + 1) * 5
-                memories = client.list_memories()
-                _, memory_status = _find_memory_by_name(memories, memory_name)
-                status_upper = (memory_status or "").upper()
-
-                if status_upper == "ACTIVE":
-                    logger.info("Memory initialization done.")
-                    break
-                if status_upper == "FAILED":
-                    logger.error("Memory creation failed.")
-                    return None, None
-
-                logger.info(
-                    "Waiting for memory to initialize... (%ds elapsed, status: %s)",
-                    elapsed,
-                    memory_status,
-                )
-            else:
-                logger.warning("Timeout waiting for memory. Status: %s", memory_status)
+            if not _wait_for_memory_active(client, memory_name, timeout=180):
                 return None, None
+            logger.info("Memory initialization done.")
 
         if not memory_id:
             logger.warning("Could not resolve memory ID for '%s'. Skipping.", memory_name)

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import Any
 
 import boto3
@@ -12,6 +11,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from ..config import DEFAULT_REGION, IAM_PROPAGATION_TIMEOUT
 from ..exceptions import AWS_ERRORS, PolicySetupError
 from . import build_gateway_arn, get_account_id
+from .polling import poll_until
 
 logger = logging.getLogger(__name__)
 
@@ -57,39 +57,36 @@ def _wait_for_iam_propagation(
 ) -> bool:
     """Wait for IAM permissions to propagate using exponential backoff.
 
-    Polls the gateway with exponential backoff until the call succeeds
-    or the timeout is reached.
-
     Returns:
         True if IAM propagated successfully, False on timeout.
     """
     logger.debug("Waiting for IAM propagation (timeout: %ds)...", timeout)
-    start = time.monotonic()
-    delay = 1.0  # Start with 1 second
-    max_delay = 16.0
 
-    while (time.monotonic() - start) < timeout:
+    def _check() -> bool | None:
         try:
             client.get_gateway(gatewayIdentifier=gateway_id)
-            elapsed = time.monotonic() - start
-            logger.debug("IAM propagation confirmed after %.1fs", elapsed)
             return True
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "")
             if error_code in ("AccessDeniedException", "UnauthorizedException"):
-                logger.debug("IAM not yet propagated, retrying in %.1fs...", delay)
-                time.sleep(delay)
-                delay = min(delay * 2, max_delay)
-            else:
-                # Non-IAM error -- propagation may already be done
-                logger.debug("Gateway check returned non-IAM error: %s", e)
-                return True
-        except BotoCoreError as e:
-            logger.debug("Gateway check returned non-IAM error: %s", e)
+                return None
+            return True
+        except BotoCoreError:
             return True
 
-    logger.warning("IAM propagation timed out after %ds. Continuing anyway (best-effort).", timeout)
-    return False
+    result = poll_until(
+        _check,
+        interval=1.0,
+        timeout=timeout,
+        backoff=2.0,
+        max_interval=16.0,
+        desc="IAM propagation",
+    )
+    if not result:
+        logger.warning(
+            "IAM propagation timed out after %ds. Continuing anyway (best-effort).", timeout
+        )
+    return result is not None
 
 
 def associate_gateway_with_policy_engine(
@@ -150,6 +147,7 @@ def _create_gateway(gateway_name: str, region: str) -> tuple[str, str]:
         logger.info("Creating OAuth authorization server...")
         cognito_response = client.create_oauth_authorizer_with_cognito(gateway_name)
 
+        # GatewayClient SDK may return a raw string instead of a dict on error
         if isinstance(cognito_response, str):
             raise PolicySetupError(f"Unexpected cognito response: {cognito_response[:100]}")
 
@@ -170,6 +168,7 @@ def _create_gateway(gateway_name: str, region: str) -> tuple[str, str]:
             enable_semantic_search=False,
         )
 
+        # GatewayClient SDK may return a raw string ID instead of a dict
         if isinstance(gateway, str):
             gateway = {"gatewayId": gateway}
 
@@ -182,8 +181,9 @@ def _create_gateway(gateway_name: str, region: str) -> tuple[str, str]:
                 region,
             )
 
-    except AWS_ERRORS as create_error:
-        if "already exists" in str(create_error).lower():
+    except ClientError as create_error:
+        error_code = create_error.response.get("Error", {}).get("Code", "")
+        if error_code in ("ConflictException", "ResourceAlreadyExistsException"):
             gateway_arn, gateway_id, _ = _find_gateway_by_name(gateway_name, region)
             if gateway_id and gateway_arn:
                 logger.info("Using existing Gateway: %s", gateway_name)

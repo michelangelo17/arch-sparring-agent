@@ -16,11 +16,19 @@ class SourceAnalyzer:
 
     def __init__(self, source_dir: str):
         self.source_dir = Path(source_dir)
+        self._file_cache: list[str] | None = None
 
     def list_source_files(self) -> list[str]:
-        """List source files recursively, excluding node_modules/venv/etc."""
+        """List source files recursively, excluding node_modules/venv/etc.
+
+        Results are cached for the lifetime of this instance.
+        """
+        if self._file_cache is not None:
+            return self._file_cache
+
         if not self.source_dir.exists():
-            return []
+            self._file_cache = []
+            return self._file_cache
 
         exclude_dirs = {"node_modules", ".venv", "venv", "__pycache__", ".git", "dist", "build"}
         files = []
@@ -30,7 +38,8 @@ class SourceAnalyzer:
                 if not any(excluded in path.parts for excluded in exclude_dirs):
                     files.append(str(path.relative_to(self.source_dir)))
 
-        return sorted(files)
+        self._file_cache = sorted(files)
+        return self._file_cache
 
     def read_source_file(self, filename: str) -> str:
         """Read a source file's contents.

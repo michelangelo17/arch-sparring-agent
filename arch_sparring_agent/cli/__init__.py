@@ -6,6 +6,11 @@ from importlib.metadata import PackageNotFoundError, version
 
 import click
 
+from . import deploy as _deploy
+from . import kb as _kb
+from . import profiles as _profiles
+from . import remediate as _remediate
+from . import run as _run
 from .common import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_REMEDIATION_FILE,
@@ -16,7 +21,6 @@ from .common import (
     EXIT_MEDIUM_RISK,
     EXIT_SUCCESS,
     configure_logging,
-    get_env_or_default,
     get_output_dir,
     get_verdict_and_exit_code,
     load_shared_config,
@@ -45,7 +49,13 @@ def cli():
     """
 
 
-# Re-export common helpers so subcommands can still `from . import configure_logging, ...`
+cli.add_command(_deploy.deploy)
+cli.add_command(_deploy.destroy)
+cli.add_command(_kb.kb)
+cli.add_command(_profiles.profiles)
+cli.add_command(_remediate.remediate)
+cli.add_command(_run.run)
+
 __all__ = [
     "DEFAULT_OUTPUT_DIR",
     "DEFAULT_REMEDIATION_FILE",
@@ -57,15 +67,7 @@ __all__ = [
     "EXIT_SUCCESS",
     "cli",
     "configure_logging",
-    "get_env_or_default",
     "get_output_dir",
     "get_verdict_and_exit_code",
     "load_shared_config",
 ]
-
-# Import submodules to trigger command registration
-from . import deploy as _deploy  # noqa: E402, F401
-from . import kb as _kb  # noqa: E402, F401
-from . import profiles_cmd as _profiles_cmd  # noqa: E402, F401
-from . import remediate as _remediate  # noqa: E402, F401
-from . import run as _run  # noqa: E402, F401

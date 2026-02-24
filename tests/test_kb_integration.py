@@ -103,9 +103,11 @@ def test_sync_fails_without_kb_in_config(mock_load):
 
 
 @patch("arch_sparring_agent.cli.deploy.save_to_ssm")
+@patch("arch_sparring_agent.cli.deploy._deploy_guardrails")
 @patch("arch_sparring_agent.cli.deploy._deploy_infra")
-def test_deploy_without_kb_leaves_fields_none(mock_deploy_infra, mock_save):
+def test_deploy_without_kb_leaves_fields_none(mock_deploy_infra, mock_guardrails, mock_save):
     mock_deploy_infra.return_value = ("arn:gw", "gw-1", "pe-1")
+    mock_guardrails.return_value = ("gr-1", "DRAFT")
     runner = CliRunner()
     result = runner.invoke(cli, ["deploy", "--region", "eu-central-1"])
     assert result.exit_code == 0
@@ -116,9 +118,11 @@ def test_deploy_without_kb_leaves_fields_none(mock_deploy_infra, mock_save):
 
 
 @patch("arch_sparring_agent.cli.deploy.save_to_ssm")
+@patch("arch_sparring_agent.cli.deploy._deploy_guardrails")
 @patch("arch_sparring_agent.cli.deploy._deploy_infra")
-def test_deploy_with_kb_populates_fields(mock_deploy_infra, mock_save):
+def test_deploy_with_kb_populates_fields(mock_deploy_infra, mock_guardrails, mock_save):
     mock_deploy_infra.return_value = ("arn:gw", "gw-1", "pe-1")
+    mock_guardrails.return_value = ("gr-1", "DRAFT")
 
     with patch("arch_sparring_agent.kb.infra.setup_knowledge_base") as mock_kb_setup:
         mock_kb_setup.return_value = ("kb-abc", "my-bucket")

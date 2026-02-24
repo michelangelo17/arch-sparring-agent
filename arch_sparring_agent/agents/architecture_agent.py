@@ -17,7 +17,7 @@ from .kb_tool import create_kb_tool
 
 logger = logging.getLogger(__name__)
 
-_BASE_PROMPT = """Analyze infrastructure and verify feature implementations.
+_SYSTEM_PROMPT_BASE = """Analyze infrastructure and verify feature implementations.
 
 UNDERSTANDING THE SOURCES:
 - CloudFormation: DEPLOYED infrastructure (IAM policies, resource configs, what EXISTS)
@@ -106,7 +106,7 @@ Output format:
 def create_architecture_agent(
     templates_dir: str,
     diagrams_dir: str,
-    model: str | BedrockModel,
+    model: BedrockModel,
     source_dir: str | None = None,
     knowledge_base_id: str | None = None,
     region: str | None = None,
@@ -114,8 +114,7 @@ def create_architecture_agent(
 ) -> Agent:
     """Create agent for analyzing CloudFormation templates, diagrams, and source code."""
 
-    # DiagramAnalyzer uses raw Bedrock converse API and needs a string model_id
-    diagram_model_id = model.config["model_id"] if isinstance(model, BedrockModel) else model
+    diagram_model_id = model.config["model_id"]
 
     cfn_analyzer = CloudFormationAnalyzer(templates_dir)
     diagram_analyzer = DiagramAnalyzer(diagrams_dir, model_id=diagram_model_id, region=region)
@@ -197,7 +196,7 @@ def create_architecture_agent(
             region,
         )
 
-    base_prompt = _BASE_PROMPT
+    base_prompt = _SYSTEM_PROMPT_BASE
 
     task_num = 3
     if source_analyzer:

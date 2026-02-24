@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..state import ReviewState
+from ..state import Gap, ReviewState, Risk
 
 if TYPE_CHECKING:
     from .orchestrator import ReviewResult
@@ -29,15 +29,15 @@ def infer_severity(text: str) -> str:
     return "medium"
 
 
-def is_duplicate(text: str, items: list, key: str | None = "description") -> bool:
-    """Check if *text* is a prefix-duplicate of any existing item.
-
-    Works with both ``list[dict]`` (default, uses *key*) and
-    ``list[str]`` (pass ``key=None``).
-    """
+def has_duplicate_description(text: str, items: list[Gap] | list[Risk]) -> bool:
+    """Check if *text* is a prefix-duplicate of any item's description."""
     prefix = text[:50]
-    if key:
-        return any(prefix in item[key] for item in items)
+    return any(prefix in item.description for item in items)
+
+
+def has_duplicate_string(text: str, items: list[str]) -> bool:
+    """Check if *text* is a prefix-duplicate of any string in *items*."""
+    prefix = text[:50]
     return any(prefix in item for item in items)
 
 
@@ -198,17 +198,15 @@ def extract_state_from_review(review_result: ReviewResult) -> ReviewState:
     )
 
 
-def extract_gaps(review_text: str, gaps_context: str) -> list[dict[str, str]]:
+def extract_gaps(review_text: str, gaps_context: str) -> list[Gap]:
     """Extract gaps from review text and context."""
-    gaps: list[dict[str, str]] = []
+    gaps: list[Gap] = []
     gap_id = 1
 
     def _collect_gap(text: str, severity_fn: Callable[[str], str] = infer_severity) -> None:
         nonlocal gap_id
-        if len(text) > 5 and not is_duplicate(text, gaps):
-            gaps.append(
-                {"id": f"gap-{gap_id}", "description": text[:200], "severity": severity_fn(text)}
-            )
+        if len(text) > 5 and not has_duplicate_description(text, gaps):
+            gaps.append(Gap(id=f"gap-{gap_id}", description=text[:200], severity=severity_fn(text)))
             gap_id += 1
 
     for source in [review_text, gaps_context]:
@@ -224,13 +222,13 @@ def extract_gaps(review_text: str, gaps_context: str) -> list[dict[str, str]]:
     return gaps[:20]
 
 
-def extract_risks(review_text: str, risks_context: str) -> list[dict[str, str]]:
+def extract_risks(review_text: str, risks_context: str) -> list[Risk]:
     """Extract risks from review text and context.
 
     Handles flat lists ("## Risks" with bullet points) and nested formats
     ("#### Risks & Mitigations" with "##### Gap N:" sub-headers).
     """
-    risks: list[dict[str, str]] = []
+    risks: list[Risk] = []
     risk_id = 1
 
     def _risk_filter(text: str) -> str | None:
@@ -245,13 +243,9 @@ def extract_risks(review_text: str, risks_context: str) -> list[dict[str, str]]:
         for item in _extract_section_items(
             source, lambda line: _is_section_header(line, "risk"), item_filter=_risk_filter
         ):
-            if not is_duplicate(item, risks):
+            if not has_duplicate_description(item, risks):
                 risks.append(
-                    {
-                        "id": f"risk-{risk_id}",
-                        "description": item[:200],
-                        "impact": infer_severity(item),
-                    }
+                    Risk(id=f"risk-{risk_id}", description=item[:200], impact=infer_severity(item))
                 )
                 risk_id += 1
 
@@ -281,7 +275,7 @@ def extract_mitigations_as_recommendations(review_text: str) -> list[str]:
     def _mitigation_filter(text: str) -> str | None:
         if text.lower().startswith("mitigation:"):
             rec = text[11:].strip()
-            if len(rec) > 10 and not is_duplicate(rec, recommendations, key=None):
+            if len(rec) > 10 and not has_duplicate_string(rec, recommendations):
                 return rec[:300]
         return None
 

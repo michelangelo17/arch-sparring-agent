@@ -12,7 +12,7 @@ from strands.models import BedrockModel
 from ..config import DEFAULT_REGION
 from ..exceptions import MODEL_ERRORS
 from ..infra.memory import create_session_manager, setup_agentcore_memory
-from ..state import ReviewState
+from ..state import Gap, ReviewState, Risk
 
 logger = logging.getLogger(__name__)
 
@@ -43,15 +43,20 @@ RULES:
 - Use tech stack info for language-specific advice"""
 
 
-def _format_list(items: list[dict], severity_key: str) -> str:
-    """Format gaps or risks list for display."""
+def _format_gaps(items: list[Gap]) -> str:
+    """Format gaps list for display."""
     if not items:
         return "  None identified"
-    lines = [
-        f"  {i}. [{item[severity_key].upper()}] {item['description']}"
-        for i, item in enumerate(items, 1)
-    ]
-    return "\n".join(lines)
+    return "\n".join(
+        f"  {i}. [{g.severity.upper()}] {g.description}" for i, g in enumerate(items, 1)
+    )
+
+
+def _format_risks(items: list[Risk]) -> str:
+    """Format risks list for display."""
+    if not items:
+        return "  None identified"
+    return "\n".join(f"  {i}. [{r.impact.upper()}] {r.description}" for i, r in enumerate(items, 1))
 
 
 def _format_recommendations(items: list[str]) -> str:
@@ -61,28 +66,33 @@ def _format_recommendations(items: list[str]) -> str:
     return "\n".join(f"  {i}. {r}" for i, r in enumerate(items, 1))
 
 
-def _format_header_list(items: list[dict], severity_key: str) -> str:
-    """Format truncated list for header display."""
-    lines = [
-        f"  {i}. [{item[severity_key].upper()}] {item['description'][:60]}..."
-        for i, item in enumerate(items, 1)
-    ]
-    return "\n".join(lines)
+def _format_gap_headers(items: list[Gap]) -> str:
+    """Format truncated gap list for header display."""
+    return "\n".join(
+        f"  {i}. [{g.severity.upper()}] {g.description[:60]}..." for i, g in enumerate(items, 1)
+    )
+
+
+def _format_risk_headers(items: list[Risk]) -> str:
+    """Format truncated risk list for header display."""
+    return "\n".join(
+        f"  {i}. [{r.impact.upper()}] {r.description[:60]}..." for i, r in enumerate(items, 1)
+    )
 
 
 def _number_to_prompt(num: int, state: ReviewState) -> str | None:
     """Convert numeric input to discussion prompt."""
     if num <= len(state.gaps):
-        return f"Discuss gap #{num}: {state.gaps[num - 1]['description']}"
+        return f"Discuss gap #{num}: {state.gaps[num - 1].description}"
     risk_num = num - len(state.gaps)
     if risk_num <= len(state.risks):
-        return f"Discuss risk #{risk_num}: {state.risks[risk_num - 1]['description']}"
+        return f"Discuss risk #{risk_num}: {state.risks[risk_num - 1].description}"
     return None
 
 
 def create_remediation_agent(
     state: ReviewState,
-    model: str | BedrockModel,
+    model: BedrockModel,
     region: str = DEFAULT_REGION,
 ) -> Agent:
     """Create agent for remediation discussions with session memory."""
@@ -113,8 +123,8 @@ def create_remediation_agent(
             "Session memory requires a project name for persistence."
         )
 
-    gaps_text = _format_list(state.gaps, "severity")
-    risks_text = _format_list(state.risks, "impact")
+    gaps_text = _format_gaps(state.gaps)
+    risks_text = _format_risks(state.risks)
     recs_text = _format_recommendations(state.recommendations)
 
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(
@@ -168,11 +178,11 @@ def run_remediation(
 
     if state.gaps:
         parts.append("\nGaps:")
-        parts.append(_format_header_list(state.gaps, "severity"))
+        parts.append(_format_gap_headers(state.gaps))
 
     if state.risks:
         parts.append("\nRisks:")
-        parts.append(_format_header_list(state.risks, "impact"))
+        parts.append(_format_risk_headers(state.risks))
 
     parts.append("\nEnter a number to discuss, ask a question, or 'exit' to end.\n")
     header = "\n".join(parts)
@@ -200,7 +210,12 @@ def run_remediation(
             if prompt:
                 user_input = prompt
 
-        response = str(agent(user_input))
+        try:
+            response = str(agent(user_input))
+        except MODEL_ERRORS as e:
+            logger.warning("Agent call failed: %s", e)
+            _emit("\n[Error: could not get a response — try again or rephrase.]")
+            continue
         _emit(f"\n{response}")
         notes.append(f"Agent: {response}")
 

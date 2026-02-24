@@ -158,10 +158,34 @@ class GuardrailsChecker:
 
     @staticmethod
     def _chunk_content(content: str) -> list[str]:
-        return [
-            content[i : i + GROUNDING_CONTENT_CHUNK_SIZE]
-            for i in range(0, len(content), GROUNDING_CONTENT_CHUNK_SIZE)
-        ]
+        """Split content into chunks up to GROUNDING_CONTENT_CHUNK_SIZE.
+
+        Splits on paragraph boundaries (``\\n\\n``) first, then merges
+        paragraphs into chunks that fit the size limit.  Falls back to a
+        hard slice when a single paragraph exceeds the limit.
+        """
+        limit = GROUNDING_CONTENT_CHUNK_SIZE
+        paragraphs = content.split("\n\n")
+        chunks: list[str] = []
+        current = ""
+
+        for para in paragraphs:
+            candidate = f"{current}\n\n{para}" if current else para
+            if len(candidate) <= limit:
+                current = candidate
+            else:
+                if current:
+                    chunks.append(current)
+                if len(para) <= limit:
+                    current = para
+                else:
+                    for i in range(0, len(para), limit):
+                        chunks.append(para[i : i + limit])
+                    current = ""
+
+        if current:
+            chunks.append(current)
+        return chunks or [content]
 
 
 def create_guardrails_checker(

@@ -59,7 +59,7 @@ Items verified in templates/source (not gaps) can be omitted."""
 
 
 def create_question_agent(
-    model: str | BedrockModel,
+    model: BedrockModel,
     templates_dir: str | None = None,
     source_dir: str | None = None,
 ) -> Agent:

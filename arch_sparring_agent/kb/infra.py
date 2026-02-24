@@ -13,6 +13,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from ..config import DEFAULT_REGION, IAM_KB_PROPAGATION_WAIT
 from ..exceptions import AWS_ERRORS, ConfigurationError
 from ..infra import get_account_id
+from ..infra.polling import CONFLICT_CODES, ensure_resource, poll_until
 
 logger = logging.getLogger(__name__)
 
@@ -76,18 +77,17 @@ def _delete_data_bucket(bucket_name: str, region: str) -> None:
 def _create_vector_bucket(vector_bucket_name: str, region: str) -> str:
     """Create an S3 vector bucket. Returns the vector bucket ARN."""
     s3v = boto3.client("s3vectors", region_name=region)
-    try:
+
+    def _create() -> str:
         resp = s3v.create_vector_bucket(vectorBucketName=vector_bucket_name)
-        arn = resp["vectorBucketArn"]
         logger.info("Created S3 vector bucket: %s", vector_bucket_name)
-        return arn
-    except ClientError as e:
-        if "ConflictException" in str(e) or "already exists" in str(e).lower():
-            arn = _find_vector_bucket_arn(s3v, vector_bucket_name)
-            if arn:
-                logger.info("Using existing S3 vector bucket: %s", vector_bucket_name)
-                return arn
-        raise
+        return resp["vectorBucketArn"]
+
+    return ensure_resource(
+        _create,
+        lambda: _find_vector_bucket_arn(s3v, vector_bucket_name),
+        desc=f"S3 vector bucket '{vector_bucket_name}'",
+    )
 
 
 def _find_vector_bucket_arn(s3v: Any, name: str) -> str | None:
@@ -101,7 +101,8 @@ def _find_vector_bucket_arn(s3v: Any, name: str) -> str | None:
 def _create_vector_index(vector_bucket_name: str, index_name: str, region: str) -> str:
     """Create a vector index inside the vector bucket. Returns the index ARN."""
     s3v = boto3.client("s3vectors", region_name=region)
-    try:
+
+    def _create() -> str:
         resp = s3v.create_index(
             vectorBucketName=vector_bucket_name,
             indexName=index_name,
@@ -115,16 +116,14 @@ def _create_vector_index(vector_bucket_name: str, index_name: str, region: str) 
                 ],
             },
         )
-        arn = resp["indexArn"]
         logger.info("Created vector index: %s", index_name)
-        return arn
-    except ClientError as e:
-        if "ConflictException" in str(e) or "already exists" in str(e).lower():
-            arn = _find_vector_index_arn(s3v, vector_bucket_name, index_name)
-            if arn:
-                logger.info("Using existing vector index: %s", index_name)
-                return arn
-        raise
+        return resp["indexArn"]
+
+    return ensure_resource(
+        _create,
+        lambda: _find_vector_index_arn(s3v, vector_bucket_name, index_name),
+        desc=f"vector index '{index_name}'",
+    )
 
 
 def _find_vector_index_arn(s3v: Any, vector_bucket_name: str, index_name: str) -> str | None:
@@ -303,35 +302,34 @@ def _create_bedrock_kb(
         },
     }
 
-    max_attempts = 4
-    for attempt in range(1, max_attempts + 1):
+    def _try_create() -> str | None:
         try:
             resp = bedrock.create_knowledge_base(**kb_kwargs)
             kb_id = resp["knowledgeBase"]["knowledgeBaseId"]
             logger.info("Created Bedrock Knowledge Base: %s (ID: %s)", KB_NAME, kb_id)
             return kb_id
         except ClientError as e:
-            err_msg = str(e)
-            if "ConflictException" in err_msg or "already exists" in err_msg.lower():
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code in CONFLICT_CODES:
                 kb_id = _find_kb_by_name(bedrock)
                 if kb_id:
                     logger.info("Using existing Bedrock Knowledge Base: %s", KB_NAME)
                     return kb_id
-            if "not authorized" in err_msg and attempt < max_attempts:
-                wait = IAM_KB_PROPAGATION_WAIT * attempt
-                logger.info(
-                    "IAM policy not yet propagated (attempt %d/%d), retrying in %ds...",
-                    attempt,
-                    max_attempts,
-                    wait,
-                )
-                time.sleep(wait)
-                continue
+            if "not authorized" in str(e).lower():
+                logger.info("IAM policy not yet propagated, retrying...")
+                return None
             raise
 
-    raise ConfigurationError(
-        f"KB creation failed after {max_attempts} attempts (IAM not propagated)"
+    result = poll_until(
+        _try_create,
+        interval=IAM_KB_PROPAGATION_WAIT,
+        timeout=IAM_KB_PROPAGATION_WAIT * 7,
+        backoff=1.5,
+        desc="Bedrock KB creation",
     )
+    if result:
+        return result
+    raise ConfigurationError("KB creation failed after retries (IAM not propagated)")
 
 
 def _find_kb_by_name(bedrock: Any) -> str | None:
@@ -347,7 +345,7 @@ def _create_data_source(kb_id: str, bucket_name: str, region: str) -> str:
     """Create an S3 data source for the KB. Returns the data source ID."""
     bedrock = boto3.client("bedrock-agent", region_name=region)
 
-    try:
+    def _create() -> str:
         resp = bedrock.create_data_source(
             knowledgeBaseId=kb_id,
             name="waf-content",
@@ -361,16 +359,14 @@ def _create_data_source(kb_id: str, bucket_name: str, region: str) -> str:
                 "chunkingConfiguration": {"chunkingStrategy": "NONE"},
             },
         )
-        ds_id = resp["dataSource"]["dataSourceId"]
-        logger.info("Created KB data source: %s", ds_id)
-        return ds_id
-    except ClientError as e:
-        if "ConflictException" in str(e) or "already exists" in str(e).lower():
-            ds_id = _find_data_source(bedrock, kb_id)
-            if ds_id:
-                logger.info("Using existing KB data source")
-                return ds_id
-        raise
+        logger.info("Created KB data source: %s", resp["dataSource"]["dataSourceId"])
+        return resp["dataSource"]["dataSourceId"]
+
+    return ensure_resource(
+        _create,
+        lambda: _find_data_source(bedrock, kb_id),
+        desc="KB data source",
+    )
 
 
 def _find_data_source(bedrock: Any, kb_id: str) -> str | None:

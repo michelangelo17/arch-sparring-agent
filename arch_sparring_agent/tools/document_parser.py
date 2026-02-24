@@ -38,5 +38,5 @@ class DocumentParser:
         return {"filename": filename, "content": doc.content, "metadata": doc.metadata}
 
     def list_documents(self) -> list[str]:
-        """List markdown files in directory."""
-        return [f.name for f in self.document_dir.glob("*.md")]
+        """List markdown files recursively, returning paths relative to the document directory."""
+        return [str(f.relative_to(self.document_dir)) for f in self.document_dir.rglob("*.md")]

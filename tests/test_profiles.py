@@ -81,7 +81,7 @@ def tmp_user_dir(tmp_path, monkeypatch):
     user_profiles = tmp_path / "user_profiles"
     user_profiles.mkdir()
     monkeypatch.setattr("arch_sparring_agent.profiles.USER_DIR", user_profiles)
-    monkeypatch.setattr("arch_sparring_agent.cli.profiles_cmd.USER_DIR", user_profiles)
+    monkeypatch.setattr("arch_sparring_agent.cli.profiles.USER_DIR", user_profiles)
     return user_profiles
 
 

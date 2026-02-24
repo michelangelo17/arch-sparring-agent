@@ -36,12 +36,20 @@ def setup_guardrails(region: str = DEFAULT_REGION) -> tuple[str, str]:
 
 
 def _find_guardrail_by_name(client: Any) -> str | None:
-    """Find an existing guardrail by name. Returns guardrail_id or None."""
+    """Find an existing guardrail by name with pagination."""
+    next_token: str | None = None
     try:
-        response = client.list_guardrails()
-        for guardrail in response.get("guardrails", []):
-            if guardrail.get("name") == GUARDRAIL_NAME:
-                return guardrail["id"]
+        while True:
+            kwargs: dict[str, Any] = {}
+            if next_token:
+                kwargs["nextToken"] = next_token
+            response = client.list_guardrails(**kwargs)
+            for guardrail in response.get("guardrails", []):
+                if guardrail.get("name") == GUARDRAIL_NAME:
+                    return guardrail["id"]
+            next_token = response.get("nextToken")
+            if not next_token:
+                break
     except AWS_ERRORS as e:
         logger.warning("Could not list guardrails: %s", e)
     return None
