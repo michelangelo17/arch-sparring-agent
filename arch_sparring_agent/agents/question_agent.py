@@ -55,7 +55,11 @@ After done_asking, summarize ALL gaps with the user's responses so the sparring
 agent has full context. Format:
 - Gap: [description] -- User response: [what the user said]
 - Gap: [description] -- Not addressed by user
-Items verified in templates/source (not gaps) can be omitted."""
+Items verified in templates/source (not gaps) can be omitted.
+
+OUTPUT CONSTRAINT: Your final output after done_asking must contain ONLY the gap
+summary in the format above. Do not include search results, analysis, preamble,
+or any other text."""
 
 
 def create_question_agent(
@@ -165,5 +169,7 @@ BEFORE asking the user:
 ARCHITECTURE FINDINGS:
 {arch_findings}
 
-Verify gaps via search first, then ask about remaining unknowns. Call done_asking when ready.""",
+Verify gaps via search first, then ask about remaining unknowns. Call done_asking when ready.
+
+Your final output must contain ONLY the gap summary. No preamble or analysis.""",
     )

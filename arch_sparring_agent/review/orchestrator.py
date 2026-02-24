@@ -31,7 +31,6 @@ from ..config import (
 from ..exceptions import MODEL_ERRORS
 from ..infra import SharedConfig
 from .context_condenser import (
-    extract_architecture_findings,
     extract_phase_findings,
     extract_requirements,
 )
@@ -273,7 +272,7 @@ class ReviewOrchestrator:
         arch_summary = run_architecture(self.architecture_agent, req_findings, has_kb=self._has_kb)
         self._capture(arch_summary)
 
-        arch_findings = extract_architecture_findings(arch_summary, self.standard_model)
+        arch_findings = arch_summary
         self._check_grounding("architecture", arch_summary, arch_findings)
         arch_findings = self._verify_against_defaults(arch_findings)
 

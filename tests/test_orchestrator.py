@@ -138,9 +138,6 @@ def run_review_mocks():
     mock_extract_req = patch(f"{_ORCH}.extract_requirements").start()
     mock_extract_req.side_effect = lambda content, model: f"[extracted] {content}"
 
-    mock_extract_arch = patch(f"{_ORCH}.extract_architecture_findings").start()
-    mock_extract_arch.side_effect = lambda content, model: f"[extracted] {content}"
-
     mock_extract_phase = patch(f"{_ORCH}.extract_phase_findings").start()
     mock_extract_phase.side_effect = lambda content, phase, model: f"[extracted:{phase}] {content}"
 
@@ -160,7 +157,6 @@ def run_review_mocks():
             mock_spar_agent=mock_spar_agent,
             mock_rev_agent=mock_rev_agent,
             mock_extract_req=mock_extract_req,
-            mock_extract_arch=mock_extract_arch,
             mock_extract_phase=mock_extract_phase,
             mock_run_arch=mock_run_arch,
             mock_run_questions=mock_run_questions,
@@ -203,18 +199,15 @@ def test_run_review(run_review_mocks):
     run_review_mocks.mock_extract_req.assert_called_once_with(
         "Requirements Summary", orch.standard_model
     )
-    run_review_mocks.mock_extract_arch.assert_called_once_with(
-        "Architecture Summary", orch.standard_model
-    )
 
     run_review_mocks.mock_run_questions.assert_called_with(
         orch.question_agent,
-        "[extracted] Architecture Summary",
+        "Architecture Summary",
     )
 
     run_review_mocks.mock_run_sparring.assert_called()
     sparring_call_args = run_review_mocks.mock_run_sparring.call_args
-    assert sparring_call_args[0][1] == "[extracted] Architecture Summary"
+    assert sparring_call_args[0][1] == "Architecture Summary"
     assert sparring_call_args[0][2] == "[extracted:Q&A] Questions Context"
 
     run_review_mocks.mock_gen_review.assert_called()
@@ -223,7 +216,7 @@ def test_run_review(run_review_mocks):
     assert result.requirements_summary == "Requirements Summary"
     assert result.requirements_findings == "[extracted] Requirements Summary"
     assert result.architecture_summary == "Architecture Summary"
-    assert result.architecture_findings == "[extracted] Architecture Summary"
+    assert result.architecture_findings == "Architecture Summary"
     assert result.qa_context == "Questions Context"
     assert result.qa_findings == "[extracted:Q&A] Questions Context"
     assert result.sparring_context == "Sparring Context"

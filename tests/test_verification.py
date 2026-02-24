@@ -59,17 +59,12 @@ def verification_integration_mocks():
         lambda c, m: c
     )
 
-    mock_extract_arch = patch(
-        "arch_sparring_agent.review.orchestrator.extract_architecture_findings"
-    ).start()
-    mock_extract_arch.side_effect = lambda c, m: f"### Features Not Found\n- item from {c}"
-
     patch("arch_sparring_agent.review.orchestrator.extract_phase_findings").start().side_effect = (
         lambda c, p, m: c
     )
 
     mock_run_arch = patch("arch_sparring_agent.review.orchestrator.run_architecture").start()
-    mock_run_arch.return_value = "arch summary"
+    mock_run_arch.return_value = "### Features Not Found\n- item from arch summary"
 
     patch("arch_sparring_agent.review.orchestrator.run_questions").start().return_value = "q"
     patch("arch_sparring_agent.review.orchestrator.run_sparring").start().return_value = "s"
