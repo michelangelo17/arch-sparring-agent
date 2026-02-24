@@ -80,6 +80,7 @@ def test_extract_architecture_findings_calls_agent(mock_agent_cls):
     kwargs = mock_agent_cls.call_args[1]
     assert "Features Verified" in kwargs["system_prompt"]
     assert "Features Not Found" in kwargs["system_prompt"]
+    assert "WAF Assessment" in kwargs["system_prompt"]
     assert result == "### Components\n- API Gateway"
 
 

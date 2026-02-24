@@ -259,8 +259,7 @@ class ReviewOrchestrator:
         # Phase 1: Requirements
         self._capture("## Phase 1: Requirements Analysis\n")
         req_result = self.requirements_agent(
-            "Analyze all documents. Summarize requirements and constraints. "
-            "Keep it under 600 words."
+            "Analyze all documents. Summarize requirements and constraints."
         )
         req_summary = str(req_result)
         self._capture(req_summary)

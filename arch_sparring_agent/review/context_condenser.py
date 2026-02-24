@@ -1,8 +1,8 @@
-"""Structured extraction of phase outputs to prevent token overflow without data loss.
+"""Structured extraction of phase outputs for clean signal propagation.
 
-Instead of hard character slices or high-threshold summarization, this module extracts
-structured findings from each phase's raw output. Every item is preserved as a concise
-bullet point — no mid-sentence cuts, no lost findings.
+Instead of passing verbose, tool-heavy raw output between phases, this module extracts
+structured findings as concise bullet points — no mid-sentence cuts, no lost findings.
+Short outputs (under CONDENSER_PASSTHROUGH_THRESHOLD) pass through unchanged.
 """
 
 from __future__ import annotations
@@ -95,9 +95,7 @@ Rules:
 - One bullet per item
 - No prose or elaboration — just state the requirement
 - Preserve ALL items, do not skip any
-- Group under: ### Functional Requirements, ### Non-Functional Requirements, ### Constraints
-
-Max 800 words.""",
+- Group under: ### Functional Requirements, ### Non-Functional Requirements, ### Constraints""",
         model,
     )
 
@@ -105,8 +103,8 @@ Max 800 words.""",
 def extract_architecture_findings(raw_output: str, model: BedrockModel) -> str:
     """Extract structured findings from Phase 2 output.
 
-    Returns Components, Features Verified, and Features Not Found sections
-    with one line per item including evidence.
+    Returns Components, Features Verified, Features Not Found, and (when present)
+    WAF Assessment sections with one line per item including evidence.
     """
     return _extract(
         raw_output,
@@ -122,14 +120,17 @@ Format:
 ### Features Not Found
 - Feature: [what was searched for]
 
+### WAF Assessment
+- Pillar — Finding: [recommendation vs actual, with source tag]
+  (Include this section only if WAF findings are present in the input)
+
 Rules:
 - One line per item
 - Include the evidence reference for verified features
-- Preserve ALL items from both Verified and Not Found sections
+- Include the [source: ...] tag for WAF findings
+- Preserve ALL items from every section
 - Do not add items that aren't in the input
-- Do not remove items that are in the input
-
-Max 600 words.""",
+- Do not remove items that are in the input""",
         model,
     )
 
@@ -160,8 +161,6 @@ Rules:
 - One bullet per item
 - Include brief reasoning where it was discussed
 - Preserve ALL items — do not skip any
-- Only use categories that have items (skip empty sections)
-
-Max 400 words.""",
+- Only use categories that have items (skip empty sections)""",
         model,
     )

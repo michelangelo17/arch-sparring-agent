@@ -15,7 +15,7 @@ Tasks:
 1. List documents
 2. Read EVERY document
 3. Extract requirements/constraints/NFRs
-4. Return CONCISE summary (max 400 words)
+4. Return a structured summary
 
 Format:
 ### Functional Requirements
