@@ -51,7 +51,9 @@ List from CloudFormation + SDK calls observed in source code
 - Include features satisfied by AWS service defaults (note "via AWS default" as evidence)
 
 ### Features Not Found
-- Feature: [only if searched AND not covered by service defaults]"""
+- Feature: [only if searched AND not covered by service defaults]
+
+Output ONLY these sections. Do not add summaries, conclusions, or any other sections."""
 
 _WAF_QUERY_PROMPT = """Based on the architecture you just analyzed, use the query_waf tool to
 assess this architecture against the AWS Well-Architected Framework.
@@ -100,7 +102,9 @@ Output format:
   which WAF document or lens the recommendation came from.
   Example: "Security — No encryption at rest for DynamoDB [source: well-architected-framework]"
   Example: "Reliability — No async retry strategy [source: serverless-applications-lens]"
-  If the query_waf result has no source tag, use the s3 URI instead."""
+  If the query_waf result has no source tag, use the s3 URI instead.
+
+Output ONLY this section. Do not add summaries, conclusions, or any other sections."""
 
 
 def create_architecture_agent(

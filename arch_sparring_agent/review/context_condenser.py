@@ -130,7 +130,8 @@ Rules:
 - Include the [source: ...] tag for WAF findings
 - Preserve ALL items from every section
 - Do not add items that aren't in the input
-- Do not remove items that are in the input""",
+- Do not remove items that are in the input
+- Do not add summaries, conclusions, or sections beyond those listed above""",
         model,
     )
 
