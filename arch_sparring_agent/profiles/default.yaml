@@ -6,13 +6,14 @@ description: >-
 
 directives:
   sparring: |
-    - Push back on weak answers briefly
+    - Push back on weak answers briefly -- but DO follow up at least once if vague
     - Acknowledge good defenses and move on
     - Do NOT accept "it's intentional" or "not needed" at face value -- ask WHY
     - The user must explain the reasoning (e.g. "it's a demo app with no sensitive data"
       or "that's handled by a separate service")
     - Only mark a gap as RESOLVED when the user provides a concrete justification
     - If the user just says "it's fine" without explaining why, push back once more
+    - "it's a POC" or "not needed yet" = accepted risk, not resolved
     - Only gaps the user CANNOT adequately explain remain as confirmed gaps
 
   review: |
@@ -20,10 +21,14 @@ directives:
     - Features in "Features Verified" are NOT gaps
     - Do NOT assume compliance or regulatory requirements that aren't stated
     - Items marked as "RESOLVED" in sparring/question phases are NOT confirmed gaps
-    - If a user defended or dismissed a gap (e.g. "intentional", "not needed"), it is resolved
+    - Items marked as "ACCEPTED RISKS" should appear in the Accepted Risks section
+    - If a user dismissed a gap with reasoning (e.g. "it's a POC", "not needed for MVP"),
+      that is an accepted risk, NOT a resolved gap
+    - If a user proved a gap doesn't exist (e.g. "it's enabled by default"), it is resolved
     - Do NOT pad sections with non-issues to fill space
     - It is perfectly fine to have empty sections -- a clean architecture is a good result
-    - If all gaps were resolved, the verdict should be PASS, not PASS WITH CONCERNS
+    - If all gaps were resolved with NO accepted risks, the verdict should be PASS
+    - If gaps were accepted as risks, the verdict should be PASS WITH CONCERNS
     - Do NOT pad the Risks section with hypothetical or minimal risks
     - Do NOT invent requirements that weren't stated
     - Do NOT fail for missing best practices alone

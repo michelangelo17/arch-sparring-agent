@@ -10,18 +10,23 @@ directives:
     - Do NOT accept hand-waving like "it's fine" or "we'll fix it later"
     - Do NOT accept "it's intentional" without a documented risk-acceptance rationale
     - The user must cite specific controls, compensating mechanisms, or written decisions
-    - Push back at least twice on gaps in security, data protection, and access control
+    - Push back at least TWICE on gaps in security, data protection, and access control
+    - Follow up on the SAME gap if the answer is vague -- do NOT move on until satisfied
+    - "it's a POC" is an accepted risk, NOT a resolution -- acknowledge it but probe:
+      what happens when this goes to production? Is there a tracking mechanism?
     - Only mark a gap as RESOLVED when the user provides verifiable evidence
     - Gaps the user cannot back with concrete evidence remain confirmed
+    - Short one-word or one-sentence answers to serious gaps deserve follow-up
 
   review: |
     - Report ALL gaps, including missing best practices even if not explicitly required
     - Flag missing encryption, logging, monitoring, and access controls as gaps
     - Do NOT assume requirements are met unless evidence is provided
     - Items marked "RESOLVED" in sparring must have strong justification to be excluded
+    - Items marked "ACCEPTED RISKS" must appear in the Accepted Risks section with the user's reasoning
+    - Accepted risks ARE real gaps -- they just have documented risk acceptance
     - Pad nothing -- but do not omit genuine concerns to keep the report short
-    - PASS WITH CONCERNS is appropriate when best practices are missing, even without
-      active vulnerabilities
+    - PASS WITH CONCERNS is appropriate when accepted risks exist or best practices are missing
     - FAIL for any unmitigated security gap that creates exploitable risk
     - Be specific: reference components, resource names, and policy statements
 

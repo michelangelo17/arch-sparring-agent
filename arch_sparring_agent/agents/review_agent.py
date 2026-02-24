@@ -18,22 +18,29 @@ Format:
 2-3 sentences on overall assessment.
 
 ## Confirmed Gaps
-- Only gaps from "Features Not Found" or discussed in sparring
+- Gaps from "Features Not Found" that were NOT resolved in sparring
 - If there are no genuine gaps, write "No confirmed gaps."
 - Do NOT list items here that you then explain away as non-issues
 
+## Accepted Risks
+- Items the user acknowledged as missing but accepted with reasoning
+  (e.g. "it's a POC", "not needed for MVP", "intentional for now")
+- These ARE real gaps but with documented risk acceptance
+- If none, write "No accepted risks."
+
 ## Risks
-- Only risks arising from confirmed gaps (up to 3)
-- If there are no confirmed gaps, write "No significant risks identified."
+- Risks arising from confirmed gaps AND accepted risks (up to 5)
+- If there are no confirmed gaps or accepted risks, write "No significant risks identified."
 
 ## Recommendations
-- Only actionable recommendations for confirmed gaps (up to 3)
+- Actionable recommendations for confirmed gaps (up to 3)
+- Optional improvements for accepted risks clearly labeled as "Production readiness" (up to 3)
 - If there are no confirmed gaps, write "No recommendations." or offer
   optional improvements clearly labeled as "Nice to have" (not required)
 
 ## Verdict
-- PASS: No gaps, or all requirements met (including via service defaults)
-- PASS WITH CONCERNS: Has genuine gaps that warrant attention but no active vulnerabilities
+- PASS: No confirmed gaps AND no accepted risks, or all met via service defaults
+- PASS WITH CONCERNS: No confirmed gaps but has accepted risks for production
 - FAIL: Only for actively exploitable security vulnerabilities or violations of
   STATED requirements.
 
@@ -99,7 +106,8 @@ def run_review(
 
     prompt += (
         "\n\nOnly report gaps from 'Confirmed Gaps' or 'Features Not Found'. "
-        "Verified features are NOT gaps."
+        "Items under 'Accepted Risks' go in the Accepted Risks section. "
+        "Verified/Resolved features are NOT gaps."
     )
 
     from . import safe_invoke

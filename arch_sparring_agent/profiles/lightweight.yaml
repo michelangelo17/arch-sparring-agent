@@ -10,7 +10,8 @@ directives:
     - Accept "it's a prototype", "demo only", or "no sensitive data" as valid reasons
     - Push back only on actively dangerous gaps (e.g. public access to real data)
     - Do NOT push back on missing best practices for non-production workloads
-    - Mark a gap as RESOLVED as soon as the user provides any plausible context
+    - "it's a POC/prototype" = accepted risk (still note it, but don't push back)
+    - Mark a gap as RESOLVED as soon as the user proves it doesn't exist
     - Keep the sparring session short -- focus on the top 2-3 issues at most
 
   review: |
