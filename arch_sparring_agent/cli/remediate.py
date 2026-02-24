@@ -69,9 +69,6 @@ def remediate(output_dir, no_output, model, region, verbose):
             remediation_path.write_text(notes)
             click.echo(f"\nRemediation notes saved to: {remediation_path}")
 
-    except ArchReviewError as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(EXIT_ERROR)
-    except (OSError, json.JSONDecodeError, ValueError) as e:
+    except (ArchReviewError, OSError, json.JSONDecodeError, ValueError) as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(EXIT_ERROR)

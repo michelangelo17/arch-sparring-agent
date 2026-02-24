@@ -39,4 +39,6 @@ class DocumentParser:
 
     def list_documents(self) -> list[str]:
         """List markdown files recursively, returning paths relative to the document directory."""
-        return [str(f.relative_to(self.document_dir)) for f in self.document_dir.rglob("*.md")]
+        return sorted(
+            str(f.relative_to(self.document_dir)) for f in self.document_dir.rglob("*.md")
+        )
