@@ -13,6 +13,7 @@ from arch_sparring_agent.profiles import (
     BUILTIN_DIR,
     get_directive,
     get_profile_path,
+    get_setting,
     list_profiles,
     load_profile,
 )
@@ -214,3 +215,38 @@ def test_create_already_exists_fails(tmp_user_dir):
     result = runner.invoke(cli, ["profiles", "create", "_test_create_profile", "--from", "default"])
     assert result.exit_code != 0
     assert "already exists" in result.output
+
+
+# ---------------------------------------------------------------------------
+# get_setting
+# ---------------------------------------------------------------------------
+
+
+def test_get_setting_returns_nested_value():
+    profile = load_profile("strict")
+    assert get_setting(profile, "sparring", "max_rounds", "high", default=2) == 3
+
+
+def test_get_setting_returns_default_when_missing():
+    profile = load_profile("strict")
+    assert get_setting(profile, "nonexistent", "key", default=42) == 42
+
+
+def test_get_setting_none_profile_returns_default():
+    assert get_setting(None, "sparring", "max_rounds", "high", default=99) == 99
+
+
+def test_all_profiles_have_sparring_settings():
+    for name in ("strict", "default", "lightweight"):
+        profile = load_profile(name)
+        for severity in ("high", "medium", "low"):
+            value = get_setting(
+                profile,
+                "sparring",
+                "max_rounds",
+                severity,
+                default=None,
+            )
+            assert isinstance(value, int), (
+                f"{name} profile missing settings.sparring.max_rounds.{severity}"
+            )

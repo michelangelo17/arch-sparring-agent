@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import yaml
 
@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 BUILTIN_DIR = Path(__file__).parent / "profiles"
 USER_DIR = Path.home() / ".config" / "arch-review" / "profiles"
 
-_EXPECTED_KEYS = {"name", "description", "directives"}
+_EXPECTED_KEYS = {"name", "description", "directives", "settings"}
+
+T = TypeVar("T")
 
 
 def project_dir() -> Path:
@@ -71,6 +73,28 @@ def get_directive(profile: dict[str, Any] | None, agent_name: str) -> str:
         return ""
     directives = profile.get("directives", {})
     return directives.get(agent_name, "")
+
+
+def get_setting(
+    profile: dict[str, Any] | None,
+    *keys: str,
+    default: T = None,  # type: ignore[assignment]
+) -> T:
+    """Retrieve a nested setting value from a loaded profile.
+
+    Walks the ``settings`` sub-dict using *keys* as successive lookups.
+    Returns *default* when the profile is ``None`` or the key path is missing.
+    """
+    if profile is None:
+        return default  # type: ignore[return-value]
+    current: Any = profile.get("settings", {})
+    for key in keys:
+        if not isinstance(current, dict):
+            return default  # type: ignore[return-value]
+        current = current.get(key)
+        if current is None:
+            return default  # type: ignore[return-value]
+    return current  # type: ignore[return-value]
 
 
 def list_profiles() -> dict[str, list[str]]:

@@ -17,7 +17,6 @@ from ..agents.architecture_agent import create_architecture_agent, run_architect
 from ..agents.question_agent import create_question_agent, run_questions
 from ..agents.requirements_agent import create_requirements_agent
 from ..agents.review_agent import create_review_agent, run_review
-from ..agents.sparring_agent import create_sparring_agent, run_sparring
 from ..config import (
     AGENT_ARCHITECTURE,
     AGENT_QUESTION,
@@ -35,6 +34,7 @@ from .context_condenser import (
     extract_requirements,
 )
 from .grounding import GuardrailsChecker, create_guardrails_checker
+from .sparring import run_sparring
 
 logger = logging.getLogger(__name__)
 
@@ -85,23 +85,23 @@ class ReviewOrchestrator:
         requirements_agent: Agent,
         architecture_agent: Agent,
         question_agent: Agent,
-        sparring_agent: Agent,
         review_agent: Agent,
         standard_model: BedrockModel,
         output_fn: Callable[[str], None] | None = None,
         *,
         has_kb: bool = False,
         guardrails: GuardrailsChecker | None = None,
+        profile: dict[str, Any] | None = None,
     ):
         self.requirements_agent = requirements_agent
         self.architecture_agent = architecture_agent
         self.question_agent = question_agent
-        self.sparring_agent = sparring_agent
         self.review_agent = review_agent
         self.standard_model = standard_model
         self.output_fn = output_fn
         self._has_kb = has_kb
         self._guardrails = guardrails
+        self._profile = profile
         self.captured_output: list[str] = []
 
     @classmethod
@@ -146,7 +146,6 @@ class ReviewOrchestrator:
             templates_dir=templates_dir,
             source_dir=source_dir,
         )
-        sparring_agent = create_sparring_agent(standard_model, profile=profile)
         review_agent = create_review_agent(
             reasoning_model,
             knowledge_base_id=kb_id,
@@ -169,12 +168,12 @@ class ReviewOrchestrator:
             requirements_agent=requirements_agent,
             architecture_agent=architecture_agent,
             question_agent=question_agent,
-            sparring_agent=sparring_agent,
             review_agent=review_agent,
             standard_model=standard_model,
             output_fn=output_fn,
             has_kb=bool(kb_id and kb_region),
             guardrails=guardrails,
+            profile=profile,
         )
 
     @staticmethod
@@ -286,8 +285,13 @@ class ReviewOrchestrator:
 
         # Phase 4: Architecture Sparring
         self._capture("\n## Phase 4: Architecture Sparring\n")
-        sparring_context = run_sparring(self.sparring_agent, arch_findings, qa_findings)
-        self._capture(f"\n{sparring_context}")
+        sparring_context = run_sparring(
+            self.standard_model,
+            arch_findings,
+            qa_findings,
+            self._profile,
+            output_fn=self._capture,
+        )
 
         sparring_findings = extract_phase_findings(
             sparring_context, "Sparring", self.standard_model

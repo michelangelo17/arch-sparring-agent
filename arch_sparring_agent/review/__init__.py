@@ -11,6 +11,7 @@ from .context_condenser import (
 from .extraction import extract_state_from_review, extract_verdict
 from .grounding import GroundingResult, GuardrailsChecker, create_guardrails_checker
 from .orchestrator import ReviewOrchestrator, ReviewResult
+from .sparring import run_sparring
 
 __all__ = [
     "ReviewOrchestrator",
@@ -24,4 +25,5 @@ __all__ = [
     "extract_verdict",
     "GroundingResult",
     "GuardrailsChecker",
+    "run_sparring",
 ]

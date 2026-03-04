@@ -7,6 +7,7 @@ from arch_sparring_agent.review.extraction import (
     has_duplicate_description,
     has_duplicate_string,
     infer_severity,
+    parse_gaps_from_findings,
     strip_markdown,
 )
 from arch_sparring_agent.review.orchestrator import ReviewResult
@@ -345,3 +346,33 @@ Verdict: PASS WITH CONCERNS
     assert any("logging" in r for r in state.recommendations)
 
     assert state.verdict == "PASS WITH CONCERNS"
+
+
+# ---------------------------------------------------------------------------
+# parse_gaps_from_findings
+# ---------------------------------------------------------------------------
+
+
+def test_parse_gaps_from_findings_features_not_found():
+    arch = "### Features Not Found\n- Encryption at rest\n- Logging"
+    gaps = parse_gaps_from_findings(arch, "")
+    assert gaps == ["Encryption at rest", "Logging"]
+
+
+def test_parse_gaps_from_findings_waf_assessment():
+    arch = "### WAF Assessment\n- No backup strategy\n- Missing monitoring"
+    gaps = parse_gaps_from_findings(arch, "")
+    assert gaps == ["No backup strategy", "Missing monitoring"]
+
+
+def test_parse_gaps_from_findings_deduplicates():
+    arch = "### Features Not Found\n- Encryption at rest"
+    qa = "### Features Not Found\n- Encryption at rest\n- Logging"
+    gaps = parse_gaps_from_findings(arch, qa)
+    assert len(gaps) == 2
+    assert "Encryption at rest" in gaps
+    assert "Logging" in gaps
+
+
+def test_parse_gaps_from_findings_empty():
+    assert parse_gaps_from_findings("No sections here.", "") == []

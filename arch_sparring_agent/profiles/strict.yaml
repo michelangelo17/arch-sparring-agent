@@ -40,3 +40,10 @@ directives:
       the CloudFormation template, source code, or well-known service behavior
     - Err on the side of flagging: a false positive is better than a missed gap
 
+settings:
+  sparring:
+    max_rounds:
+      high: 3
+      medium: 2
+      low: 1
+

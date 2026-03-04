@@ -14,8 +14,8 @@ The Click command in `cli/run.py` validates input directories, loads the review 
 
 `ReviewOrchestrator.create()` is the factory that wires everything together:
 
-- Creates two model variants via `create_model()`: a **standard model** (no reasoning) for simple tasks (requirements, questions, sparring, context condensation), and a **reasoning model** (with extended thinking) for architecture and review analysis. When `reasoning_level` is `"off"`, both are the same model instance.
-- Creates all 5 agents, each with their own system prompt and tool set.
+- Creates two model variants via `create_model()`: a **standard model** (no reasoning) for simple tasks (requirements, questions, context condensation), and a **reasoning model** (with extended thinking) for architecture and review analysis. When `reasoning_level` is `"off"`, both are the same model instance.
+- Creates agents for Phases 1-3 and 5, each with their own system prompt and tool set. Phase 4 (sparring) agents are created per-gap by `review/sparring.py`.
 - Creates a `GuardrailsChecker` via `create_guardrails_checker()` if guardrail config is present in `SharedConfig`.
 
 The constructor accepts pre-built agents via dependency injection, which is what tests use. The `create()` classmethod is the production path.
@@ -37,7 +37,7 @@ The phases in order:
 | 2. Architecture | `ArchitectureEvaluator` | Requirements findings + templates/diagrams/source | No |
 | 2b. Defaults verification | Inline `DefaultsVerifier` agent | Architecture findings | No |
 | 3. Questions | `QuestionAgent` | Architecture findings | Yes — `ask_user` tool |
-| 4. Sparring | `SparringAgent` | Architecture + Q&A findings | Yes — `challenge_user` tool |
+| 4. Sparring | `SparringAgent` | Architecture + Q&A findings | Yes — per-gap loop with `challenge_user` and `classify_gap` tools |
 | 5. Review | `ReviewAgent` | All findings | No |
 
 ### 4. Results are saved → back in `cli/run.py`
@@ -78,6 +78,8 @@ Most files export two things:
 
 The exception is `requirements_agent.py`, which only exports `create_requirements_agent`. It has no `run_requirements` because the orchestrator calls the agent directly with a simple prompt and reads `str(result)` — no special prompt construction needed.
 
+`sparring_agent.py` is a focused factory only — it exports `create_sparring_agent()` (which returns a `SparringAgent` dataclass), `GapResult`, and `SparringAgent`. The per-gap orchestration loop lives in `review/sparring.py`, consistent with the pattern of keeping agent factories small and putting pipeline coordination in `review/`.
+
 The agents don't know about each other. The orchestrator chains them by passing one agent's extracted findings as input to the next.
 
 `kb_tool.py` is a shared factory that creates the `query_waf` tool used by both the architecture and review agents when a Knowledge Base is configured.
@@ -92,8 +94,9 @@ Two files, re-exported through `config/__init__.py` so all imports use `from ..c
 ### `review/` — The Review Pipeline
 
 - **`orchestrator.py`** — `ReviewOrchestrator` coordinates the 5 phases, manages output capture for the session transcript, and runs the service-defaults verification step between Phase 2 and 3. All captured output passes through `_strip_redacted()` which removes `[REDACTED]` reasoning trace placeholders that Bedrock models emit when extended thinking is enabled.
+- **`sparring.py`** — Per-gap sparring orchestration for Phase 4. Parses gaps from architecture findings, triages by severity via a single LLM call, then spars on each gap individually with bounded follow-up rounds. Creates a fresh `SparringAgent` per gap to avoid conversation history pollution. Accumulates a plain-text running context for cross-gap awareness. Assembles a markdown summary matching the format expected by the context condenser (`### Confirmed Gaps` / `### Accepted Risks` / `### Resolved`).
 - **`context_condenser.py`** — Structured extraction that converts verbose agent output into concise bullet points. Uses a model call (not regex) so it handles varied output formats. Falls back to chunked extraction for content that exceeds the context window.
-- **`extraction.py`** — Markdown parsing for the final review output. Extracts gaps, risks, recommendations, and verdict from the review text to build a `ReviewState` for remediation mode. This is regex/string-based (not model-based) because the review output follows a known format.
+- **`extraction.py`** — Markdown parsing for the final review output. Extracts gaps, risks, recommendations, and verdict from the review text to build a `ReviewState` for remediation mode. Also exports `parse_gaps_from_findings()` used by the sparring module to extract individual gap descriptions from "Features Not Found" and "WAF Assessment" sections. This is regex/string-based (not model-based) because the review output follows a known format.
 - **`grounding.py`** — Post-hoc validation using Bedrock Guardrails' ApplyGuardrail API. `GuardrailsChecker` chunks content at `GROUNDING_CONTENT_CHUNK_SIZE` (API limit: 5K chars per content block), truncates sources at `GROUNDING_SOURCE_MAX_CHARS`, and reports the worst grounding score across all chunks. Gracefully degrades — guardrail unavailability never blocks a review. `create_guardrails_checker()` returns `None` when guardrail config is missing.
 
 ### `infra/` — AWS Infrastructure
@@ -120,9 +123,9 @@ Each tool class reads files from a user-provided directory and returns content a
 
 ### `profiles.py` — Review Profiles
 
-Profiles are YAML files with `name`, `description`, and `directives` (per-agent behavioral instructions appended to system prompts). Resolution order: project (`.arch-review/profiles/`) → user (`~/.config/arch-review/profiles/`) → built-in (packaged with the tool).
+Profiles are YAML files with `name`, `description`, `directives` (per-agent behavioral instructions appended to system prompts), and `settings` (structured configuration values like sparring round limits). Resolution order: project (`.arch-review/profiles/`) → user (`~/.config/arch-review/profiles/`) → built-in (packaged with the tool).
 
-`load_profile()` returns a dict, and `get_directive(profile, agent_name)` extracts the relevant directive string. The profile dict flows opaquely through the orchestrator and agent factories — only `get_directive()` inspects its contents. Unknown keys in a profile generate a warning but don't cause errors.
+`load_profile()` returns a dict. `get_directive(profile, agent_name)` extracts the relevant directive string. `get_setting(profile, *keys, default=...)` retrieves nested values from the `settings` sub-dict with type-safe defaults. The profile dict flows opaquely through the orchestrator — only `get_directive()` and `get_setting()` inspect its contents. Unknown keys in a profile generate a warning but don't cause errors.
 
 Additional exported functions: `list_profiles()` (grouped by source: builtin/user/project), `get_profile_path()` (find a profile's file path), and `project_dir()` (CWD-relative project profiles directory).
 
@@ -184,7 +187,7 @@ Define a `@tool`-decorated function inside the relevant `create_*_agent()` facto
 
 ### Adding a New Review Profile
 
-Create a YAML file in `arch_sparring_agent/profiles/` with `name`, `description`, and `directives` keys. The `directives` map agent names (`requirements`, `architecture`, `sparring`, `review`) to instruction strings that get appended to the agent's system prompt.
+Create a YAML file in `arch_sparring_agent/profiles/` with `name`, `description`, `directives`, and `settings` keys. The `directives` map agent names (`requirements`, `architecture`, `sparring`, `review`) to instruction strings that get appended to the agent's system prompt. The `settings` block contains structured values like `settings.sparring.max_rounds` (keyed by severity: `high`, `medium`, `low`) that control sparring depth per gap.
 
 ### Adding a New CLI Command
 

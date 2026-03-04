@@ -289,6 +289,29 @@ def extract_mitigations_as_recommendations(review_text: str) -> list[str]:
     return recommendations
 
 
+def parse_gaps_from_findings(arch_findings: str, qa_findings: str) -> list[str]:
+    """Extract deduplicated gap descriptions from architecture findings.
+
+    Collects items from "Features Not Found" and "WAF Assessment" sections
+    across both inputs.  Returns plain strings (not dataclasses) so the
+    caller can wrap them with severity after triage.
+    """
+    gaps: list[str] = []
+
+    def _make_matcher(keyword: str) -> Callable[[str], bool]:
+        return lambda line: _is_section_header(line, keyword)
+
+    def _collect(text: str) -> None:
+        for keyword in ("not found", "waf assessment"):
+            for item in _extract_section_items(text, _make_matcher(keyword)):
+                if len(item) > 5 and not has_duplicate_string(item, gaps):
+                    gaps.append(item)
+
+    _collect(arch_findings)
+    _collect(qa_findings)
+    return gaps
+
+
 def extract_verdict(review_text: str) -> str:
     """Extract verdict string from review text.
 

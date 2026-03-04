@@ -42,3 +42,10 @@ directives:
     - Only list something in "Features Not Found" if the requirement is genuinely unmet,
       not merely implicit via AWS defaults
 
+settings:
+  sparring:
+    max_rounds:
+      high: 2
+      medium: 1
+      low: 1
+

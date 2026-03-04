@@ -33,3 +33,10 @@ directives:
     - For prototypes and demos, focus on functional correctness over security hardening
     - Keep the analysis focused on what's deployed, not what could be improved
 
+settings:
+  sparring:
+    max_rounds:
+      high: 1
+      medium: 1
+      low: 1
+

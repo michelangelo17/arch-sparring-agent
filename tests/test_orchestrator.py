@@ -39,7 +39,6 @@ def create_mocks():
     mock_create_req = patch(f"{_ORCH}.create_requirements_agent").start()
     mock_create_arch = patch(f"{_ORCH}.create_architecture_agent").start()
     mock_create_quest = patch(f"{_ORCH}.create_question_agent").start()
-    mock_create_spar = patch(f"{_ORCH}.create_sparring_agent").start()
     mock_create_rev = patch(f"{_ORCH}.create_review_agent").start()
     mock_create_guardrails = patch(f"{_ORCH}.create_guardrails_checker").start()
     mock_create_guardrails.return_value = None
@@ -50,7 +49,6 @@ def create_mocks():
             mock_create_req=mock_create_req,
             mock_create_arch=mock_create_arch,
             mock_create_quest=mock_create_quest,
-            mock_create_spar=mock_create_spar,
             mock_create_rev=mock_create_rev,
             mock_standard_model=mock_standard_model,
             mock_create_guardrails=mock_create_guardrails,
@@ -70,7 +68,6 @@ def test_create_builds_all_agents(create_mocks):
     create_mocks.mock_create_req.assert_called()
     create_mocks.mock_create_arch.assert_called()
     create_mocks.mock_create_quest.assert_called()
-    create_mocks.mock_create_spar.assert_called()
     create_mocks.mock_create_rev.assert_called()
 
     assert orch.standard_model is not None
@@ -132,7 +129,6 @@ def run_review_mocks():
 
     mock_arch_agent = MagicMock()
     mock_quest_agent = MagicMock()
-    mock_spar_agent = MagicMock()
     mock_rev_agent = MagicMock()
 
     mock_extract_req = patch(f"{_ORCH}.extract_requirements").start()
@@ -154,7 +150,6 @@ def run_review_mocks():
             mock_req_agent=mock_req_agent,
             mock_arch_agent=mock_arch_agent,
             mock_quest_agent=mock_quest_agent,
-            mock_spar_agent=mock_spar_agent,
             mock_rev_agent=mock_rev_agent,
             mock_extract_req=mock_extract_req,
             mock_extract_phase=mock_extract_phase,
@@ -172,7 +167,6 @@ def _make_orchestrator(run_review_mocks, **kwargs):
         "requirements_agent": run_review_mocks.mock_req_agent,
         "architecture_agent": run_review_mocks.mock_arch_agent,
         "question_agent": run_review_mocks.mock_quest_agent,
-        "sparring_agent": run_review_mocks.mock_spar_agent,
         "review_agent": run_review_mocks.mock_rev_agent,
         "standard_model": run_review_mocks.mock_standard_model,
     }
@@ -207,6 +201,7 @@ def test_run_review(run_review_mocks):
 
     run_review_mocks.mock_run_sparring.assert_called()
     sparring_call_args = run_review_mocks.mock_run_sparring.call_args
+    assert sparring_call_args[0][0] is orch.standard_model
     assert sparring_call_args[0][1] == "Architecture Summary"
     assert sparring_call_args[0][2] == "[extracted:Q&A] Questions Context"
 

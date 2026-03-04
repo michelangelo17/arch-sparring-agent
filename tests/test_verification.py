@@ -13,7 +13,6 @@ def _make_orchestrator():
         requirements_agent=MagicMock(),
         architecture_agent=MagicMock(),
         question_agent=MagicMock(),
-        sparring_agent=MagicMock(),
         review_agent=MagicMock(),
         standard_model=MagicMock(name="standard_model"),
     )
@@ -84,7 +83,6 @@ def test_verify_called_during_run_review(mock_verify, verification_integration_m
         requirements_agent=MagicMock(return_value="req summary"),
         architecture_agent=MagicMock(),
         question_agent=MagicMock(),
-        sparring_agent=MagicMock(),
         review_agent=MagicMock(),
         standard_model=MagicMock(name="standard_model"),
     )

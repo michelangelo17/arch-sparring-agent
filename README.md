@@ -5,7 +5,7 @@ Multi-agent system for architecture reviews. Analyzes requirements documents, Cl
 ## Features
 
 - **5-phase review process**: Requirements → Architecture → Questions → Sparring → Final Review
-- **Interactive sparring**: Challenges architectural gaps and pushes back on weak justifications
+- **Interactive sparring**: Challenges each gap individually with follow-up rounds, pushing back on weak justifications before classifying outcomes
 - **Remediation mode**: Discuss and resolve findings from previous reviews with session memory
 - **CDK support**: Works with CloudFormation templates and CDK synthesized output (`cdk.out/`)
 - **Multimodal analysis**: Analyzes architecture diagrams (PNG, JPEG) via Bedrock Converse API
@@ -136,9 +136,9 @@ Profiles control agent behavior — how strict the review is, what justification
 
 | Profile       | Description                                                       |
 | ------------- | ----------------------------------------------------------------- |
-| `default`     | Balanced review — thorough but pragmatic                          |
-| `strict`      | Low tolerance for gaps, demands evidence, errs on the side of flagging |
-| `lightweight` | Pragmatic for prototypes and demos, accepts "it's a prototype"    |
+| `default`     | Balanced review — thorough but pragmatic (2 rounds for high-severity gaps) |
+| `strict`      | Low tolerance for gaps, demands evidence (up to 3 rounds per gap) |
+| `lightweight` | Pragmatic for prototypes and demos (1 round per gap)              |
 
 ```bash
 arch-review run --profile strict --documents-dir ./docs --templates-dir ./templates --diagrams-dir ./diagrams
@@ -159,7 +159,7 @@ arch-review profiles create myprofile           # Copies from default
 arch-review profiles create myprofile --from strict  # Copies from strict
 ```
 
-Each profile is a complete, standalone specification — no layering or overrides. Edit the generated YAML to adjust behavioral directives for each agent.
+Each profile is a complete, standalone specification — no layering or overrides. Edit the generated YAML to adjust behavioral directives for each agent. Profiles also control sparring depth via `settings.sparring.max_rounds` (keyed by severity: `high`, `medium`, `low`).
 
 ## WAF Knowledge Base
 
@@ -446,7 +446,7 @@ The `KnowledgeBaseOptional` statement is only needed if you use `deploy --with-k
 2. **Architecture Analysis**: Analyzes CloudFormation templates, diagrams, and source code (queries WAF KB if available)
    - **2b. Service defaults verification**: A focused model call checks whether flagged "Features Not Found" are actually provided by AWS service defaults, filtering false positives
 3. **Clarifying Questions**: Gathers context by asking the user about unverified gaps
-4. **Sparring**: Challenges architectural decisions and pushes back on weak justifications
+4. **Sparring**: Triages gaps by severity, then spars on each individually with bounded follow-up rounds. Each gap is classified as CONFIRMED_GAP, ACCEPTED_RISK, or RESOLVED
 5. **Final Review**: Produces structured review with gaps, risks, recommendations, and verdict
 
 Between each phase, a **context condenser** extracts structured findings from the raw agent output using a separate model call. This prevents token overflow as context accumulates across phases. Optionally, a **contextual grounding check** validates that the condensed findings are faithful to the raw output using the Bedrock Guardrails ApplyGuardrail API.
@@ -502,6 +502,7 @@ arch_sparring_agent/
 │   └── sync.py                # S3 upload and ingestion trigger
 ├── review/
 │   ├── orchestrator.py        # Phase orchestration + service default verification
+│   ├── sparring.py            # Per-gap sparring loop (Phase 4 orchestration)
 │   ├── context_condenser.py   # Structured extraction to prevent token overflow
 │   ├── extraction.py          # Markdown parsing and state extraction
 │   └── grounding.py           # Contextual grounding checks via Bedrock Guardrails
