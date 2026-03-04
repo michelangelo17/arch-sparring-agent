@@ -17,7 +17,7 @@ from strands import Agent
 from strands.models import BedrockModel
 
 from ..agents import safe_invoke
-from ..agents.sparring_agent import GapResult, create_sparring_agent
+from ..agents.sparring_agent import ClassificationOutcome, GapResult, create_sparring_agent
 from ..exceptions import MODEL_ERRORS
 from ..profiles import get_setting
 from .extraction import parse_gaps_from_findings
@@ -49,7 +49,6 @@ class SparringGap:
     """A gap being sparred on, with severity from triage."""
 
     description: str
-    source: str
     severity: str
 
 
@@ -91,7 +90,7 @@ def run_sparring(
             _build_running_context(results),
             output_fn,
         )
-        results.append(GapResult(gap.description, result.classification, result.reasoning))
+        results.append(result)
         challenge_offset += count
 
     summary = _assemble_summary(results)
@@ -124,13 +123,12 @@ def _triage_gaps(raw_gaps: list[str], model: BedrockModel) -> list[SparringGap]:
         )
         response = str(triage_agent(gap_list))
         severity_map = _parse_triage_response(response, raw_gaps)
-    except (*MODEL_ERRORS,):
+    except MODEL_ERRORS:
         logger.warning("Gap triage failed — defaulting all gaps to MEDIUM")
 
     gaps = [
         SparringGap(
             description=g,
-            source="findings",
             severity=severity_map.get(g, "MEDIUM"),
         )
         for g in raw_gaps
@@ -140,22 +138,17 @@ def _triage_gaps(raw_gaps: list[str], model: BedrockModel) -> list[SparringGap]:
 
 
 def _parse_triage_response(response: str, raw_gaps: list[str]) -> dict[str, str]:
-    """Parse numbered severity lines, fuzzy-matching against raw gaps."""
+    """Parse numbered severity lines, matching by index position."""
     severity_map: dict[str, str] = dict.fromkeys(raw_gaps, "MEDIUM")
-    pattern = re.compile(
-        r"^\d+\.\s*(HIGH|MEDIUM|LOW)\s*:\s*(.+)",
-        re.IGNORECASE,
-    )
+    pattern = re.compile(r"^\s*(\d+)\.\s*(HIGH|MEDIUM|LOW)", re.IGNORECASE)
     for line in response.split("\n"):
-        match = pattern.match(line.strip())
+        match = pattern.match(line)
         if not match:
             continue
-        severity = match.group(1).upper()
-        desc = match.group(2).strip()
-        for gap in raw_gaps:
-            if gap.lower().startswith(desc[:40].lower()):
-                severity_map[gap] = severity
-                break
+        idx = int(match.group(1)) - 1
+        severity = match.group(2).upper()
+        if 0 <= idx < len(raw_gaps):
+            severity_map[raw_gaps[idx]] = severity
     return severity_map
 
 
@@ -173,12 +166,18 @@ def _spar_single_gap(
     output_fn: Callable[[str], None] | None,
 ) -> tuple[GapResult, int]:
     """Spar on a single gap with bounded rounds."""
+    if output_fn:
+        output_fn(f"\n### [{gap.severity}] {gap.description}\n")
+
     sa = create_sparring_agent(
         model,
         profile=profile,
         challenge_offset=challenge_offset,
     )
     max_rounds = _max_rounds_for(gap.severity, profile)
+
+    def _to_gap_result(outcome: ClassificationOutcome) -> GapResult:
+        return GapResult(gap.description, outcome.classification, outcome.reasoning)
 
     try:
         for round_num in range(max_rounds):
@@ -188,19 +187,19 @@ def _spar_single_gap(
                 round_num,
             )
             safe_invoke(sa.agent, prompt)
-            result = sa.get_result()
-            if result:
-                return result, sa.challenge_count()
+            outcome = sa.get_result()
+            if outcome:
+                return _to_gap_result(outcome), sa.challenge_count()
 
         safe_invoke(
             sa.agent,
             "Classify the gap based on the conversation so far. "
             "Call classify_gap with your conclusion.",
         )
-        result = sa.get_result()
-        if result:
-            return result, sa.challenge_count()
-    except (*MODEL_ERRORS,):
+        outcome = sa.get_result()
+        if outcome:
+            return _to_gap_result(outcome), sa.challenge_count()
+    except MODEL_ERRORS:
         logger.warning(
             "Sparring failed for gap '%s' — marking as CONFIRMED_GAP",
             gap.description[:60],
@@ -214,13 +213,8 @@ def _spar_single_gap(
 
 def _max_rounds_for(severity: str, profile: dict[str, Any] | None) -> int:
     """Return the max sparring rounds for a given severity and profile."""
-    return get_setting(
-        profile,
-        "sparring",
-        "max_rounds",
-        severity.lower(),
-        default=1,
-    )
+    value = get_setting(profile, "sparring", "max_rounds", severity.lower(), default=1)
+    return value if isinstance(value, int) else 1
 
 
 def _build_round_prompt(gap: SparringGap, running_context: str, round_num: int) -> str:
@@ -253,25 +247,21 @@ def _build_running_context(results: list[GapResult]) -> str:
     return "\n".join(lines)
 
 
+_CLASSIFICATION_HEADINGS = [
+    ("Confirmed Gaps", "CONFIRMED_GAP"),
+    ("Accepted Risks", "ACCEPTED_RISK"),
+    ("Resolved", "RESOLVED"),
+]
+
+
 def _assemble_summary(results: list[GapResult]) -> str:
     """Group results by classification into a markdown summary."""
-    confirmed = [r for r in results if r.classification == "CONFIRMED_GAP"]
-    accepted = [r for r in results if r.classification == "ACCEPTED_RISK"]
-    resolved = [r for r in results if r.classification == "RESOLVED"]
-
     sections: list[str] = []
-
-    if confirmed:
-        items = "\n".join(f"- {r.description}: {r.reasoning}" for r in confirmed)
-        sections.append(f"### Confirmed Gaps\n{items}")
-
-    if accepted:
-        items = "\n".join(f"- {r.description}: {r.reasoning}" for r in accepted)
-        sections.append(f"### Accepted Risks\n{items}")
-
-    if resolved:
-        items = "\n".join(f"- {r.description}: {r.reasoning}" for r in resolved)
-        sections.append(f"### Resolved\n{items}")
+    for heading, classification in _CLASSIFICATION_HEADINGS:
+        group = [r for r in results if r.classification == classification]
+        if group:
+            items = "\n".join(f"- {r.description}: {r.reasoning}" for r in group)
+            sections.append(f"### {heading}\n{items}")
 
     if not sections:
         return "No gaps to report."

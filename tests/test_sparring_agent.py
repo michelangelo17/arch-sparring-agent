@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 from arch_sparring_agent.agents.sparring_agent import (
-    GapResult,
+    ClassificationOutcome,
     SparringAgent,
     create_sparring_agent,
 )
@@ -49,10 +49,10 @@ def test_classify_gap_tool_sets_result():
     result_msg = classify_fn(classification="RESOLVED", reasoning="proved it")
     assert "RESOLVED" in result_msg
 
-    gap_result = sa.get_result()
-    assert isinstance(gap_result, GapResult)
-    assert gap_result.classification == "RESOLVED"
-    assert gap_result.reasoning == "proved it"
+    outcome = sa.get_result()
+    assert isinstance(outcome, ClassificationOutcome)
+    assert outcome.classification == "RESOLVED"
+    assert outcome.reasoning == "proved it"
 
 
 def test_classify_gap_rejects_invalid_classification():

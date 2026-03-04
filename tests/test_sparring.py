@@ -2,7 +2,11 @@
 
 from unittest.mock import MagicMock, patch
 
-from arch_sparring_agent.agents.sparring_agent import GapResult, SparringAgent
+from arch_sparring_agent.agents.sparring_agent import (
+    ClassificationOutcome,
+    GapResult,
+    SparringAgent,
+)
 from arch_sparring_agent.review.sparring import (
     SparringGap,
     _assemble_summary,
@@ -46,17 +50,17 @@ def test_triage_gaps_fallback_on_error():
     assert all(g.severity == "MEDIUM" for g in gaps)
 
 
-def test_parse_triage_response_fuzzy_match():
+def test_parse_triage_response_index_match():
     raw_gaps = ["Encryption at rest for DynamoDB", "Missing CloudWatch alarms"]
-    response = "1. HIGH: Encryption at rest for Dyna\n2. LOW: Missing CloudWatch ala"
+    response = "1. HIGH: Encryption at rest for DynamoDB\n2. LOW: Missing CloudWatch alarms"
     result = _parse_triage_response(response, raw_gaps)
     assert result["Encryption at rest for DynamoDB"] == "HIGH"
     assert result["Missing CloudWatch alarms"] == "LOW"
 
 
-def test_parse_triage_response_unmatched_defaults_medium():
+def test_parse_triage_response_out_of_range_defaults_medium():
     raw_gaps = ["Some unique gap"]
-    response = "1. HIGH: Totally different text"
+    response = "5. HIGH: Out of range index"
     result = _parse_triage_response(response, raw_gaps)
     assert result["Some unique gap"] == "MEDIUM"
 
@@ -77,7 +81,7 @@ def _make_sparring_agent(classify_on_round=None, classification="RESOLVED"):
     def fake_invoke(prompt):
         call_count[0] += 1
         if classify_on_round is not None and call_count[0] >= classify_on_round:
-            _result[0] = GapResult("", classification, "test reasoning")
+            _result[0] = ClassificationOutcome(classification, "test reasoning")
         return "agent output"
 
     mock_agent = MagicMock()
@@ -92,7 +96,7 @@ def _make_sparring_agent(classify_on_round=None, classification="RESOLVED"):
 
 def test_spar_single_gap_resolved():
     model = MagicMock(name="model")
-    gap = SparringGap("Missing encryption", "findings", "HIGH")
+    gap = SparringGap("Missing encryption", "HIGH")
     profile = {"settings": {"sparring": {"max_rounds": {"high": 3}}}}
 
     sa = _make_sparring_agent(classify_on_round=1, classification="RESOLVED")
@@ -106,7 +110,7 @@ def test_spar_single_gap_resolved():
 
 def test_spar_single_gap_accepted_risk():
     model = MagicMock(name="model")
-    gap = SparringGap("Missing logging", "findings", "MEDIUM")
+    gap = SparringGap("Missing logging", "MEDIUM")
     profile = {"settings": {"sparring": {"max_rounds": {"medium": 2}}}}
 
     sa = _make_sparring_agent(classify_on_round=1, classification="ACCEPTED_RISK")
@@ -119,7 +123,7 @@ def test_spar_single_gap_accepted_risk():
 
 def test_spar_single_gap_max_rounds_confirmed():
     model = MagicMock(name="model")
-    gap = SparringGap("Missing backup", "findings", "LOW")
+    gap = SparringGap("Missing backup", "LOW")
     profile = {"settings": {"sparring": {"max_rounds": {"low": 1}}}}
 
     sa = _make_sparring_agent(classify_on_round=None)
@@ -133,7 +137,7 @@ def test_spar_single_gap_max_rounds_confirmed():
 def test_final_classify_turn():
     """Agent doesn't classify during rounds but does on the final turn."""
     model = MagicMock(name="model")
-    gap = SparringGap("Missing auth", "findings", "HIGH")
+    gap = SparringGap("Missing auth", "HIGH")
     profile = {"settings": {"sparring": {"max_rounds": {"high": 2}}}}
 
     sa = _make_sparring_agent(classify_on_round=3, classification="ACCEPTED_RISK")
@@ -146,7 +150,7 @@ def test_final_classify_turn():
 
 def test_single_gap_error_does_not_crash():
     model = MagicMock(name="model")
-    gap = SparringGap("Broken gap", "findings", "HIGH")
+    gap = SparringGap("Broken gap", "HIGH")
     profile = {"settings": {"sparring": {"max_rounds": {"high": 2}}}}
 
     sa = _make_sparring_agent()
@@ -227,8 +231,8 @@ def test_run_sparring_assembles_summary():
     model = MagicMock(name="model")
     gaps = ["Gap A", "Gap B"]
     triaged = [
-        SparringGap("Gap A", "findings", "HIGH"),
-        SparringGap("Gap B", "findings", "MEDIUM"),
+        SparringGap("Gap A", "HIGH"),
+        SparringGap("Gap B", "MEDIUM"),
     ]
 
     with patch(f"{_MOD}.parse_gaps_from_findings", return_value=gaps):

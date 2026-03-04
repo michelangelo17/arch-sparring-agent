@@ -1,11 +1,13 @@
 """Sparring agent for Phase 4 — challenging architectural decisions.
 
-Exports ``create_sparring_agent`` (factory), ``GapResult`` and
-``SparringAgent`` (dataclasses consumed by the review/sparring orchestrator).
+Exports ``create_sparring_agent`` (factory), ``ClassificationOutcome``,
+``GapResult``, and ``SparringAgent`` (dataclasses consumed by the
+review/sparring orchestrator).
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,6 +45,14 @@ CLASSIFICATION RULES:
 
 
 @dataclass(frozen=True, slots=True)
+class ClassificationOutcome:
+    """Result of the classify_gap tool (no description — added by orchestrator)."""
+
+    classification: str
+    reasoning: str
+
+
+@dataclass(frozen=True, slots=True)
 class GapResult:
     """Outcome of sparring on a single gap."""
 
@@ -56,8 +66,8 @@ class SparringAgent:
     """Return type of ``create_sparring_agent``."""
 
     agent: Agent
-    get_result: Any  # Callable[[], GapResult | None]
-    challenge_count: Any  # Callable[[], int]
+    get_result: Callable[[], ClassificationOutcome | None]
+    challenge_count: Callable[[], int]
 
 
 def create_sparring_agent(
@@ -67,7 +77,7 @@ def create_sparring_agent(
 ) -> SparringAgent:
     """Create an agent for challenging a single architectural gap."""
     challenges_made: list[str] = []
-    _result: list[GapResult] = []
+    _result: list[ClassificationOutcome] = []
 
     @tool
     def challenge_user(challenge: str) -> str:
@@ -89,7 +99,7 @@ def create_sparring_agent(
                 f"Must be one of: {', '.join(sorted(VALID_CLASSIFICATIONS))}"
             )
         _result.clear()
-        _result.append(GapResult("", classification, reasoning))
+        _result.append(ClassificationOutcome(classification, reasoning))
         return f"Gap classified as {classification}."
 
     system_prompt = _SYSTEM_PROMPT

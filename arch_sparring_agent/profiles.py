@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, overload
 
 import yaml
 
@@ -75,26 +75,30 @@ def get_directive(profile: dict[str, Any] | None, agent_name: str) -> str:
     return directives.get(agent_name, "")
 
 
-def get_setting(
-    profile: dict[str, Any] | None,
-    *keys: str,
-    default: T = None,  # type: ignore[assignment]
-) -> T:
+@overload
+def get_setting(profile: dict[str, Any] | None, *keys: str, default: T) -> T: ...
+
+
+@overload
+def get_setting(profile: dict[str, Any] | None, *keys: str) -> Any: ...
+
+
+def get_setting(profile: dict[str, Any] | None, *keys: str, default: Any = None) -> Any:
     """Retrieve a nested setting value from a loaded profile.
 
     Walks the ``settings`` sub-dict using *keys* as successive lookups.
     Returns *default* when the profile is ``None`` or the key path is missing.
     """
     if profile is None:
-        return default  # type: ignore[return-value]
+        return default
     current: Any = profile.get("settings", {})
     for key in keys:
         if not isinstance(current, dict):
-            return default  # type: ignore[return-value]
+            return default
         current = current.get(key)
         if current is None:
-            return default  # type: ignore[return-value]
-    return current  # type: ignore[return-value]
+            return default
+    return current
 
 
 def list_profiles() -> dict[str, list[str]]:
